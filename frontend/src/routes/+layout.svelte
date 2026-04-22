@@ -4,6 +4,7 @@
 	import { auth } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
+	import { browser } from '$app/environment';
 
 	$: isDashboard = $page.url.pathname.startsWith('/dashboard');
 
@@ -13,7 +14,7 @@
 	}
 </script>
 
-<TopoCanvas />
+{#if browser}<TopoCanvas />{/if}
 
 <div class="layout">
 	<nav>
