@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package.json bun.lockb* ./
 RUN bun install --frozen-lockfile
 COPY . .
-RUN bun run build
+RUN bunx svelte-kit sync && bun run build
 
 FROM oven/bun:1-alpine
 WORKDIR /app
