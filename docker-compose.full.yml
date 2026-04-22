@@ -1,0 +1,43 @@
+services:
+  poi-api:
+    image: ghcr.io/trippier/poi-api:latest
+    build:
+      context: ./poi-api
+    ports:
+      - "${POI_API_PORT:-8080}:8080"
+    env_file:
+      - ./poi-api/.env.example
+    environment:
+      POI_REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  itinerary-api:
+    image: ghcr.io/trippier/itinerary-api:latest
+    build:
+      context: ./itinerary-api
+    ports:
+      - "${ITINERARY_API_PORT:-8000}:8000"
+    env_file:
+      - ./itinerary-api/.env.example
+    environment:
+      POI_API_URL: http://poi-api:8080
+    depends_on:
+      - poi-api
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  redis_data:

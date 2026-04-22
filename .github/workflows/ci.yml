@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  go-test:
+    name: Go — test & vet
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: poi-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+      - run: go mod download
+      - run: go vet ./...
+      - run: go test -race -coverprofile=coverage.out ./...
+      - uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage
+          path: poi-api/coverage.out
+
+  go-lint:
+    name: Go — lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: poi-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: poi-api
+
+  python-test:
+    name: Python — test & lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: itinerary-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: mypy app
+      - run: pytest --tb=short

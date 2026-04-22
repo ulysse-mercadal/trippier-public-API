@@ -1,0 +1,126 @@
+// Package main is the entry point of the poi-api server.
+// It wires configuration, providers, and the HTTP router together.
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
+
+	"github.com/trippier/poi-api/internal/config"
+	"github.com/trippier/poi-api/internal/middleware"
+	"github.com/trippier/poi-api/internal/providers"
+	"github.com/trippier/poi-api/internal/providers/geonames"
+	"github.com/trippier/poi-api/internal/providers/overpass"
+	"github.com/trippier/poi-api/internal/providers/wikipedia"
+	"github.com/trippier/poi-api/internal/providers/wikivoyage"
+	"github.com/trippier/poi-api/internal/search"
+)
+
+func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "config: %v\n", err)
+		os.Exit(1)
+	}
+
+	log := buildLogger(cfg.LogLevel)
+	defer log.Sync() //nolint:errcheck
+
+	rdb := buildRedis(cfg.RedisURL)
+
+	pp := buildProviders(cfg)
+	svc := search.NewService(pp, time.Duration(cfg.ProviderTimeout)*time.Second)
+	handler := search.NewHandler(svc)
+
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.New()
+	r.Use(
+		gin.Recovery(),
+		middleware.RequestID(),
+		middleware.Logger(log),
+		middleware.RateLimit(cfg.RateLimitPerMin),
+	)
+
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	pois := r.Group("/pois")
+	cacheTTL := time.Duration(cfg.CacheTTLSeconds) * time.Second
+	pois.Use(middleware.Cache(rdb, cacheTTL))
+	handler.RegisterRoutes(pois)
+
+	srv := &http.Server{
+		Addr:         fmt.Sprintf(":%s", cfg.Port),
+		Handler:      r,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Start server in a goroutine so the shutdown listener is non-blocking.
+	go func() {
+		log.Info("poi-api starting", zap.String("addr", srv.Addr))
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal("server error", zap.Error(err))
+		}
+	}()
+
+	// Graceful shutdown on SIGINT / SIGTERM.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Info("shutting down server…")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Error("shutdown error", zap.Error(err))
+	}
+	log.Info("server stopped")
+}
+
+func buildProviders(cfg *config.Config) []providers.Provider {
+	pp := []providers.Provider{
+		overpass.New(),
+		wikivoyage.New(cfg.Lang),
+		wikipedia.New(cfg.Lang),
+	}
+	if cfg.GeoNamesUsername != "" {
+		pp = append(pp, geonames.New(cfg.GeoNamesUsername))
+	}
+	return pp
+}
+
+func buildLogger(level string) *zap.Logger {
+	var cfg zap.Config
+	if level == "debug" {
+		cfg = zap.NewDevelopmentConfig()
+	} else {
+		cfg = zap.NewProductionConfig()
+	}
+	log, err := cfg.Build()
+	if err != nil {
+		panic(fmt.Sprintf("build logger: %v", err))
+	}
+	return log
+}
+
+func buildRedis(redisURL string) *redis.Client {
+	opt, err := redis.ParseURL(redisURL)
+	if err != nil {
+		// Non-fatal: cache will be a no-op if Redis is unavailable.
+		return redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	}
+	return redis.NewClient(opt)
+}
