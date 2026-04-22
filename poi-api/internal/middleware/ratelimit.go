@@ -3,6 +3,9 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -77,6 +80,15 @@ func RateLimit(authAPIURL, internalSecret string, cost int, exempt ...string) gi
 	}
 }
 
+// buildInternalAuth returns an X-Internal-Auth header value: "<ts>.<hmac-sha256(secret, ts)>".
+// Using a timestamp-bound HMAC prevents replaying a captured header.
+func buildInternalAuth(secret string) string {
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(ts))
+	return ts + "." + hex.EncodeToString(mac.Sum(nil))
+}
+
 func checkRateLimit(ctx context.Context, client *http.Client, authAPIURL, secret, apiKey string, cost int) (*rateLimitResponse, error) {
 	payload, _ := json.Marshal(map[string]interface{}{
 		"api_key": apiKey,
@@ -91,7 +103,7 @@ func checkRateLimit(ctx context.Context, client *http.Client, authAPIURL, secret
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Secret", secret)
+	req.Header.Set("X-Internal-Auth", buildInternalAuth(secret))
 
 	resp, err := client.Do(req)
 	if err != nil {

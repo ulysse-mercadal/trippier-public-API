@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import time
+
 import httpx
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -9,6 +13,17 @@ from starlette.responses import JSONResponse, Response
 
 
 EXEMPT_PATHS = {"/health"}
+
+
+def _build_internal_auth(secret: str) -> str:
+    """Return an X-Internal-Auth header value: '<ts>.<hmac-sha256(secret, ts)>'.
+
+    Using a timestamp-bound HMAC prevents replaying a captured header value.
+    The receiving side (auth-api) rejects tokens older than 30 s.
+    """
+    ts = str(int(time.time()))
+    sig = hmac.new(secret.encode(), ts.encode(), hashlib.sha256).hexdigest()
+    return f"{ts}.{sig}"
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -33,7 +48,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             resp = await self._client.post(
                 f"{self._auth_api_url}/internal/check-rate-limit",
                 json={"api_key": api_key, "cost": self._cost},
-                headers={"X-Internal-Secret": self._internal_secret},
+                headers={"X-Internal-Auth": _build_internal_auth(self._internal_secret)},
             )
             data = resp.json()
         except Exception:

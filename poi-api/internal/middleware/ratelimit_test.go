@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -12,11 +13,17 @@ import (
 
 func init() { gin.SetMode(gin.TestMode) }
 
-// fakeAuthAPI returns an httptest.Server that responds to /internal/check-rate-limit
-// with the given allowed status and remaining tokens.
+// fakeAuthAPI returns an httptest.Server that responds to /internal/check-rate-limit.
+// It verifies that the caller sends a valid X-Internal-Auth header (ts.hmac format).
 func fakeAuthAPI(t *testing.T, allowed bool, remaining int) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("X-Internal-Auth")
+		if !strings.Contains(auth, ".") {
+			t.Errorf("X-Internal-Auth header missing or malformed: %q", auth)
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		body := map[string]interface{}{
 			"allowed":        allowed,

@@ -3,8 +3,13 @@ package middleware_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
+
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -21,6 +26,14 @@ func signedToken(secret, subject string, expOffset time.Duration) string {
 	})
 	s, _ := tok.SignedString([]byte(secret))
 	return s
+}
+
+// buildInternalAuth mirrors the production helper for use in tests.
+func buildInternalAuth(secret string) string {
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(ts))
+	return ts + "." + hex.EncodeToString(mac.Sum(nil))
 }
 
 func newRouter(secret string) *gin.Engine {
@@ -59,7 +72,7 @@ func TestJWTAuth_MissingHeader(t *testing.T) {
 
 func TestJWTAuth_ExpiredToken(t *testing.T) {
 	secret := "test-secret"
-	token := signedToken(secret, "user-123", -time.Hour) // expired
+	token := signedToken(secret, "user-123", -time.Hour)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
@@ -98,15 +111,22 @@ func TestJWTAuth_MalformedToken(t *testing.T) {
 	}
 }
 
-func TestInternalAuth_ValidSecret(t *testing.T) {
+// ── InternalAuth (HMAC-based) ─────────────────────────────────────────────────
+
+func newInternalRouter(secret string) *gin.Engine {
 	r := gin.New()
-	r.POST("/internal", mw.InternalAuth("my-secret"), func(c *gin.Context) {
+	r.POST("/internal", mw.InternalAuth(secret), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
+	return r
+}
+
+func TestInternalAuth_ValidHMAC(t *testing.T) {
+	r := newInternalRouter("my-secret")
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/internal", nil)
-	req.Header.Set("X-Internal-Secret", "my-secret")
+	req.Header.Set("X-Internal-Auth", buildInternalAuth("my-secret"))
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
@@ -114,18 +134,60 @@ func TestInternalAuth_ValidSecret(t *testing.T) {
 	}
 }
 
-func TestInternalAuth_InvalidSecret(t *testing.T) {
-	r := gin.New()
-	r.POST("/internal", mw.InternalAuth("my-secret"), func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"ok": true})
-	})
+func TestInternalAuth_WrongSecret(t *testing.T) {
+	r := newInternalRouter("correct-secret")
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/internal", nil)
-	req.Header.Set("X-Internal-Secret", "wrong")
+	req.Header.Set("X-Internal-Auth", buildInternalAuth("wrong-secret"))
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401", w.Code)
+	}
+}
+
+func TestInternalAuth_MissingHeader(t *testing.T) {
+	r := newInternalRouter("my-secret")
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/internal", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", w.Code)
+	}
+}
+
+func TestInternalAuth_MalformedHeader(t *testing.T) {
+	r := newInternalRouter("my-secret")
+
+	for _, bad := range []string{"notimestamp", ".", "abc.def.extra", ""} {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/internal", nil)
+		req.Header.Set("X-Internal-Auth", bad)
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("header=%q: status = %d, want 401", bad, w.Code)
+		}
+	}
+}
+
+func TestInternalAuth_ExpiredTimestamp(t *testing.T) {
+	r := newInternalRouter("my-secret")
+
+	// Build a header with a timestamp 60s in the past (outside the 30s window).
+	oldTS := strconv.FormatInt(time.Now().Add(-60*time.Second).Unix(), 10)
+	mac := hmac.New(sha256.New, []byte("my-secret"))
+	mac.Write([]byte(oldTS))
+	staleHeader := oldTS + "." + hex.EncodeToString(mac.Sum(nil))
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/internal", nil)
+	req.Header.Set("X-Internal-Auth", staleHeader)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401 for expired timestamp", w.Code)
 	}
 }

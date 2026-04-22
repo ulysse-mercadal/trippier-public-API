@@ -62,7 +62,7 @@ def test_missing_api_key_returns_401(client: TestClient) -> None:
 
 @respx.mock
 def test_allowed_request_passes(client: TestClient) -> None:
-    respx.post(RATE_LIMIT_ENDPOINT).mock(
+    route = respx.post(RATE_LIMIT_ENDPOINT).mock(
         return_value=httpx.Response(
             200,
             json={"allowed": True, "remaining": 90, "limit": 100, "resets_in_secs": 3600},
@@ -71,6 +71,13 @@ def test_allowed_request_passes(client: TestClient) -> None:
     resp = client.get("/search", headers={"X-API-Key": "trp_valid_key"})
     assert resp.status_code == 200
     assert resp.headers.get("X-RateLimit-Remaining") == "90"
+
+    # Verify HMAC header was sent (not the raw secret)
+    sent_header = route.calls.last.request.headers.get("x-internal-auth", "")
+    assert "." in sent_header, f"X-Internal-Auth should be '<ts>.<hmac>', got: {sent_header!r}"
+    ts_part, sig_part = sent_header.split(".", 1)
+    assert ts_part.isdigit(), "timestamp part must be numeric"
+    assert len(sig_part) == 64, "signature should be sha256 hex (64 chars)"
 
 
 # ── rate limit exceeded ───────────────────────────────────────────────────────

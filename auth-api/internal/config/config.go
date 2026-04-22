@@ -2,6 +2,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -22,8 +23,9 @@ type Config struct {
 	DefaultResetIntervalS int
 }
 
-// Load reads configuration from environment variables (prefixed AUTH_).
-func Load() *Config {
+// Load reads configuration from environment variables (prefixed AUTH_)
+// and returns an error if required secrets do not meet minimum length requirements.
+func Load() (*Config, error) {
 	v := viper.New()
 	v.SetEnvPrefix("AUTH")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
@@ -41,7 +43,7 @@ func Load() *Config {
 	v.SetDefault("DEFAULT_TOKENS_LIMIT", 1000)
 	v.SetDefault("DEFAULT_RESET_INTERVAL_S", 3600)
 
-	return &Config{
+	cfg := &Config{
 		Port:                  v.GetString("PORT"),
 		DatabaseURL:           v.GetString("DATABASE_URL"),
 		RedisURL:              v.GetString("REDIS_URL"),
@@ -54,4 +56,13 @@ func Load() *Config {
 		DefaultTokensLimit:    v.GetInt("DEFAULT_TOKENS_LIMIT"),
 		DefaultResetIntervalS: v.GetInt("DEFAULT_RESET_INTERVAL_S"),
 	}
+
+	if len(cfg.JWTSecret) < 32 {
+		return nil, fmt.Errorf("AUTH_JWT_SECRET must be at least 32 characters (got %d)", len(cfg.JWTSecret))
+	}
+	if len(cfg.InternalSecret) < 16 {
+		return nil, fmt.Errorf("AUTH_INTERNAL_SECRET must be at least 16 characters (got %d)", len(cfg.InternalSecret))
+	}
+
+	return cfg, nil
 }
