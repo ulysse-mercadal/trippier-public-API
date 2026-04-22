@@ -15,11 +15,13 @@ dist/
 .mypy_cache/
 .ruff_cache/
 
-# Node / frontend
+# Node / Bun / frontend
 node_modules/
 .next/
 .svelte-kit/
 build/
+# bun.lockb is binary — commit it so installs are reproducible
+# (do NOT add it here)
 
 # IDE
 .idea/

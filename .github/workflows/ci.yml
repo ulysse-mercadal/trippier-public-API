@@ -84,6 +84,23 @@ jobs:
           version: latest
           working-directory: auth-api
 
+  # ── frontend ─────────────────────────────────────────────────────────────────
+
+  frontend-check:
+    name: frontend — typecheck & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run check
+      - run: bun run build
+
   # ── itinerary-api ─────────────────────────────────────────────────────────────
 
   itinerary-api-test:
