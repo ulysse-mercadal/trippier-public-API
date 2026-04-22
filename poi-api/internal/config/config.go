@@ -2,7 +2,6 @@
 package config
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -48,10 +47,6 @@ func Load() (*Config, error) {
 		LogLevel:         v.GetString("log_level"),
 		AuthAPIURL:       v.GetString("auth_api_url"),
 		InternalSecret:   v.GetString("internal_secret"),
-	}
-
-	if cfg.GeoNamesUsername == "" {
-		fmt.Println("warning: POI_GEONAMES_USERNAME not set — geonames provider will be disabled")
 	}
 
 	return cfg, nil

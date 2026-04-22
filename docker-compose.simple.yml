@@ -1,29 +1,103 @@
 services:
-  poi-api:
-    image: ghcr.io/trippier/poi-api:latest
-    build:
-      context: ./poi-api
-    ports:
-      - "${POI_API_PORT:-8080}:8080"
-    env_file:
-      - ./poi-api/.env.example
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
     environment:
-      POI_REDIS_URL: redis://redis:6379
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
+      POSTGRES_USER: trippier
+      POSTGRES_PASSWORD: trippier
+      POSTGRES_DB: trippier
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trippier"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # No volume: data is ephemeral in dev
 
   redis:
     image: redis:7-alpine
-    volumes:
-      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
-    restart: unless-stopped
 
-volumes:
-  redis_data:
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI — open http://localhost:8025 to see emails
+
+  # ── auth-api ─────────────────────────────────────────────────────────────────
+
+  auth-api:
+    build:
+      context: ./auth-api
+    ports:
+      - "8081:8081"
+    env_file:
+      - .env.example
+    environment:
+      AUTH_DATABASE_URL: postgres://trippier:trippier@postgres:5432/trippier?sslmode=disable
+      AUTH_REDIS_URL: redis://redis:6379
+      AUTH_INTERNAL_SECRET: ${INTERNAL_SECRET:-change-me-internal-secret}
+      AUTH_SMTP_HOST: mailhog
+      AUTH_APP_URL: http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── poi-api ──────────────────────────────────────────────────────────────────
+
+  poi-api:
+    build:
+      context: ./poi-api
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env.example
+    environment:
+      POI_REDIS_URL: redis://redis:6379
+      POI_AUTH_API_URL: http://auth-api:8081
+      POI_INTERNAL_SECRET: ${INTERNAL_SECRET:-change-me-internal-secret}
+      POI_LOG_LEVEL: debug
+    depends_on:
+      redis:
+        condition: service_healthy
+      auth-api:
+        condition: service_started
+
+  # ── itinerary-api ─────────────────────────────────────────────────────────────
+
+  itinerary-api:
+    build:
+      context: ./itinerary-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.example
+    environment:
+      POI_API_URL: http://poi-api:8080
+      AUTH_API_URL: http://auth-api:8081
+      INTERNAL_SECRET: ${INTERNAL_SECRET:-change-me-internal-secret}
+    depends_on:
+      - poi-api
+      - auth-api
+
+  # ── frontend ─────────────────────────────────────────────────────────────────
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      AUTH_API_URL: http://auth-api:8081
+      POI_API_URL: http://poi-api:8080
+      ITINERARY_API_URL: http://itinerary-api:8000
+    depends_on:
+      - auth-api
+      - poi-api

@@ -3,25 +3,31 @@ OWNER     ?= trippier
 TAG       ?= latest
 
 POI_IMAGE        = $(REGISTRY)/$(OWNER)/poi-api:$(TAG)
+AUTH_IMAGE       = $(REGISTRY)/$(OWNER)/auth-api:$(TAG)
 ITINERARY_IMAGE  = $(REGISTRY)/$(OWNER)/itinerary-api:$(TAG)
+FRONTEND_IMAGE   = $(REGISTRY)/$(OWNER)/frontend:$(TAG)
 
-.PHONY: build-simple build-full push-simple push-full \
+.PHONY: build push \
         dev dev-full stop \
-        test-go test-python test \
-        lint-go lint-python lint \
+        test-go-poi test-go-auth test-python test \
+        lint-go-poi lint-go-auth lint-python lint \
         tidy
 
-build-simple:
+# ── Build ─────────────────────────────────────────────────────────────────────
+
+build:
 	docker build -t $(POI_IMAGE) ./poi-api
-
-build-full: build-simple
+	docker build -t $(AUTH_IMAGE) ./auth-api
 	docker build -t $(ITINERARY_IMAGE) ./itinerary-api
+	docker build -t $(FRONTEND_IMAGE) ./frontend
 
-push-simple: build-simple
+push: build
 	docker push $(POI_IMAGE)
-
-push-full: build-full
+	docker push $(AUTH_IMAGE)
 	docker push $(ITINERARY_IMAGE)
+	docker push $(FRONTEND_IMAGE)
+
+# ── Dev ───────────────────────────────────────────────────────────────────────
 
 dev:
 	docker compose -f docker-compose.simple.yml up --build
@@ -30,23 +36,39 @@ dev-full:
 	docker compose -f docker-compose.full.yml up --build
 
 stop:
+	docker compose -f docker-compose.simple.yml down -v
+
+stop-full:
 	docker compose -f docker-compose.full.yml down -v
 
-test-go:
+# ── Tests ─────────────────────────────────────────────────────────────────────
+
+test-go-poi:
 	cd poi-api && go test -race ./...
+
+test-go-auth:
+	cd auth-api && go test -race ./...
 
 test-python:
 	cd itinerary-api && pytest --tb=short
 
-test: test-go test-python
+test: test-go-poi test-go-auth test-python
 
-lint-go:
+# ── Lint ──────────────────────────────────────────────────────────────────────
+
+lint-go-poi:
 	cd poi-api && golangci-lint run
+
+lint-go-auth:
+	cd auth-api && golangci-lint run
 
 lint-python:
 	cd itinerary-api && ruff check . && mypy app
 
-lint: lint-go lint-python
+lint: lint-go-poi lint-go-auth lint-python
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
 
 tidy:
 	cd poi-api && go mod tidy
+	cd auth-api && go mod tidy

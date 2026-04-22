@@ -36,6 +36,10 @@ func main() {
 	log := buildLogger(cfg.LogLevel)
 	defer log.Sync() //nolint:errcheck
 
+	if cfg.GeoNamesUsername == "" {
+		log.Warn("POI_GEONAMES_USERNAME not set — geonames provider will be disabled")
+	}
+
 	rdb := buildRedis(cfg.RedisURL)
 
 	pp := buildProviders(cfg)

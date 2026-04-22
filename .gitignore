@@ -1,0 +1,27 @@
+.env
+
+# Go
+*/bin/
+*/vendor/
+*/*.out
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend
+node_modules/
+.next/
+.svelte-kit/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
