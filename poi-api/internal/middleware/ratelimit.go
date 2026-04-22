@@ -1,72 +1,112 @@
 package middleware
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
-	"sync"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-// RateLimit returns a Gin middleware that enforces a sliding-window rate limit
-// per client IP. requestsPerMin is the maximum number of requests allowed in
-// any 60-second window.
+type rateLimitResponse struct {
+	Allowed      bool   `json:"allowed"`
+	Remaining    int    `json:"remaining"`
+	Limit        int    `json:"limit"`
+	ResetsInSecs int64  `json:"resets_in_secs"`
+	Error        string `json:"error"`
+}
+
+// RateLimit validates the caller's X-API-Key against the auth-api token bucket.
+// Each request costs `cost` tokens. Routes in exempt are passed through without
+// a key (e.g. "/health", "/pois/providers").
 //
-// The implementation uses an in-memory token bucket so no external dependency
-// is required. For multi-instance deployments, replace with a Redis-backed
-// counter (see cache.go for the Redis client setup).
-func RateLimit(requestsPerMin int) gin.HandlerFunc {
-	type entry struct {
-		mu       sync.Mutex
-		requests []time.Time
+// On auth-api unavailability the request is rejected with 503 to prevent
+// unlimited access during outages.
+func RateLimit(authAPIURL, internalSecret string, cost int, exempt ...string) gin.HandlerFunc {
+	exemptSet := make(map[string]struct{}, len(exempt))
+	for _, p := range exempt {
+		exemptSet[p] = struct{}{}
 	}
-
-	var (
-		mu      sync.Mutex
-		clients = make(map[string]*entry)
-	)
-
-	getOrCreate := func(ip string) *entry {
-		mu.Lock()
-		defer mu.Unlock()
-		if e, ok := clients[ip]; ok {
-			return e
-		}
-		e := &entry{}
-		clients[ip] = e
-		return e
-	}
-
-	window := time.Minute
+	client := &http.Client{Timeout: 5 * time.Second}
 
 	return func(c *gin.Context) {
-		ip := c.ClientIP()
-		e := getOrCreate(ip)
-
-		e.mu.Lock()
-		now := time.Now()
-		cutoff := now.Add(-window)
-
-		// Slide the window: discard requests older than 1 minute.
-		valid := e.requests[:0]
-		for _, t := range e.requests {
-			if t.After(cutoff) {
-				valid = append(valid, t)
-			}
+		if _, ok := exemptSet[c.FullPath()]; ok {
+			c.Next()
+			return
 		}
-		e.requests = valid
 
-		if len(e.requests) >= requestsPerMin {
-			e.mu.Unlock()
+		apiKey := c.GetHeader("X-API-Key")
+		if apiKey == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "X-API-Key header required"})
+			return
+		}
+
+		rlResp, err := checkRateLimit(c.Request.Context(), client, authAPIURL, internalSecret, apiKey, cost)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "rate-limit service unavailable"})
+			return
+		}
+
+		if !rlResp.Allowed {
+			if rlResp.Error == "invalid api key" {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid api key"})
+				return
+			}
+			c.Header("X-RateLimit-Remaining", "0")
+			c.Header("X-RateLimit-Reset", strconv.FormatInt(
+				time.Now().Add(time.Duration(rlResp.ResetsInSecs)*time.Second).Unix(), 10,
+			))
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
-				"error": "rate limit exceeded",
+				"error":          "rate limit exceeded",
+				"resets_in_secs": rlResp.ResetsInSecs,
 			})
 			return
 		}
 
-		e.requests = append(e.requests, now)
-		e.mu.Unlock()
-
+		c.Header("X-RateLimit-Limit", strconv.Itoa(rlResp.Limit))
+		c.Header("X-RateLimit-Remaining", strconv.Itoa(rlResp.Remaining))
+		c.Header("X-RateLimit-Reset", strconv.FormatInt(
+			time.Now().Add(time.Duration(rlResp.ResetsInSecs)*time.Second).Unix(), 10,
+		))
 		c.Next()
 	}
+}
+
+func checkRateLimit(ctx context.Context, client *http.Client, authAPIURL, secret, apiKey string, cost int) (*rateLimitResponse, error) {
+	payload, _ := json.Marshal(map[string]interface{}{
+		"api_key": apiKey,
+		"cost":    cost,
+	})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		fmt.Sprintf("%s/internal/check-rate-limit", authAPIURL),
+		bytes.NewReader(payload),
+	)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Internal-Secret", secret)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var rl rateLimitResponse
+	if err := json.Unmarshal(body, &rl); err != nil {
+		return nil, err
+	}
+	return &rl, nil
 }

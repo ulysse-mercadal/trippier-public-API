@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     poi_api_url: str = "http://localhost:8080"
     poi_client_timeout: float = 10.0
     log_level: str = "info"
+    auth_api_url: str = "http://auth-api:8081"
+    internal_secret: str = "change-me-internal-secret"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

@@ -7,8 +7,11 @@ on:
     branches: [main]
 
 jobs:
-  go-test:
-    name: Go — test & vet
+
+  # ── poi-api ──────────────────────────────────────────────────────────────────
+
+  poi-api-test:
+    name: poi-api — test & vet
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -24,15 +27,12 @@ jobs:
       - run: go test -race -coverprofile=coverage.out ./...
       - uses: actions/upload-artifact@v4
         with:
-          name: go-coverage
+          name: poi-api-coverage
           path: poi-api/coverage.out
 
-  go-lint:
-    name: Go — lint
+  poi-api-lint:
+    name: poi-api — lint
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: poi-api
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -44,8 +44,50 @@ jobs:
           version: latest
           working-directory: poi-api
 
-  python-test:
-    name: Python — test & lint
+  # ── auth-api ─────────────────────────────────────────────────────────────────
+
+  auth-api-test:
+    name: auth-api — test & vet
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: auth-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+      - run: go mod download
+      - run: go vet ./...
+      # DB-dependent packages (auth.Service, apikey.Service) require a live
+      # PostgreSQL connection and are skipped here; they run in the integration
+      # test suite (make test-integration).
+      - run: go test -race -run 'TestJWT|TestInternalAuth|TestDeduct|TestSetTokens|TestGetUsage|TestCheckRateLimit|TestIsDuplicate|TestPassword' ./...
+      - uses: actions/upload-artifact@v4
+        with:
+          name: auth-api-coverage
+          path: auth-api/coverage.out
+        continue-on-error: true
+
+  auth-api-lint:
+    name: auth-api — lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: auth-api
+
+  # ── itinerary-api ─────────────────────────────────────────────────────────────
+
+  itinerary-api-test:
+    name: itinerary-api — test & lint
     runs-on: ubuntu-latest
     defaults:
       run:

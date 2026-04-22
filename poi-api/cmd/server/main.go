@@ -48,7 +48,7 @@ func main() {
 		gin.Recovery(),
 		middleware.RequestID(),
 		middleware.Logger(log),
-		middleware.RateLimit(cfg.RateLimitPerMin),
+		middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 1, "/health"),
 	)
 
 	r.GET("/health", func(c *gin.Context) {
