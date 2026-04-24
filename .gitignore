@@ -4,6 +4,7 @@
 */bin/
 */vendor/
 */*.out
+*/tmp/          # air hot-reload build artifacts
 
 # Python
 __pycache__/

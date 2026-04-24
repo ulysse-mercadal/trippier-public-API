@@ -1,0 +1,8 @@
+FROM golang:1.23-alpine
+WORKDIR /app
+RUN go install github.com/air-verse/air@v1.61.1
+COPY go.mod go.sum ./
+RUN go mod download
+# Source is mounted via volume in docker-compose.dev.yml
+EXPOSE 8080
+CMD ["air"]
