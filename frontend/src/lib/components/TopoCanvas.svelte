@@ -2,23 +2,33 @@
 	import { onMount, onDestroy } from 'svelte';
 
 	let canvas: HTMLCanvasElement;
-	let animFrame: number;
 
-	interface Hill {
-		fx: number; fy: number;
-		a: number;  b: number;
-		angle: number;
-		levels: number;
+	// Deterministic pseudo-random seeded by grid indices + channel
+	function seeded(c: number, r: number, i: number): number {
+		const x = Math.sin(c * 127.1 + r * 311.7 + i * 74.3) * 43758.5453;
+		return x - Math.floor(x);
 	}
 
-	const HILLS: Hill[] = [
-		{ fx: 0.10, fy: 0.22, a: 0.19, b: 0.13, angle: -0.4, levels: 10 },
-		{ fx: 0.74, fy: 0.55, a: 0.23, b: 0.16, angle:  0.6, levels: 12 },
-		{ fx: 0.90, fy: 0.10, a: 0.13, b: 0.08, angle:  0.2, levels: 7  },
-		{ fx: 0.04, fy: 0.85, a: 0.15, b: 0.10, angle: -0.1, levels: 9  },
-		{ fx: 0.50, fy: 0.92, a: 0.18, b: 0.09, angle:  0.9, levels: 7  },
-		{ fx: 0.36, fy: 0.42, a: 0.10, b: 0.07, angle:  0.3, levels: 6  },
-	];
+	// Grid layout — 5×4 cells covering the full canvas with overlap
+	const COLS = 5;
+	const ROWS = 4;
+
+	// Normalised params computed once: positions as fractions of canvas size,
+	// radii as fractions of width/height, angle in radians, level count.
+	interface HillNorm { fx: number; fy: number; arx: number; ary: number; angle: number; levels: number }
+	const HILLS: HillNorm[] = [];
+	for (let r = 0; r < ROWS; r++) {
+		for (let c = 0; c < COLS; c++) {
+			HILLS.push({
+				fx:     (c + 0.5 + (seeded(c, r, 0) - 0.5) * 0.45) / COLS,
+				fy:     (r + 0.5 + (seeded(c, r, 1) - 0.5) * 0.45) / ROWS,
+				arx:    0.11 + seeded(c, r, 2) * 0.08,
+				ary:    0.07 + seeded(c, r, 3) * 0.06,
+				angle:  (seeded(c, r, 4) - 0.5) * Math.PI,
+				levels: 7 + Math.floor(seeded(c, r, 5) * 6),
+			});
+		}
+	}
 
 	function drawEllipse(
 		ctx: CanvasRenderingContext2D,
@@ -26,7 +36,7 @@
 		rx: number, ry: number,
 		angle: number, distort: number,
 	) {
-		const STEPS = 80;
+		const STEPS = 90;
 		ctx.beginPath();
 		for (let i = 0; i <= STEPS; i++) {
 			const t = (i / STEPS) * Math.PI * 2;
@@ -52,14 +62,15 @@
 		for (const h of HILLS) {
 			const cx = h.fx * W;
 			const cy = h.fy * H;
-			const rx = h.a  * W;
-			const ry = h.b  * H;
+			const rx = h.arx * W;
+			const ry = h.ary * H;
 
 			for (let i = 1; i <= h.levels; i++) {
 				const s       = i / h.levels;
-				const opacity = 0.03 + s * 0.075;
+				// Inner rings dim, outer rings brighter — classic topo look
+				const opacity = 0.04 + s * 0.13;
 				ctx.strokeStyle = `rgba(255,255,255,${opacity.toFixed(3)})`;
-				ctx.lineWidth   = 0.8;
+				ctx.lineWidth   = 0.75;
 				drawEllipse(ctx, cx, cy, rx * s, ry * s, h.angle, 1 - s * 0.5);
 			}
 		}
@@ -78,7 +89,6 @@
 
 	onDestroy(() => {
 		window.removeEventListener('resize', resize);
-		cancelAnimationFrame(animFrame);
 	});
 </script>
 
