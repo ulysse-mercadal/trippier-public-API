@@ -12,19 +12,19 @@ const (
 // SearchQuery holds all parameters for a POI search request.
 // Weights maps each PoiType to a relative importance factor (e.g. {"see":2,"eat":1}).
 type SearchQuery struct {
-	Mode      SearchMode          `form:"mode"      binding:"required,oneof=radius polygon district"`
-	Lat       float64             `form:"lat"`
-	Lng       float64             `form:"lng"`
-	Radius    int                 `form:"radius"`
-	Polygon   string              `form:"polygon"`
-	District  string              `form:"district"`
-	Providers []Provider          `form:"providers"`
-	Types     []PoiType           `form:"types"`
-	Weights   map[PoiType]float64 `form:"-"`
-	Lang      string              `form:"lang"`
-	Limit     int                 `form:"limit"`
-	Offset    int                 `form:"offset"`
-	MinScore  float64             `form:"min_score"`
+	Mode      SearchMode          `form:"mode"      json:"mode"      binding:"omitempty,oneof=radius polygon district"`
+	Lat       float64             `form:"lat"       json:"lat"`
+	Lng       float64             `form:"lng"       json:"lng"`
+	Radius    int                 `form:"radius"    json:"radius"`
+	Polygon   string              `form:"polygon"   json:"polygon,omitempty"`
+	District  string              `form:"district"  json:"district,omitempty"`
+	Providers []Provider          `form:"providers" json:"providers"`
+	Types     []PoiType           `form:"types"     json:"types,omitempty"`
+	Weights   map[PoiType]float64 `form:"-"         json:"weights,omitempty"`
+	Lang      string              `form:"lang"      json:"lang"`
+	Limit     int                 `form:"limit"     json:"limit"`
+	Offset    int                 `form:"offset"    json:"offset"`
+	MinScore  float64             `form:"min_score" json:"min_score,omitempty"`
 }
 
 // SearchResult is the top-level API response body for GET /pois/search.

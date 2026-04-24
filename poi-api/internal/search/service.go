@@ -115,6 +115,9 @@ func (s *Service) ProvidersStatus(ctx context.Context) []types.ProviderStatus {
 }
 
 func (s *Service) applyDefaults(q *types.SearchQuery) {
+	if q.Mode == "" {
+		q.Mode = types.ModeRadius
+	}
 	if q.Radius == 0 {
 		q.Radius = 5000
 	}
