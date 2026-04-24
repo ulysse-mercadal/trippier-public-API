@@ -47,8 +47,9 @@ func GetUsage(ctx context.Context, rdb *redis.Client, sha256Hash string) (remain
 
 // deductScript atomically deducts cost tokens.
 // Returns [remaining, ttlSecs] on success,
-//         [-1, 0]             if key not in Redis,
-//         [-2, ttlSecs]       if insufficient tokens.
+//
+//	[-1, 0]             if key not in Redis,
+//	[-2, ttlSecs]       if insufficient tokens.
 var deductScript = redis.NewScript(`
 local val = redis.call('GET', KEYS[1])
 if val == false then return {-1, 0} end

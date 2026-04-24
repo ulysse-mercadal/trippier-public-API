@@ -55,7 +55,8 @@ func (s *Service) Register(ctx context.Context, emailAddr, password string) erro
 	}
 
 	_, err = s.db.Exec(ctx,
-		`INSERT INTO users (email, password_hash, verification_token) VALUES ($1, $2, $3)`,
+		`INSERT INTO users (email, password_hash, verification_token, verification_token_expires_at)
+		 VALUES ($1, $2, $3, NOW() + INTERVAL '24 hours')`,
 		emailAddr, string(hash), token,
 	)
 	if err != nil {
@@ -76,8 +77,11 @@ func (s *Service) Register(ctx context.Context, emailAddr, password string) erro
 // VerifyEmail marks the account as verified and clears the token.
 func (s *Service) VerifyEmail(ctx context.Context, token string) error {
 	tag, err := s.db.Exec(ctx,
-		`UPDATE users SET verified = true, verification_token = NULL, updated_at = NOW()
-		 WHERE verification_token = $1 AND verified = false`,
+		`UPDATE users
+		    SET verified = true, verification_token = NULL, verification_token_expires_at = NULL, updated_at = NOW()
+		  WHERE verification_token = $1
+		    AND verified = false
+		    AND verification_token_expires_at > NOW()`,
 		token,
 	)
 	if err != nil {

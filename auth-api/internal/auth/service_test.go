@@ -49,7 +49,7 @@ func TestPasswordMinLength(t *testing.T) {
 	// The service rejects passwords shorter than 8 chars.
 	// This test documents the business rule without hitting the DB.
 	cases := []struct {
-		pw      string
+		pw       string
 		tooShort bool
 	}{
 		{"abc", true},

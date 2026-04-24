@@ -48,8 +48,10 @@ func main() {
 	jwtAuth := mw.JWTAuth(cfg.JWTSecret)
 	internalAuth := mw.InternalAuth(cfg.InternalSecret)
 
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery())
+	r.SetTrustedProxies(nil) //nolint:errcheck
+	r.Use(gin.Logger(), gin.Recovery(), mw.SecureHeaders())
 
 	r.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
 
