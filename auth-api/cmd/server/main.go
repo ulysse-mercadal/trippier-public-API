@@ -3,11 +3,18 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
+
 	"github.com/trippier/auth-api/internal/apikey"
 	"github.com/trippier/auth-api/internal/auth"
 	"github.com/trippier/auth-api/internal/config"
@@ -19,20 +26,24 @@ import (
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("config: %v", err)
+		fmt.Fprintf(os.Stderr, "config: %v\n", err)
+		os.Exit(1)
 	}
+
+	log := buildLogger(cfg.LogLevel)
+	defer log.Sync() //nolint:errcheck
 
 	ctx := context.Background()
 
 	pool, err := db.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("db: %v", err)
+		log.Fatal("db", zap.Error(err))
 	}
 	defer pool.Close()
 
 	opt, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
-		log.Fatalf("redis url: %v", err)
+		log.Fatal("redis url", zap.Error(err))
 	}
 	rdb := redis.NewClient(opt)
 	defer rdb.Close()
@@ -55,16 +66,55 @@ func main() {
 
 	r.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
 
-	authHandler.RegisterRoutes(r.Group(""), jwtAuth)
+	loginLimiter := mw.IPRateLimit(rdb, 10, time.Minute)
+	registerLimiter := mw.IPRateLimit(rdb, 5, 15*time.Minute)
+	authHandler.RegisterRoutes(r.Group(""), jwtAuth, loginLimiter, registerLimiter)
 	keyHandler.RegisterRoutes(
 		r.Group("/api-keys"),
 		r.Group("/internal", internalAuth),
 		jwtAuth,
 	)
 
-	addr := fmt.Sprintf(":%s", cfg.Port)
-	log.Printf("auth-api listening on %s", addr)
-	if err := r.Run(addr); err != nil {
-		log.Fatalf("server: %v", err)
+	srv := &http.Server{
+		Addr:         fmt.Sprintf(":%s", cfg.Port),
+		Handler:      r,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
 	}
+
+	// Start server in a goroutine so the shutdown listener is non-blocking.
+	go func() {
+		log.Info("auth-api starting", zap.String("addr", srv.Addr))
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal("server error", zap.Error(err))
+		}
+	}()
+
+	// Graceful shutdown on SIGINT / SIGTERM.
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Info("shutting down server…")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Error("shutdown error", zap.Error(err))
+	}
+	log.Info("server stopped")
+}
+
+func buildLogger(level string) *zap.Logger {
+	var cfg zap.Config
+	if level == "debug" {
+		cfg = zap.NewDevelopmentConfig()
+	} else {
+		cfg = zap.NewProductionConfig()
+	}
+	log, err := cfg.Build()
+	if err != nil {
+		panic(fmt.Sprintf("build logger: %v", err))
+	}
+	return log
 }

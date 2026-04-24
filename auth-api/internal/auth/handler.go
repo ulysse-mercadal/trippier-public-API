@@ -20,10 +20,10 @@ func NewHandler(svc *Service, appURL string) *Handler {
 }
 
 // RegisterRoutes mounts all auth endpoints on r.
-func (h *Handler) RegisterRoutes(r gin.IRouter, jwtAuth gin.HandlerFunc) {
-	r.POST("/register", h.register)
+func (h *Handler) RegisterRoutes(r gin.IRouter, jwtAuth gin.HandlerFunc, loginLimiter gin.HandlerFunc, registerLimiter gin.HandlerFunc) {
+	r.POST("/register", registerLimiter, h.register)
 	r.GET("/verify-email", h.verifyEmail)
-	r.POST("/login", h.login)
+	r.POST("/login", loginLimiter, h.login)
 	r.GET("/me", jwtAuth, h.me)
 }
 

@@ -21,6 +21,7 @@ type Config struct {
 	AppURL                string
 	DefaultTokensLimit    int
 	DefaultResetIntervalS int
+	LogLevel              string
 }
 
 // Load reads configuration from environment variables (prefixed AUTH_)
@@ -42,6 +43,7 @@ func Load() (*Config, error) {
 	v.SetDefault("APP_URL", "http://localhost:3000")
 	v.SetDefault("DEFAULT_TOKENS_LIMIT", 1000)
 	v.SetDefault("DEFAULT_RESET_INTERVAL_S", 3600)
+	v.SetDefault("LOG_LEVEL", "info")
 
 	cfg := &Config{
 		Port:                  v.GetString("PORT"),
@@ -55,6 +57,7 @@ func Load() (*Config, error) {
 		AppURL:                v.GetString("APP_URL"),
 		DefaultTokensLimit:    v.GetInt("DEFAULT_TOKENS_LIMIT"),
 		DefaultResetIntervalS: v.GetInt("DEFAULT_RESET_INTERVAL_S"),
+		LogLevel:              v.GetString("LOG_LEVEL"),
 	}
 
 	if len(cfg.JWTSecret) < 32 {
