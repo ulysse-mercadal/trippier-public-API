@@ -68,7 +68,7 @@ func (s *Service) Register(ctx context.Context, emailAddr, password string) erro
 
 	verifyURL := fmt.Sprintf("%s/api/auth/verify-email?token=%s", s.appURL, token)
 	if err := s.emailer.SendVerification(emailAddr, verifyURL); err != nil {
-		fmt.Printf("warn: could not send verification email to %s: %v\n", emailAddr, err)
+		return fmt.Errorf("send verification email: %w", err)
 	}
 
 	return nil
