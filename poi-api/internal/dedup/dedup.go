@@ -33,7 +33,7 @@ func Merge(pois []types.RawPoi) []types.EnrichedPoi {
 
 func group(pois []types.RawPoi) [][]types.RawPoi {
 	used := make([]bool, len(pois))
-	var groups [][]types.RawPoi
+	groups := make([][]types.RawPoi, 0, len(pois))
 
 	for i := range pois {
 		if used[i] {
@@ -56,15 +56,24 @@ func areDuplicates(a, b types.RawPoi) bool {
 	if a.WikidataID != "" && a.WikidataID == b.WikidataID {
 		return true
 	}
-	if a.Coords != nil && b.Coords != nil && !a.Coords.Approximate && !b.Coords.Approximate {
+	aApprox := a.Coords == nil || a.Coords.Approximate
+	bApprox := b.Coords == nil || b.Coords.Approximate
+
+	// When both POIs have precise coordinates, check proximity first — it is
+	// cheaper than JaroWinkler and quickly eliminates distant duplicates.
+	if !aApprox && !bApprox {
 		dist := mathutil.Haversine(a.Coords.Lat, a.Coords.Lng, b.Coords.Lat, b.Coords.Lng)
-		similarity := mathutil.JaroWinkler(
-			strings.ToLower(strings.TrimSpace(a.Name)),
-			strings.ToLower(strings.TrimSpace(b.Name)),
-		)
-		return dist < proximityThresholdMeters && similarity >= nameSimilarityThreshold
+		if dist >= proximityThresholdMeters {
+			return false
+		}
 	}
-	return false
+
+	// Name similarity decides the final outcome.
+	similarity := mathutil.JaroWinkler(
+		strings.ToLower(strings.TrimSpace(a.Name)),
+		strings.ToLower(strings.TrimSpace(b.Name)),
+	)
+	return similarity >= nameSimilarityThreshold
 }
 
 func toEnriched(group []types.RawPoi) types.EnrichedPoi {

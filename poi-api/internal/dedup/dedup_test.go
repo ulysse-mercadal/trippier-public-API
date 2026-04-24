@@ -16,14 +16,14 @@ func TestMergeByWikidataID(t *testing.T) {
 	pois := []types.RawPoi{
 		{
 			ID: "overpass:1", Name: "Louvre Museum",
-			Provider: types.ProviderOverpass,
-			Coords:   coords(48.8606, 2.3376),
+			Provider:   types.ProviderOverpass,
+			Coords:     coords(48.8606, 2.3376),
 			WikidataID: "Q19675",
 		},
 		{
 			ID: "wikipedia:123", Name: "Louvre",
-			Provider: types.ProviderWikipedia,
-			Coords:   coords(48.8606, 2.3376),
+			Provider:   types.ProviderWikipedia,
+			Coords:     coords(48.8606, 2.3376),
 			WikidataID: "Q19675",
 		},
 	}
@@ -88,14 +88,14 @@ func TestPrimaryProviderPriority(t *testing.T) {
 	pois := []types.RawPoi{
 		{
 			ID: "wikipedia:1", Name: "Panthéon",
-			Provider: types.ProviderWikipedia,
-			Coords:   coords(48.8462, 2.3461),
+			Provider:   types.ProviderWikipedia,
+			Coords:     coords(48.8462, 2.3461),
 			WikidataID: "Q188715",
 		},
 		{
 			ID: "overpass:10", Name: "Panthéon",
-			Provider: types.ProviderOverpass,
-			Coords:   coords(48.8462, 2.3461),
+			Provider:   types.ProviderOverpass,
+			Coords:     coords(48.8462, 2.3461),
 			WikidataID: "Q188715",
 		},
 	}
@@ -116,17 +116,17 @@ func TestMergeContactMerge(t *testing.T) {
 	pois := []types.RawPoi{
 		{
 			ID: "overpass:20", Name: "Brasserie Lipp",
-			Provider: types.ProviderOverpass,
-			Coords:   coords(48.8540, 2.3330),
+			Provider:   types.ProviderOverpass,
+			Coords:     coords(48.8540, 2.3330),
 			WikidataID: "Q123",
-			Contact: types.Contact{Website: "https://brasserie-lipp.fr"},
+			Contact:    types.Contact{Website: "https://brasserie-lipp.fr"},
 		},
 		{
 			ID: "wikivoyage:brasserie_lipp", Name: "Brasserie Lipp",
-			Provider: types.ProviderWikivoyage,
-			Coords:   coords(48.8540, 2.3330),
+			Provider:   types.ProviderWikivoyage,
+			Coords:     coords(48.8540, 2.3330),
 			WikidataID: "Q123",
-			Contact: types.Contact{Phone: "+33 1 45 48 53 91"},
+			Contact:    types.Contact{Phone: "+33 1 45 48 53 91"},
 		},
 	}
 
