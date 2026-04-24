@@ -39,6 +39,19 @@ type RawPoi struct {
 	Distance    float64           `json:"distance,omitempty"`
 }
 
+// SlimPoi is the lightweight projection returned by GET /pois/search/slim.
+type SlimPoi struct {
+	Name   string       `json:"name"`
+	Type   PoiType      `json:"type"`
+	Coords *Coordinates `json:"coords,omitempty"`
+}
+
+// SlimResult is the top-level response body for GET /pois/search/slim.
+type SlimResult struct {
+	Total   int       `json:"total"`
+	Results []SlimPoi `json:"results"`
+}
+
 // EnrichedPoi is the final merged and scored result returned to the caller.
 type EnrichedPoi struct {
 	ID            string              `json:"id"`

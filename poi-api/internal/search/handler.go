@@ -21,11 +21,12 @@ func NewHandler(svc *Service) *Handler {
 // RegisterRoutes attaches all POI routes to the given router group.
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/search", h.search)
+	rg.GET("/search/slim", h.searchSlim)
 	rg.GET("/providers", h.providers)
 	rg.GET("/:id", h.getByID)
 }
 
-// search godoc
+// search godoc.
 // @Summary     Search for points of interest
 // @Tags        pois
 // @Produce     json
@@ -60,6 +61,8 @@ func (h *Handler) search(c *gin.Context) {
 	}
 	q.Weights = weights
 
+	applyQueryDefaults(&q)
+
 	if err := Validate(q); err != nil {
 		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
@@ -74,7 +77,50 @@ func (h *Handler) search(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-// providers godoc
+// searchSlim godoc.
+// @Summary     Search POIs — lightweight projection (name, type, coords only)
+// @Tags        pois
+// @Produce     json
+// @Param       mode      query  string   false "Search mode: radius | polygon | district (default radius)"
+// @Param       lat       query  number   false "Latitude"
+// @Param       lng       query  number   false "Longitude"
+// @Param       radius    query  integer  false "Search radius in meters (default 5000)"
+// @Param       polygon   query  string   false "GeoJSON polygon string"
+// @Param       district  query  string   false "District or city name"
+// @Param       types     query  []string false "POI types to include"
+// @Param       limit     query  integer  false "Max results (default 20, max 100)"
+// @Param       offset    query  integer  false "Pagination offset"
+// @Success     200  {object}  types.SlimResult
+// @Failure     400  {object}  errorResponse
+// @Router      /pois/search/slim [get]
+func (h *Handler) searchSlim(c *gin.Context) {
+	var q types.SearchQuery
+	if err := c.ShouldBindQuery(&q); err != nil {
+		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+
+	applyQueryDefaults(&q)
+
+	if err := Validate(q); err != nil {
+		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+
+	result, err := h.service.Search(c.Request.Context(), q)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		return
+	}
+
+	slim := make([]types.SlimPoi, len(result.Results))
+	for i, p := range result.Results {
+		slim[i] = types.SlimPoi{Name: p.Name, Type: p.Type, Coords: p.Coords}
+	}
+	c.JSON(http.StatusOK, types.SlimResult{Total: result.Total, Results: slim})
+}
+
+// providers godoc.
 // @Summary  List available data providers and their status
 // @Tags     pois
 // @Produce  json
@@ -85,7 +131,7 @@ func (h *Handler) providers(c *gin.Context) {
 	c.JSON(http.StatusOK, statuses)
 }
 
-// getByID godoc
+// getByID godoc.
 // @Summary  Retrieve a single POI by its namespaced ID
 // @Tags     pois
 // @Produce  json
@@ -95,6 +141,13 @@ func (h *Handler) providers(c *gin.Context) {
 // @Router   /pois/{id} [get]
 func (h *Handler) getByID(c *gin.Context) {
 	c.JSON(http.StatusNotImplemented, errorResponse{Error: "not implemented"})
+}
+
+// applyQueryDefaults fills in missing mode so callers can omit it when lat/lng/radius are provided.
+func applyQueryDefaults(q *types.SearchQuery) {
+	if q.Mode == "" {
+		q.Mode = types.ModeRadius
+	}
 }
 
 type errorResponse struct {
