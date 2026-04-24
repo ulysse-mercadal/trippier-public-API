@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 
 from app.models.types import Poi
@@ -14,7 +16,7 @@ class PoiClient:
         self._base_url = base_url.rstrip("/")
         self._timeout = timeout
 
-    async def search(self, query: dict) -> list[Poi]:
+    async def search(self, query: dict[str, Any]) -> list[Poi]:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             response = await client.get(f"{self._base_url}/pois/search", params=query)
             response.raise_for_status()

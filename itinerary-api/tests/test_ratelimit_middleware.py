@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
 import respx
-import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.middleware.ratelimit import RateLimitMiddleware
-
 
 AUTH_URL = "http://fake-auth-api"
 SECRET = "test-internal-secret"
@@ -27,18 +26,18 @@ def make_app(auth_url: str = AUTH_URL) -> FastAPI:
     )
 
     @app.get("/health")
-    def health():
+    def health() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/search")
-    def search():
+    def search() -> dict[str, list[str]]:
         return {"results": []}
 
     return app
 
 
 @pytest.fixture
-def client():
+def client() -> TestClient:
     return TestClient(make_app(), raise_server_exceptions=False)
 
 

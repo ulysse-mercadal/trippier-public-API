@@ -7,10 +7,10 @@ import hmac
 import time
 
 import httpx
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
-
+from starlette.types import ASGIApp
 
 EXEMPT_PATHS = {"/health"}
 
@@ -29,14 +29,14 @@ def _build_internal_auth(secret: str) -> str:
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Calls auth-api /internal/check-rate-limit before each protected request."""
 
-    def __init__(self, app, auth_api_url: str, internal_secret: str, cost: int) -> None:
+    def __init__(self, app: ASGIApp, auth_api_url: str, internal_secret: str, cost: int) -> None:
         super().__init__(app)
         self._auth_api_url = auth_api_url.rstrip("/")
         self._internal_secret = internal_secret
         self._cost = cost
         self._client = httpx.AsyncClient(timeout=5.0)
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.url.path in EXEMPT_PATHS:
             return await call_next(request)
 
@@ -57,9 +57,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if not data.get("allowed"):
             if data.get("error") == "invalid api key":
                 return JSONResponse({"error": "invalid api key"}, status_code=401)
+            resets_in = data.get("resets_in_secs", 0)
             return JSONResponse(
-                {"error": "rate limit exceeded", "resets_in_secs": data.get("resets_in_secs", 0)},
+                {"error": "rate limit exceeded", "resets_in_secs": resets_in},
                 status_code=429,
+                headers={"Retry-After": str(resets_in)},
             )
 
         response = await call_next(request)

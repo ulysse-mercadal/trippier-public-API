@@ -10,7 +10,6 @@ The service splits a flat list of POIs across N days by:
 from __future__ import annotations
 
 import math
-from typing import Optional
 
 from app.models.types import (
     Coordinates,
@@ -51,7 +50,7 @@ class ItineraryService:
         self,
         pois: list[Poi],
         days: int,
-        start: Optional[Coordinates],
+        start: Coordinates | None,
     ) -> list[list[Poi]]:
         if not pois:
             return [[] for _ in range(days)]
@@ -66,20 +65,19 @@ class ItineraryService:
             for c in clusters:
                 c.clear()
             for poi in pois_with_coords:
-                nearest = min(
-                    range(days),
-                    key=lambda i: _haversine(
-                        poi.coords.lat, poi.coords.lng,
-                        centroids[i][0], centroids[i][1],
-                    ),
-                )
-                clusters[nearest].append(poi)
+                coords = poi.coords
+                if coords is None:
+                    continue
+                dists = [
+                    _haversine(coords.lat, coords.lng, centroids[j][0], centroids[j][1])
+                    for j in range(days)
+                ]
+                clusters[dists.index(min(dists))].append(poi)
             for i, cluster in enumerate(clusters):
                 if cluster:
-                    centroids[i] = (
-                        sum(p.coords.lat for p in cluster) / len(cluster),
-                        sum(p.coords.lng for p in cluster) / len(cluster),
-                    )
+                    lats = [p.coords.lat for p in cluster if p.coords is not None]
+                    lngs = [p.coords.lng for p in cluster if p.coords is not None]
+                    centroids[i] = (sum(lats) / len(cluster), sum(lngs) / len(cluster))
 
         for i, poi in enumerate(pois_no_coords):
             clusters[i % days].append(poi)
@@ -90,19 +88,23 @@ class ItineraryService:
         self,
         pois: list[Poi],
         k: int,
-        start: Optional[Coordinates],
+        start: Coordinates | None,
     ) -> list[tuple[float, float]]:
         if not pois:
             lat = start.lat if start else 0.0
             lng = start.lng if start else 0.0
             return [(lat, lng)] * k
         step = max(1, len(pois) // k)
-        return [(pois[i * step].coords.lat, pois[i * step].coords.lng) for i in range(k)]
+        return [
+            (c.lat, c.lng)
+            for i in range(k)
+            if (c := pois[i * step].coords) is not None
+        ]
 
     def _nearest_neighbour(
         self,
         pois: list[Poi],
-        start: Optional[Coordinates],
+        start: Coordinates | None,
     ) -> list[Poi]:
         if not pois:
             return []
@@ -142,7 +144,10 @@ def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     lat2_rad = math.radians(lat2)
     delta_lat = math.radians(lat2 - lat1)
     delta_lng = math.radians(lng2 - lng1)
-    a = math.sin(delta_lat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lng / 2) ** 2
+    a = (
+        math.sin(delta_lat / 2) ** 2
+        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lng / 2) ** 2
+    )
     return earth_radius * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 

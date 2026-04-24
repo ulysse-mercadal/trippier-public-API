@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -34,9 +34,9 @@ class Poi(BaseModel):
     id: str
     name: str
     type: PoiType
-    coords: Optional[Coordinates] = None
-    description: Optional[str] = None
-    distance: Optional[float] = None
+    coords: Coordinates | None = None
+    description: str | None = None
+    distance: float | None = None
 
 
 class Preferences(BaseModel):
@@ -52,13 +52,13 @@ class Preferences(BaseModel):
 class ItineraryRequest(BaseModel):
     """Request body for POST /itinerary/generate."""
 
-    pois: Optional[list[Poi]] = None
-    poi_query: Optional[dict] = Field(
+    pois: list[Poi] | None = None
+    poi_query: dict[str, Any] | None = Field(
         default=None,
         description="Pass-through query forwarded to poi-api if pois is not provided.",
     )
     days: int = Field(default=1, ge=1, le=30)
-    start_location: Optional[Coordinates] = None
+    start_location: Coordinates | None = None
     preferences: Preferences = Field(default_factory=Preferences)
 
 
@@ -68,7 +68,7 @@ class DayPlan(BaseModel):
     day: int
     pois: list[Poi]
     estimated_duration_hours: float
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class ItineraryResponse(BaseModel):
@@ -76,4 +76,4 @@ class ItineraryResponse(BaseModel):
 
     days: list[DayPlan]
     total_pois: int
-    summary: Optional[str] = None
+    summary: str | None = None

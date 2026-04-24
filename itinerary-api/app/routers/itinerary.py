@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.config import get_itinerary_service, get_poi_client
 from app.models.types import ItineraryRequest, ItineraryResponse
 from app.services.itinerary_service import ItineraryService
 from app.services.poi_client import PoiClient
-from app.config import get_poi_client, get_itinerary_service
 
 router = APIRouter(prefix="/itinerary", tags=["itinerary"])
 
@@ -19,8 +19,8 @@ router = APIRouter(prefix="/itinerary", tags=["itinerary"])
 )
 async def generate(
     request: ItineraryRequest,
-    poi_client: PoiClient = Depends(get_poi_client),
-    service: ItineraryService = Depends(get_itinerary_service),
+    poi_client: PoiClient = Depends(get_poi_client),  # noqa: B008
+    service: ItineraryService = Depends(get_itinerary_service),  # noqa: B008
 ) -> ItineraryResponse:
     if request.pois is None and request.poi_query is None:
         raise HTTPException(

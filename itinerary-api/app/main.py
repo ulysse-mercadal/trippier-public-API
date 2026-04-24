@@ -24,5 +24,5 @@ app.include_router(itinerary_router)
 
 
 @app.get("/health", tags=["meta"])
-def health() -> dict:
+def health() -> dict[str, str]:
     return {"status": "ok"}
