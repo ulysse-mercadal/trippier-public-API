@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trippier/poi-api/internal/providers"
 	"github.com/trippier/poi-api/pkg/types"
 )
 
@@ -111,6 +112,7 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 		return nil, fmt.Errorf("overpass: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	providers.SetUserAgent(req)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -189,21 +191,21 @@ func (p *Provider) toRawPois(elements []overpassElement) []types.RawPoi {
 			lat, lng = el.Center.Lat, el.Center.Lon
 		}
 		pois = append(pois, types.RawPoi{
-			ID:          fmt.Sprintf("overpass:%d", el.ID),
-			Name:        name,
-			Type:        p.resolveType(el.Tags),
-			Provider:    types.ProviderOverpass,
-			Coords:      &types.Coordinates{
-				Lat:     lat,
-				Lng:     lng,
+			ID:       fmt.Sprintf("overpass:%d", el.ID),
+			Name:     name,
+			Type:     p.resolveType(el.Tags),
+			Provider: types.ProviderOverpass,
+			Coords: &types.Coordinates{
+				Lat: lat,
+				Lng: lng,
 			},
-			Contact:     types.Contact{
+			Contact: types.Contact{
 				Website: el.Tags["website"],
 				Phone:   el.Tags["phone"],
 				Hours:   el.Tags["opening_hours"],
 			},
-			Tags:        el.Tags,
-			WikidataID:  el.Tags["wikidata"],
+			Tags:       el.Tags,
+			WikidataID: el.Tags["wikidata"],
 		})
 	}
 	return pois

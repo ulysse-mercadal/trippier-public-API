@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trippier/poi-api/internal/providers"
 	"github.com/trippier/poi-api/pkg/types"
 )
 
@@ -68,6 +69,7 @@ type geosearchPage struct {
 	Lat    float64 `json:"lat"`
 	Lon    float64 `json:"lon"`
 	Dist   float64 `json:"dist"`
+	Type   string  `json:"type"`
 }
 
 func (p *Provider) geosearch(ctx context.Context, q types.SearchQuery) ([]geosearchPage, error) {
@@ -78,6 +80,7 @@ func (p *Provider) geosearch(ctx context.Context, q types.SearchQuery) ([]geosea
 		"gsradius":    {strconv.Itoa(q.Radius)},
 		"gslimit":     {"50"},
 		"gsnamespace": {"0"},
+		"gsprop":      {"type"},
 		"format":      {"json"},
 	}
 
@@ -85,6 +88,7 @@ func (p *Provider) geosearch(ctx context.Context, q types.SearchQuery) ([]geosea
 	if err != nil {
 		return nil, err
 	}
+	providers.SetUserAgent(req)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -100,7 +104,15 @@ func (p *Provider) geosearch(ctx context.Context, q types.SearchQuery) ([]geosea
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
-	return result.Query.Geosearch, nil
+	// Exclude historical events — they have coordinates at the event site but
+	// are not physical places a traveller can visit.
+	pages := result.Query.Geosearch[:0]
+	for _, p := range result.Query.Geosearch {
+		if p.Type != "event" {
+			pages = append(pages, p)
+		}
+	}
+	return pages, nil
 }
 
 func (p *Provider) enrichPages(ctx context.Context, pages []geosearchPage) []types.RawPoi {
@@ -126,6 +138,7 @@ func (p *Provider) enrichPages(ctx context.Context, pages []geosearchPage) []typ
 	if err != nil {
 		return p.pagesWithoutEnrichment(pages)
 	}
+	providers.SetUserAgent(req)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -188,4 +201,3 @@ func (p *Provider) pagesWithoutEnrichment(pages []geosearchPage) []types.RawPoi 
 	}
 	return pois
 }
-

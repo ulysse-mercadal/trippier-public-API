@@ -41,14 +41,14 @@ type geonamesResponse struct {
 }
 
 type geonameItem struct {
-	GeonameID   int     `json:"geonameId"`
-	Name        string  `json:"name"`
-	Lat         string  `json:"lat"`
-	Lng         string  `json:"lng"`
-	FcodeName   string  `json:"fcodeName"`
-	Fcode       string  `json:"fcode"`
+	GeonameID   int    `json:"geonameId"`
+	Name        string `json:"name"`
+	Lat         string `json:"lat"`
+	Lng         string `json:"lng"`
+	FcodeName   string `json:"fcodeName"`
+	Fcode       string `json:"fcode"`
 	CountryCode string `json:"countryCode"`
-	Distance    string  `json:"distance"`
+	Distance    string `json:"distance"`
 }
 
 // Provider fetches nearby geographic features from the GeoNames API.

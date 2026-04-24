@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trippier/poi-api/internal/providers"
 	"github.com/trippier/poi-api/pkg/types"
 )
 
@@ -75,12 +76,19 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 	return p.parseListings(wikitext, pageTitle), nil
 }
 
-func (p *Provider) resolveZone(ctx context.Context, lat, lng float64, radius int) (string, error) {
+// zoneSearchRadius is the fixed radius used to find the nearest Wikivoyage article.
+// It is deliberately larger than the POI search radius so that neighbourhood
+// articles (e.g. "Paris/7th arrondissement") are always found even when the
+// user requests a small search radius.
+// Capped at 10 000 m — the maximum accepted by the MediaWiki geosearch API.
+const zoneSearchRadius = 10_000
+
+func (p *Provider) resolveZone(ctx context.Context, lat, lng float64, _ int) (string, error) {
 	params := url.Values{
 		"action":      {"query"},
 		"list":        {"geosearch"},
 		"gscoord":     {fmt.Sprintf("%.6f|%.6f", lat, lng)},
-		"gsradius":    {strconv.Itoa(radius)},
+		"gsradius":    {strconv.Itoa(zoneSearchRadius)},
 		"gslimit":     {"1"},
 		"gsnamespace": {"0"},
 		"format":      {"json"},
@@ -90,6 +98,7 @@ func (p *Provider) resolveZone(ctx context.Context, lat, lng float64, radius int
 	if err != nil {
 		return "", err
 	}
+	providers.SetUserAgent(req)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -125,6 +134,7 @@ func (p *Provider) fetchWikitext(ctx context.Context, title string) (string, err
 	if err != nil {
 		return "", err
 	}
+	providers.SetUserAgent(req)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -149,9 +159,10 @@ var listingRe = regexp.MustCompile(`(?i)\{\{(see|do|eat|drink|buy|sleep|listing)
 var fieldRe = regexp.MustCompile(`(\w+)\s*=\s*([^|}\n]+)`)
 
 func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
-	var pois []types.RawPoi
+	matches := listingRe.FindAllStringSubmatch(wikitext, -1)
+	pois := make([]types.RawPoi, 0, len(matches))
 
-	for _, match := range listingRe.FindAllStringSubmatch(wikitext, -1) {
+	for _, match := range matches {
 		kind := strings.ToLower(match[1])
 		fields := p.parseFields(match[2])
 
@@ -166,7 +177,7 @@ func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 			Type:        listingTypeMap[kind],
 			Provider:    types.ProviderWikivoyage,
 			Description: strings.TrimSpace(fields["content"]),
-			Contact:     types.Contact{
+			Contact: types.Contact{
 				Website: strings.TrimSpace(fields["url"]),
 				Phone:   strings.TrimSpace(fields["phone"]),
 				Hours:   strings.TrimSpace(fields["hours"]),
