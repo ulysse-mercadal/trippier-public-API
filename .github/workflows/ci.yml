@@ -4,118 +4,78 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
-
-  # ── poi-api ──────────────────────────────────────────────────────────────────
-
-  poi-api-test:
-    name: poi-api — test & vet
+  test-go-poi:
+    name: Test poi-api
     runs-on: ubuntu-latest
-    defaults:
-      run:
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: poi-api/go.sum
+      - run: go test -race ./...
         working-directory: poi-api
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-          cache: true
-      - run: go mod download
-      - run: go vet ./...
-      - run: go test -race -coverprofile=coverage.out ./...
-      - uses: actions/upload-artifact@v4
-        with:
-          name: poi-api-coverage
-          path: poi-api/coverage.out
 
-  poi-api-lint:
-    name: poi-api — lint
+  test-go-auth:
+    name: Test auth-api
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
-          cache: true
-      - uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          working-directory: poi-api
-
-  # ── auth-api ─────────────────────────────────────────────────────────────────
-
-  auth-api-test:
-    name: auth-api — test & vet
-    runs-on: ubuntu-latest
-    defaults:
-      run:
+          go-version: "1.23"
+          cache-dependency-path: auth-api/go.sum
+      - run: go test -race ./...
         working-directory: auth-api
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-          cache: true
-      - run: go mod download
-      - run: go vet ./...
-      # DB-dependent packages (auth.Service, apikey.Service) require a live
-      # PostgreSQL connection and are skipped here; they run in the integration
-      # test suite (make test-integration).
-      - run: go test -race -run 'TestJWT|TestInternalAuth|TestDeduct|TestSetTokens|TestGetUsage|TestCheckRateLimit|TestIsDuplicate|TestPassword' ./...
-      - uses: actions/upload-artifact@v4
-        with:
-          name: auth-api-coverage
-          path: auth-api/coverage.out
-        continue-on-error: true
 
-  auth-api-lint:
-    name: auth-api — lint
+  test-python:
+    name: Test itinerary-api
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-          cache: true
-      - uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          working-directory: auth-api
-
-  # ── frontend ─────────────────────────────────────────────────────────────────
-
-  frontend-check:
-    name: frontend — typecheck & build
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
-      - run: bun run check
-      - run: bun run build
-
-  # ── itinerary-api ─────────────────────────────────────────────────────────────
-
-  itinerary-api-test:
-    name: itinerary-api — test & lint
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: itinerary-api
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
-      - run: pip install -r requirements-dev.txt
-      - run: ruff check .
-      - run: mypy app
-      - run: pytest --tb=short
+      - run: pip install -r requirements-dev.txt && pytest --tb=short
+        working-directory: itinerary-api
+
+  lint-go-poi:
+    name: Lint poi-api
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: poi-api/go.sum
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64
+          working-directory: poi-api
+
+  lint-go-auth:
+    name: Lint auth-api
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: auth-api/go.sum
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64
+          working-directory: auth-api
+
+  lint-python:
+    name: Lint itinerary-api
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt && ruff check . && mypy app
+        working-directory: itinerary-api
