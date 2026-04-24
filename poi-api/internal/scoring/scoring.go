@@ -7,19 +7,40 @@ import (
 	"github.com/trippier/poi-api/pkg/types"
 )
 
+// defaultTypeWeights ranks POI types by tourist relevance when the caller
+// has not provided explicit weights. "see" and "do" score highest because
+// travellers prioritise landmarks and activities over generic services.
+var defaultTypeWeights = map[types.PoiType]float64{
+	types.TypeSee:   1.0,
+	types.TypeDo:    0.8,
+	types.TypeEat:   0.6,
+	types.TypeDrink: 0.5,
+	types.TypeSleep: 0.4,
+	types.TypeBuy:   0.4,
+	// TypeGeneric falls through to the 0.5 fallback in typeScore.
+}
+
 // Score computes a relevance score in [0, 100] for an enriched POI.
-// The formula weighs type match, multi-source confirmation, distance, and coordinate precision.
+// Weights:
+//   - type match      40 — what kind of POI it is
+//   - source count    30 — confirmed by multiple independent sources
+//   - distance        20 — closer is better, but doesn't dominate
+//   - coord precision 10 — precise location preferred over approximate
 func Score(poi types.EnrichedPoi, q types.SearchQuery) float64 {
 	s := typeScore(poi.Type, q.Weights)*40 +
-		sourceScore(len(poi.Sources))*20 +
-		distanceScore(poi.Distance, float64(q.Radius))*30 +
+		sourceScore(len(poi.Sources))*30 +
+		distanceScore(poi.Distance, float64(q.Radius))*20 +
 		coordScore(poi)*10
 	return math.Min(s, 100)
 }
 
 func typeScore(t types.PoiType, weights map[types.PoiType]float64) float64 {
 	if len(weights) == 0 {
-		return 0.5
+		w := defaultTypeWeights[t]
+		if w == 0 {
+			return 0.5
+		}
+		return w
 	}
 	w, ok := weights[t]
 	if !ok {
