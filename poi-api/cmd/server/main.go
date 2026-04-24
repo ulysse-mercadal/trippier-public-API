@@ -40,7 +40,10 @@ func main() {
 		log.Info("POI_GEONAMES_USERNAME not set — geonames provider will be disabled")
 	}
 
-	rdb := buildRedis(cfg.RedisURL)
+	rdb, err := buildRedis(cfg.RedisURL)
+	if err != nil {
+		log.Fatal("redis url", zap.Error(err))
+	}
 
 	pp := buildProviders(cfg)
 	svc := search.NewService(pp, time.Duration(cfg.ProviderTimeout)*time.Second)
@@ -122,11 +125,10 @@ func buildLogger(level string) *zap.Logger {
 	return log
 }
 
-func buildRedis(redisURL string) *redis.Client {
+func buildRedis(redisURL string) (*redis.Client, error) {
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {
-		// Non-fatal: cache will be a no-op if Redis is unavailable.
-		return redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+		return nil, err
 	}
-	return redis.NewClient(opt)
+	return redis.NewClient(opt), nil
 }
