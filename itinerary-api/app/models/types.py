@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class PoiType(str, Enum):
+class PoiType(StrEnum):
     """Category of a point of interest, mirroring the poi-api taxonomy."""
 
     see = "see"
