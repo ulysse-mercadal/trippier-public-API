@@ -46,7 +46,7 @@ func main() {
 		log.Fatal("redis url", zap.Error(err))
 	}
 	rdb := redis.NewClient(opt)
-	defer rdb.Close()
+	defer rdb.Close() //nolint:errcheck
 
 	emailer := email.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom)
 
