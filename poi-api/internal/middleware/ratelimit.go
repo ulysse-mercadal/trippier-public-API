@@ -64,6 +64,7 @@ func RateLimit(authAPIURL, internalSecret string, cost int, exempt ...string) gi
 			c.Header("X-RateLimit-Reset", strconv.FormatInt(
 				time.Now().Add(time.Duration(rlResp.ResetsInSecs)*time.Second).Unix(), 10,
 			))
+			c.Header("Retry-After", strconv.FormatInt(rlResp.ResetsInSecs, 10))
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error":          "rate limit exceeded",
 				"resets_in_secs": rlResp.ResetsInSecs,

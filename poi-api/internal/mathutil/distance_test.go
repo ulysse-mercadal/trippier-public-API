@@ -9,29 +9,29 @@ import (
 
 func TestHaversine(t *testing.T) {
 	tests := []struct {
-		name     string
-		lat1     float64
-		lng1     float64
-		lat2     float64
-		lng2     float64
-		wantApx  float64 // expected distance in metres (±1 %)
+		name    string
+		lat1    float64
+		lng1    float64
+		lat2    float64
+		lng2    float64
+		wantApx float64 // expected distance in metres (±1 %)
 	}{
 		{
-			name:    "same point",
-			lat1:    48.8566, lng1: 2.3522,
-			lat2:    48.8566, lng2: 2.3522,
+			name: "same point",
+			lat1: 48.8566, lng1: 2.3522,
+			lat2: 48.8566, lng2: 2.3522,
 			wantApx: 0,
 		},
 		{
-			name:    "Paris → London (~340 km)",
-			lat1:    48.8566, lng1: 2.3522,
-			lat2:    51.5074, lng2: -0.1278,
+			name: "Paris → London (~340 km)",
+			lat1: 48.8566, lng1: 2.3522,
+			lat2: 51.5074, lng2: -0.1278,
 			wantApx: 340_600,
 		},
 		{
-			name:    "short distance 50 m",
-			lat1:    48.85680, lng1: 2.35200,
-			lat2:    48.85725, lng2: 2.35200,
+			name: "short distance 50 m",
+			lat1: 48.85680, lng1: 2.35200,
+			lat2: 48.85725, lng2: 2.35200,
 			wantApx: 50,
 		},
 	}

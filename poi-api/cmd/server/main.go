@@ -37,7 +37,7 @@ func main() {
 	defer log.Sync() //nolint:errcheck
 
 	if cfg.GeoNamesUsername == "" {
-		log.Warn("POI_GEONAMES_USERNAME not set — geonames provider will be disabled")
+		log.Info("POI_GEONAMES_USERNAME not set — geonames provider will be disabled")
 	}
 
 	rdb := buildRedis(cfg.RedisURL)
@@ -48,8 +48,10 @@ func main() {
 
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
+	r.SetTrustedProxies(nil) //nolint:errcheck
 	r.Use(
 		gin.Recovery(),
+		middleware.SecureHeaders(),
 		middleware.RequestID(),
 		middleware.Logger(log),
 		middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 1, "/health"),

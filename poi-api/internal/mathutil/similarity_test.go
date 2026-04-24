@@ -16,7 +16,7 @@ func TestJaroWinkler(t *testing.T) {
 		{"abc", "", 0.0, 0.0},
 		{"", "abc", 0.0, 0.0},
 		{"louvre", "louvre", 1.0, 1.0},
-		{"louvre", "louvr", 0.95, 1.0},  // very close
+		{"louvre", "louvr", 0.95, 1.0},   // very close
 		{"cafe", "restaurant", 0.0, 0.7}, // clearly different
 		{"musée", "musee", 0.85, 1.0},    // accent difference (byte-level comparison)
 	}

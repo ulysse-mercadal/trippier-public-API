@@ -14,8 +14,8 @@ func coords(lat, lng float64, approx bool) *types.Coordinates {
 func TestSetDistances(t *testing.T) {
 	pois := []types.RawPoi{
 		{ID: "a", Coords: coords(48.8566, 2.3522, false)}, // exact
-		{ID: "b", Coords: coords(0, 0, true)},              // approximate — skipped
-		{ID: "c"},                                           // nil coords — skipped
+		{ID: "b", Coords: coords(0, 0, true)},             // approximate — skipped
+		{ID: "c"},                                         // nil coords — skipped
 	}
 
 	result := geo.SetDistances(pois, 48.8566, 2.3522)
