@@ -42,7 +42,7 @@ func Load() (*Config, error) {
 	v.SetDefault("SMTP_FROM", "noreply@trippier.dev")
 	v.SetDefault("APP_URL", "http://localhost:3000")
 	v.SetDefault("DEFAULT_TOKENS_LIMIT", 1000)
-	v.SetDefault("DEFAULT_RESET_INTERVAL_S", 3600)
+	v.SetDefault("DEFAULT_RESET_INTERVAL_S", 2592000) // 30 days
 	v.SetDefault("LOG_LEVEL", "info")
 
 	cfg := &Config{

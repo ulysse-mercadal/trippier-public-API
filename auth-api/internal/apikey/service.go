@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/trippier/auth-api/internal/models"
 	rl "github.com/trippier/auth-api/internal/ratelimit"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -24,15 +25,17 @@ var ErrNotFound = errors.New("api key not found")
 type Service struct {
 	db              *pgxpool.Pool
 	rdb             *redis.Client
+	log             *zap.Logger
 	defaultLimit    int
 	defaultInterval int // seconds
 }
 
 // New creates a Service.
-func New(db *pgxpool.Pool, rdb *redis.Client, defaultLimit, defaultInterval int) *Service {
+func New(db *pgxpool.Pool, rdb *redis.Client, defaultLimit, defaultInterval int, log *zap.Logger) *Service {
 	return &Service{
 		db:              db,
 		rdb:             rdb,
+		log:             log,
 		defaultLimit:    defaultLimit,
 		defaultInterval: defaultInterval,
 	}
@@ -73,9 +76,11 @@ func (s *Service) Create(ctx context.Context, userID, name string) (*CreateResul
 		return nil, fmt.Errorf("insert: %w", err)
 	}
 
+	// Prime the user-level bucket only if it does not already exist — a second
+	// key for the same user must not reset the remaining token count.
 	ttl := time.Duration(s.defaultInterval) * time.Second
-	if err := rl.SetTokens(ctx, s.rdb, sha256Hash, s.defaultLimit, ttl); err != nil {
-		fmt.Printf("warn: could not prime redis bucket for key %s: %v\n", id, err)
+	if err := rl.InitBucket(ctx, s.rdb, userID, s.defaultLimit, ttl); err != nil {
+		s.log.Warn("could not prime redis bucket", zap.String("user_id", userID), zap.Error(err))
 	}
 
 	key := models.APIKey{
@@ -90,11 +95,12 @@ func (s *Service) Create(ctx context.Context, userID, name string) (*CreateResul
 	return &CreateResult{PlaintextKey: plaintext, Key: key}, nil
 }
 
-// List returns all non-revoked keys for a user, enriched with Redis usage data.
+// List returns all non-revoked keys for a user, enriched with the shared
+// user-level Redis usage data (all keys draw from the same pool).
 func (s *Service) List(ctx context.Context, userID string) ([]models.APIKeyWithUsage, error) {
 	rows, err := s.db.Query(ctx,
-		`SELECT id, user_id, name, key_prefix, key_hash_sha256, tokens_limit,
-		        tokens_reset_interval_secs, revoked, created_at, last_used_at
+		`SELECT id, user_id, name, key_prefix,
+		        tokens_limit, tokens_reset_interval_secs, revoked, created_at, last_used_at
 		 FROM api_keys WHERE user_id = $1 AND revoked = false ORDER BY created_at DESC`,
 		userID,
 	)
@@ -103,31 +109,38 @@ func (s *Service) List(ctx context.Context, userID string) ([]models.APIKeyWithU
 	}
 	defer rows.Close()
 
-	var keys []models.APIKeyWithUsage
+	var rawKeys []models.APIKey
 	for rows.Next() {
 		var k models.APIKey
-		var sha256Hash string
 		if err := rows.Scan(
-			&k.ID, &k.UserID, &k.Name, &k.KeyPrefix, &sha256Hash,
+			&k.ID, &k.UserID, &k.Name, &k.KeyPrefix,
 			&k.TokensLimit, &k.TokensResetIntervalSecs, &k.Revoked,
 			&k.CreatedAt, &k.LastUsedAt,
 		); err != nil {
 			return nil, err
 		}
+		rawKeys = append(rawKeys, k)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
-		remaining, ttlSecs, err := rl.GetUsage(ctx, s.rdb, sha256Hash)
-		if err != nil || remaining == -1 {
-			remaining = k.TokensLimit // bucket not primed yet → assume full
-			ttlSecs = int64(k.TokensResetIntervalSecs)
-		}
+	// Fetch the shared user-level bucket once for all keys.
+	remaining, ttlSecs, err := rl.GetUsage(ctx, s.rdb, userID)
+	if err != nil || remaining == -1 {
+		remaining = s.defaultLimit
+		ttlSecs = int64(s.defaultInterval)
+	}
 
+	keys := make([]models.APIKeyWithUsage, 0, len(rawKeys))
+	for _, k := range rawKeys {
 		keys = append(keys, models.APIKeyWithUsage{
 			APIKey:          k,
 			TokensRemaining: remaining,
 			ResetsInSecs:    ttlSecs,
 		})
 	}
-	return keys, rows.Err()
+	return keys, nil
 }
 
 // Revoke marks a key as revoked.
@@ -149,11 +162,9 @@ func (s *Service) Revoke(ctx context.Context, userID, keyID string) error {
 func (s *Service) ValidateBySHA256(ctx context.Context, sha256Hash string) (*models.InternalKeyInfo, error) {
 	var info models.InternalKeyInfo
 	err := s.db.QueryRow(ctx,
-		`SELECT user_id, id, tokens_limit, tokens_reset_interval_secs
-		 FROM api_keys
-		 WHERE key_hash_sha256 = $1 AND revoked = false`,
+		`SELECT user_id, id FROM api_keys WHERE key_hash_sha256 = $1 AND revoked = false`,
 		sha256Hash,
-	).Scan(&info.UserID, &info.KeyID, &info.TokensLimit, &info.TokensResetIntervalSecs)
+	).Scan(&info.UserID, &info.KeyID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &models.InternalKeyInfo{Valid: false}, nil
 	}
@@ -167,10 +178,15 @@ func (s *Service) ValidateBySHA256(ctx context.Context, sha256Hash string) (*mod
 		s.db.Exec(ctx2, `UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`, info.KeyID) //nolint:errcheck
 	}()
 
-	remaining, _, err := rl.GetUsage(ctx, s.rdb, sha256Hash)
+	// Use global config for limit/interval — the bucket is per-user, not per-key.
+	info.TokensLimit = s.defaultLimit
+	info.TokensResetIntervalSecs = s.defaultInterval
+
+	// Prime the user bucket lazily if it disappeared from Redis.
+	remaining, _, err := rl.GetUsage(ctx, s.rdb, info.UserID)
 	if err != nil || remaining == -1 {
-		ttl := time.Duration(info.TokensResetIntervalSecs) * time.Second
-		rl.SetTokens(ctx, s.rdb, sha256Hash, info.TokensLimit, ttl) //nolint:errcheck
+		ttl := time.Duration(s.defaultInterval) * time.Second
+		rl.InitBucket(ctx, s.rdb, info.UserID, s.defaultLimit, ttl) //nolint:errcheck
 	}
 
 	info.Valid = true

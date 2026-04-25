@@ -9,19 +9,34 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// RedisKey returns the Redis key for a given API-key SHA-256 hash.
-func RedisKey(sha256Hash string) string {
-	return "rl:" + sha256Hash
+// RedisKey returns the Redis key for a user-level token bucket.
+// Buckets are per-user, not per API key — all keys belonging to the same user
+// draw from the same pool.
+func RedisKey(userID string) string {
+	return "rl:user:" + userID
 }
 
-// SetTokens initialises (or resets) the token bucket for a key.
-func SetTokens(ctx context.Context, rdb *redis.Client, sha256Hash string, limit int, ttl time.Duration) error {
-	return rdb.Set(ctx, RedisKey(sha256Hash), limit, ttl).Err()
+// InitBucket primes the token bucket for a user only if it does not already
+// exist in Redis (SETNX semantics). Creating a second API key does not reset
+// the remaining tokens.
+func InitBucket(ctx context.Context, rdb *redis.Client, userID string, limit int, ttl time.Duration) error {
+	return rdb.SetArgs(ctx, RedisKey(userID), limit, redis.SetArgs{
+		Mode:    "NX",
+		TTL:     ttl,
+		Get:     false,
+		KeepTTL: false,
+	}).Err()
 }
 
-// GetUsage returns (remaining, ttlSecs). remaining == -1 means key not in Redis.
-func GetUsage(ctx context.Context, rdb *redis.Client, sha256Hash string) (remaining int, ttlSecs int64, err error) {
-	key := RedisKey(sha256Hash)
+// SetTokens force-sets (or resets) the token bucket for a user. Use this for
+// administrative resets only — normal key creation should call InitBucket.
+func SetTokens(ctx context.Context, rdb *redis.Client, userID string, limit int, ttl time.Duration) error {
+	return rdb.Set(ctx, RedisKey(userID), limit, ttl).Err()
+}
+
+// GetUsage returns (remaining, ttlSecs). remaining == -1 means no bucket in Redis.
+func GetUsage(ctx context.Context, rdb *redis.Client, userID string) (remaining int, ttlSecs int64, err error) {
+	key := RedisKey(userID)
 
 	pipe := rdb.Pipeline()
 	getCmd := pipe.Get(ctx, key)
@@ -48,8 +63,8 @@ func GetUsage(ctx context.Context, rdb *redis.Client, sha256Hash string) (remain
 // deductScript atomically deducts cost tokens.
 // Returns [remaining, ttlSecs] on success,
 //
-//	[-1, 0]             if key not in Redis,
-//	[-2, ttlSecs]       if insufficient tokens.
+//	[-1, 0]            if bucket not in Redis,
+//	[-2, ttlSecs]      if insufficient tokens.
 var deductScript = redis.NewScript(`
 local val = redis.call('GET', KEYS[1])
 if val == false then return {-1, 0} end
@@ -67,10 +82,10 @@ if ttl < 0 then ttl = 0 end
 return {remaining, ttl}
 `)
 
-// Deduct subtracts cost from the bucket.
+// Deduct subtracts cost from the user's bucket.
 // Returns (remaining, ttlSecs, notFound, insufficient, err).
-func Deduct(ctx context.Context, rdb *redis.Client, sha256Hash string, cost int) (remaining int, ttlSecs int64, notFound bool, insufficient bool, err error) {
-	key := RedisKey(sha256Hash)
+func Deduct(ctx context.Context, rdb *redis.Client, userID string, cost int) (remaining int, ttlSecs int64, notFound bool, insufficient bool, err error) {
+	key := RedisKey(userID)
 	res, err := deductScript.Run(ctx, rdb, []string{key}, cost).Int64Slice()
 	if err != nil {
 		return 0, 0, false, false, fmt.Errorf("lua: %w", err)

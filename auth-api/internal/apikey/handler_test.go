@@ -3,8 +3,6 @@ package apikey_test
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -39,9 +37,10 @@ func postJSON(t *testing.T, r http.Handler, path string, body interface{}) *http
 
 // checkRateLimitHandler is an isolated implementation of the check-rate-limit
 // endpoint that uses miniredis directly — no PostgreSQL required.
-// It mirrors exactly the logic in apikey.Handler.checkRateLimit but replaces
-// the DB-backed ValidateBySHA256 call with a pre-seeded bucket.
-func checkRateLimitHandler(rdb *redis.Client, tokensLimit, resetIntervalSecs int) gin.HandlerFunc {
+// It mirrors the logic in apikey.Handler.checkRateLimit but replaces the
+// DB-backed ValidateBySHA256 call with a fixed userID, matching production
+// behaviour where buckets are keyed per-user, not per-key.
+func checkRateLimitHandler(rdb *redis.Client, userID string, tokensLimit, resetIntervalSecs int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var body struct {
 			APIKey string `json:"api_key" binding:"required"`
@@ -52,18 +51,15 @@ func checkRateLimitHandler(rdb *redis.Client, tokensLimit, resetIntervalSecs int
 			return
 		}
 
-		sum := sha256.Sum256([]byte(body.APIKey))
-		hash := hex.EncodeToString(sum[:])
-
-		remaining, ttlSecs, notFound, insufficient, err := rl.Deduct(c.Request.Context(), rdb, hash, body.Cost)
+		remaining, ttlSecs, notFound, insufficient, err := rl.Deduct(c.Request.Context(), rdb, userID, body.Cost)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "rate-limit error"})
 			return
 		}
 		if notFound {
 			ttl := time.Duration(resetIntervalSecs) * time.Second
-			_ = rl.SetTokens(c.Request.Context(), rdb, hash, tokensLimit, ttl)
-			remaining, ttlSecs, _, insufficient, err = rl.Deduct(c.Request.Context(), rdb, hash, body.Cost)
+			_ = rl.SetTokens(c.Request.Context(), rdb, userID, tokensLimit, ttl)
+			remaining, ttlSecs, _, insufficient, err = rl.Deduct(c.Request.Context(), rdb, userID, body.Cost)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "rate-limit error"})
 				return
@@ -87,11 +83,9 @@ func checkRateLimitHandler(rdb *redis.Client, tokensLimit, resetIntervalSecs int
 	}
 }
 
-func seedBucket(t *testing.T, rdb *redis.Client, plaintext string, limit int) {
+func seedBucket(t *testing.T, rdb *redis.Client, userID string, limit int) {
 	t.Helper()
-	sum := sha256.Sum256([]byte(plaintext))
-	hash := hex.EncodeToString(sum[:])
-	if err := rl.SetTokens(context.Background(), rdb, hash, limit, time.Hour); err != nil {
+	if err := rl.SetTokens(context.Background(), rdb, userID, limit, time.Hour); err != nil {
 		t.Fatalf("seed bucket: %v", err)
 	}
 }
@@ -100,14 +94,14 @@ func TestCheckRateLimit_Allowed(t *testing.T) {
 	mr, rdb := newTestRedis(t)
 	defer mr.Close()
 
-	plaintext := "trp_test_key_abc123"
-	seedBucket(t, rdb, plaintext, 100)
+	userID := "user-abc123"
+	seedBucket(t, rdb, userID, 100)
 
 	r := gin.New()
-	r.POST("/internal/check-rate-limit", checkRateLimitHandler(rdb, 100, 3600))
+	r.POST("/internal/check-rate-limit", checkRateLimitHandler(rdb, userID, 100, 3600))
 
 	w := postJSON(t, r, "/internal/check-rate-limit", map[string]interface{}{
-		"api_key": plaintext,
+		"api_key": "trp_test_key_abc123",
 		"cost":    10,
 	})
 
@@ -129,14 +123,14 @@ func TestCheckRateLimit_Insufficient(t *testing.T) {
 	mr, rdb := newTestRedis(t)
 	defer mr.Close()
 
-	plaintext := "trp_test_key_def456"
-	seedBucket(t, rdb, plaintext, 5)
+	userID := "user-def456"
+	seedBucket(t, rdb, userID, 5)
 
 	r := gin.New()
-	r.POST("/internal/check-rate-limit", checkRateLimitHandler(rdb, 5, 3600))
+	r.POST("/internal/check-rate-limit", checkRateLimitHandler(rdb, userID, 5, 3600))
 
 	w := postJSON(t, r, "/internal/check-rate-limit", map[string]interface{}{
-		"api_key": plaintext,
+		"api_key": "trp_test_key_def456",
 		"cost":    10,
 	})
 
@@ -156,8 +150,9 @@ func TestCheckRateLimit_BucketNotFound_AutoInit(t *testing.T) {
 	defer mr.Close()
 
 	// No pre-seeding: bucket does not exist in Redis.
+	userID := "user-fresh-xyz"
 	r := gin.New()
-	r.POST("/internal/check-rate-limit", checkRateLimitHandler(rdb, 1000, 3600))
+	r.POST("/internal/check-rate-limit", checkRateLimitHandler(rdb, userID, 1000, 3600))
 
 	w := postJSON(t, r, "/internal/check-rate-limit", map[string]interface{}{
 		"api_key": "trp_fresh_key_xyz",
@@ -180,7 +175,7 @@ func TestCheckRateLimit_InvalidInput(t *testing.T) {
 	defer mr.Close()
 
 	r := gin.New()
-	r.POST("/internal/check-rate-limit", checkRateLimitHandler(rdb, 100, 3600))
+	r.POST("/internal/check-rate-limit", checkRateLimitHandler(rdb, "user-invalid", 100, 3600))
 
 	// Missing api_key.
 	w := postJSON(t, r, "/internal/check-rate-limit", map[string]interface{}{

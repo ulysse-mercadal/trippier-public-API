@@ -53,7 +53,7 @@ func main() {
 	authSvc := auth.New(pool, emailer, cfg.JWTSecret, cfg.AppURL)
 	authHandler := auth.NewHandler(authSvc, cfg.AppURL)
 
-	keySvc := apikey.New(pool, rdb, cfg.DefaultTokensLimit, cfg.DefaultResetIntervalS)
+	keySvc := apikey.New(pool, rdb, cfg.DefaultTokensLimit, cfg.DefaultResetIntervalS, log)
 	keyHandler := apikey.NewHandler(keySvc)
 
 	jwtAuth := mw.JWTAuth(cfg.JWTSecret)

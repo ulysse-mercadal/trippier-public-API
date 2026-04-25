@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -57,7 +58,7 @@ func (s *Service) Register(ctx context.Context, emailAddr, password string) erro
 	_, err = s.db.Exec(ctx,
 		`INSERT INTO users (email, password_hash, verification_token, verification_token_expires_at)
 		 VALUES ($1, $2, $3, NOW() + INTERVAL '24 hours')`,
-		emailAddr, string(hash), token,
+		strings.ToLower(emailAddr), string(hash), token,
 	)
 	if err != nil {
 		if isDuplicateKey(err) {
@@ -98,7 +99,7 @@ func (s *Service) Login(ctx context.Context, emailAddr, password string) (string
 	var user models.User
 	err := s.db.QueryRow(ctx,
 		`SELECT id, email, password_hash, verified FROM users WHERE email = $1`,
-		emailAddr,
+		strings.ToLower(emailAddr),
 	).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.Verified)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", ErrBadCredentials
@@ -149,18 +150,5 @@ func randomHex(n int) (string, error) {
 
 // isDuplicateKey detects PostgreSQL unique-constraint violations.
 func isDuplicateKey(err error) bool {
-	return err != nil && (contains(err.Error(), "duplicate key") || contains(err.Error(), "23505"))
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsStr(s, sub))
-}
-
-func containsStr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
+	return err != nil && (strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "23505"))
 }

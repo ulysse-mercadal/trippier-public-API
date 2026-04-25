@@ -13,6 +13,11 @@ import (
 	rl "github.com/trippier/auth-api/internal/ratelimit"
 )
 
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
 // Handler exposes API-key management and the internal rate-limit endpoint.
 type Handler struct {
 	svc *Service
@@ -95,10 +100,7 @@ func (h *Handler) checkRateLimit(c *gin.Context) {
 		return
 	}
 
-	sum := sha256.Sum256([]byte(body.APIKey))
-	sha256Hash := hex.EncodeToString(sum[:])
-
-	info, err := h.svc.ValidateBySHA256(c.Request.Context(), sha256Hash)
+	info, err := h.svc.ValidateBySHA256(c.Request.Context(), sha256Hex(body.APIKey))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
@@ -108,8 +110,9 @@ func (h *Handler) checkRateLimit(c *gin.Context) {
 		return
 	}
 
+	// All deductions go against the user-level bucket, shared across all keys.
 	remaining, ttlSecs, notFound, insufficient, err := rl.Deduct(
-		c.Request.Context(), h.svc.rdb, sha256Hash, body.Cost,
+		c.Request.Context(), h.svc.rdb, info.UserID, body.Cost,
 	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "rate-limit error"})
@@ -117,10 +120,11 @@ func (h *Handler) checkRateLimit(c *gin.Context) {
 	}
 
 	if notFound {
+		// Bucket disappeared from Redis (e.g. restart) — prime and retry once.
 		ttl := time.Duration(info.TokensResetIntervalSecs) * time.Second
-		_ = rl.SetTokens(c.Request.Context(), h.svc.rdb, sha256Hash, info.TokensLimit, ttl)
+		_ = rl.InitBucket(c.Request.Context(), h.svc.rdb, info.UserID, info.TokensLimit, ttl)
 		remaining, ttlSecs, _, insufficient, err = rl.Deduct(
-			c.Request.Context(), h.svc.rdb, sha256Hash, body.Cost,
+			c.Request.Context(), h.svc.rdb, info.UserID, body.Cost,
 		)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "rate-limit error"})

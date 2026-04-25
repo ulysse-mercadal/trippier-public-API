@@ -21,12 +21,12 @@ func TestSetTokens_And_GetUsage(t *testing.T) {
 	rdb := newTestRedis(t)
 	ctx := context.Background()
 
-	hash := "abc123"
-	if err := rl.SetTokens(ctx, rdb, hash, 100, time.Minute); err != nil {
+	userID := "abc123"
+	if err := rl.SetTokens(ctx, rdb, userID, 100, time.Minute); err != nil {
 		t.Fatalf("SetTokens: %v", err)
 	}
 
-	remaining, ttlSecs, err := rl.GetUsage(ctx, rdb, hash)
+	remaining, ttlSecs, err := rl.GetUsage(ctx, rdb, userID)
 	if err != nil {
 		t.Fatalf("GetUsage: %v", err)
 	}
@@ -55,10 +55,10 @@ func TestDeduct_Success(t *testing.T) {
 	rdb := newTestRedis(t)
 	ctx := context.Background()
 
-	hash := "key1"
-	_ = rl.SetTokens(ctx, rdb, hash, 50, time.Minute)
+	userID := "key1"
+	_ = rl.SetTokens(ctx, rdb, userID, 50, time.Minute)
 
-	remaining, ttl, notFound, insufficient, err := rl.Deduct(ctx, rdb, hash, 10)
+	remaining, ttl, notFound, insufficient, err := rl.Deduct(ctx, rdb, userID, 10)
 	if err != nil {
 		t.Fatalf("Deduct: %v", err)
 	}
@@ -77,10 +77,10 @@ func TestDeduct_Insufficient(t *testing.T) {
 	rdb := newTestRedis(t)
 	ctx := context.Background()
 
-	hash := "key2"
-	_ = rl.SetTokens(ctx, rdb, hash, 5, time.Minute)
+	userID := "key2"
+	_ = rl.SetTokens(ctx, rdb, userID, 5, time.Minute)
 
-	_, _, _, insufficient, err := rl.Deduct(ctx, rdb, hash, 10)
+	_, _, _, insufficient, err := rl.Deduct(ctx, rdb, userID, 10)
 	if err != nil {
 		t.Fatalf("Deduct: %v", err)
 	}
@@ -106,11 +106,11 @@ func TestDeduct_Idempotent_Remaining(t *testing.T) {
 	rdb := newTestRedis(t)
 	ctx := context.Background()
 
-	hash := "key3"
-	_ = rl.SetTokens(ctx, rdb, hash, 100, time.Minute)
+	userID := "key3"
+	_ = rl.SetTokens(ctx, rdb, userID, 100, time.Minute)
 
 	for i := 0; i < 5; i++ {
-		remaining, _, _, _, err := rl.Deduct(ctx, rdb, hash, 10)
+		remaining, _, _, _, err := rl.Deduct(ctx, rdb, userID, 10)
 		if err != nil {
 			t.Fatalf("deduct %d: %v", i, err)
 		}
