@@ -42,6 +42,15 @@ func New(lang string) *Provider {
 	}
 }
 
+// NewWithURL returns a Provider targeting a custom API endpoint.
+// Intended for testing against a local httptest server.
+func NewWithURL(baseURL string) *Provider {
+	return &Provider{
+		client:  &http.Client{Timeout: defaultTimeout},
+		baseURL: baseURL,
+	}
+}
+
 // Name implements providers.Provider.
 func (p *Provider) Name() types.Provider { return types.ProviderWikivoyage }
 
@@ -158,6 +167,34 @@ func (p *Provider) fetchWikitext(ctx context.Context, title string) (string, err
 var listingRe = regexp.MustCompile(`(?i)\{\{(see|do|eat|drink|buy|sleep|listing)\s*\|([^}]+)\}\}`)
 var fieldRe = regexp.MustCompile(`(\w+)\s*=\s*([^|}\n]+)`)
 
+// wikiLinkRe matches complete [[Target]] or [[Target|Display]] links.
+var wikiLinkRe = regexp.MustCompile(`\[\[[^\]]*\]\]`)
+
+// wikiFragmentRe matches broken [[ fragments (truncated by the | field delimiter).
+var wikiFragmentRe = regexp.MustCompile(`\[\[.*`)
+
+// stripWikiMarkup removes wiki link syntax from a field value.
+// [[Target|Display]] → Display; [[Target#Anchor]] → Target; [[Ns/Sub]] → Sub.
+// Broken fragments truncated by the pipe field delimiter are stripped entirely,
+// causing the name to become empty and the listing to be dropped.
+func stripWikiMarkup(s string) string {
+	s = wikiLinkRe.ReplaceAllStringFunc(s, func(m string) string {
+		inner := m[2 : len(m)-2]
+		if i := strings.LastIndex(inner, "|"); i >= 0 {
+			return strings.TrimSpace(inner[i+1:])
+		}
+		if i := strings.Index(inner, "#"); i >= 0 {
+			inner = inner[:i]
+		}
+		if i := strings.LastIndex(inner, "/"); i >= 0 {
+			inner = inner[i+1:]
+		}
+		return strings.TrimSpace(inner)
+	})
+	s = wikiFragmentRe.ReplaceAllString(s, "")
+	return strings.TrimSpace(s)
+}
+
 func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 	matches := listingRe.FindAllStringSubmatch(wikitext, -1)
 	pois := make([]types.RawPoi, 0, len(matches))
@@ -166,7 +203,7 @@ func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 		kind := strings.ToLower(match[1])
 		fields := p.parseFields(match[2])
 
-		name := strings.TrimSpace(fields["name"])
+		name := stripWikiMarkup(strings.TrimSpace(fields["name"]))
 		if name == "" {
 			continue
 		}
