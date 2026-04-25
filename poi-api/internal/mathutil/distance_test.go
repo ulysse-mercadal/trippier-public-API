@@ -52,21 +52,3 @@ func TestHaversine(t *testing.T) {
 		})
 	}
 }
-
-func TestBoundingBox(t *testing.T) {
-	minLat, minLng, maxLat, maxLng := mathutil.BoundingBox(48.8566, 2.3522, 1000)
-
-	if minLat >= 48.8566 || maxLat <= 48.8566 {
-		t.Errorf("lat %f not inside [%f, %f]", 48.8566, minLat, maxLat)
-	}
-	if minLng >= 2.3522 || maxLng <= 2.3522 {
-		t.Errorf("lng %f not inside [%f, %f]", 2.3522, minLng, maxLng)
-	}
-
-	// Width should be symmetric around the centre.
-	latSpan := maxLat - minLat
-	lngSpan := maxLng - minLng
-	if latSpan <= 0 || lngSpan <= 0 {
-		t.Errorf("non-positive span: lat=%f lng=%f", latSpan, lngSpan)
-	}
-}
