@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -39,6 +40,13 @@ func RateLimit(authAPIURL, internalSecret string, cost int, exempt ...string) gi
 
 	return func(c *gin.Context) {
 		if _, ok := exemptSet[c.FullPath()]; ok {
+			c.Next()
+			return
+		}
+
+		// Requests signed with the shared internal secret (e.g. the official
+		// site's server-side proxy) bypass rate limiting entirely.
+		if h := c.GetHeader("X-Internal-Auth"); h != "" && validInternalAuth(h, internalSecret) {
 			c.Next()
 			return
 		}
@@ -79,6 +87,27 @@ func RateLimit(authAPIURL, internalSecret string, cost int, exempt ...string) gi
 		))
 		c.Next()
 	}
+}
+
+// validInternalAuth checks an X-Internal-Auth header value produced by buildInternalAuth.
+// Returns true only if the signature is correct and the timestamp is within ±30 s.
+func validInternalAuth(header, secret string) bool {
+	parts := strings.SplitN(header, ".", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return false
+	}
+	ts, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return false
+	}
+	diff := time.Now().Unix() - ts
+	if diff > 30 || diff < -30 {
+		return false
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(parts[0]))
+	expected := hex.EncodeToString(mac.Sum(nil))
+	return hmac.Equal([]byte(expected), []byte(parts[1]))
 }
 
 // buildInternalAuth returns an X-Internal-Auth header value: "<ts>.<hmac-sha256(secret, ts)>".
