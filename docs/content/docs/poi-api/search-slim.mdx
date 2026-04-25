@@ -1,0 +1,78 @@
+---
+title: GET /pois/search/slim
+description: Lightweight POI projection returning only name, type and coordinates. Designed for map-pin rendering at scale.
+---
+
+<div className="endpoint-head">
+  <span className="method-badge method-get">GET</span>
+  <code>/pois/search/slim</code>
+  <span className="auth-tag">requires X-API-Key</span>
+</div>
+
+Lightweight projection of the full search — returns only `name`, `type` and `coords`. Designed for rendering map pins at scale without the overhead of full POI metadata.
+
+Accepts the same query parameters as [`/pois/search`](/docs/poi-api/search) except `weights` and `min_score`.
+
+---
+
+## Query parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `mode` | string | — | `radius` | `radius` · `polygon` · `district` |
+| `lat` | float | radius | — | Latitude WGS-84 |
+| `lng` | float | radius | — | Longitude WGS-84 |
+| `radius` | int | no | `5000` | Search radius in metres |
+| `polygon` | string | polygon | — | Space-separated `lat lng` pairs |
+| `district` | string | district | — | District or city name |
+| `providers` | string[] | no | all | Filter to specific providers |
+| `types` | string[] | no | all | Filter POI types |
+| `lang` | string | no | `en` | ISO 639-1 language code |
+| `limit` | int | no | `20` | Max results (max 100) |
+| `offset` | int | no | `0` | Pagination offset |
+
+---
+
+## Response `200`
+
+```json
+{
+  "total": 42,
+  "results": [
+    {
+      "name":   "Cathédrale Notre-Dame de Paris",
+      "type":   "see",
+      "coords": { "lat": 48.8530, "lng": 2.3499, "approximate": false }
+    },
+    {
+      "name":   "Tour Eiffel",
+      "type":   "see",
+      "coords": { "lat": 48.8584, "lng": 2.2945, "approximate": false }
+    }
+  ]
+}
+```
+
+### `SlimPoi` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | POI name |
+| `type` | string | POI category |
+| `coords` | object | `lat`, `lng`, `approximate` |
+
+---
+
+## Error responses
+
+| Status | Condition |
+|--------|-----------|
+| `400` | Missing required parameters or invalid mode |
+| `429` | Rate limit exceeded |
+| `500` | Internal server error |
+
+---
+
+## Try it
+
+<TryPoisSlim />

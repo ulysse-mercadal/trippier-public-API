@@ -1,0 +1,82 @@
+---
+title: GET /pois/events
+description: Cultural festivals, recurring events, and local celebrations filtered via Wikidata SPARQL.
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+<div className="endpoint-head">
+  <span className="method-badge method-get">GET</span>
+  <code>/pois/events</code>
+  <span className="auth-tag">requires X-API-Key</span>
+</div>
+
+Returns cultural festivals, recurring events, and local celebrations a traveller might attend at the given location. Powered by Wikipedia geosearch with Wikidata SPARQL classification — distinct from the main POI search pipeline.
+
+<Callout type="info">
+  Articles without a Wikidata ID are dropped: they cannot be verified as festivals and would pollute the events list. The Wikidata SPARQL query resolves `P31/P279*` (instance of / subclass of) against festival class `Q132241`, catching music festivals, film festivals, carnivals, food festivals, and more.
+</Callout>
+
+---
+
+## Query parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `mode` | string | — | `radius` | `radius` · `district` |
+| `lat` | float | radius | — | Latitude WGS-84 |
+| `lng` | float | radius | — | Longitude WGS-84 |
+| `radius` | int | no | `5000` | Search radius in metres |
+| `district` | string | district | — | District or city name |
+| `lang` | string | no | `en` | ISO 639-1 language code |
+| `limit` | int | no | `20` | Max results (max 100) |
+| `offset` | int | no | `0` | Pagination offset |
+
+---
+
+## Response `200`
+
+Same shape as `/pois/search` — a `SearchResult` object with `total` and `results`.
+
+```json
+{
+  "total": 3,
+  "results": [
+    {
+      "id":          "wikipedia:3276325",
+      "name":        "Fête de la Musique",
+      "type":        "event",
+      "score":       72.5,
+      "coords":      { "lat": 48.8566, "lng": 2.3522, "approximate": false },
+      "description": "Annual free music festival held on 21 June throughout France.",
+      "sources":     ["wikipedia_events"],
+      "wikidata_id": "Q1328136",
+      "recurring":   true
+    }
+  ]
+}
+```
+
+### Event-specific fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `recurring` | bool | `true` for annually recurring festivals |
+| `date_start` | string | ISO 8601 start date when available |
+| `date_end` | string | ISO 8601 end date when available |
+
+---
+
+## Error responses
+
+| Status | Condition |
+|--------|-----------|
+| `400` | Missing required parameters or unsupported mode (`polygon` not supported) |
+| `429` | Rate limit exceeded |
+| `500` | Wikidata SPARQL unavailable or internal error |
+
+---
+
+## Try it
+
+<TryEvents />

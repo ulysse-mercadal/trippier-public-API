@@ -1,0 +1,5 @@
+{
+  "title": "POI API",
+  "description": "Base URL: http://localhost:8080",
+  "pages": ["search", "search-slim", "events", "providers", "health"]
+}

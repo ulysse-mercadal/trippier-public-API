@@ -1,0 +1,109 @@
+---
+title: GET /pois/search
+description: Full POI search with multi-provider fan-out, deduplication, enrichment, and scoring.
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+<div className="endpoint-head">
+  <span className="method-badge method-get">GET</span>
+  <code>/pois/search</code>
+  <span className="auth-tag">requires X-API-Key</span>
+</div>
+
+Full search with multi-provider fan-out, deduplication, enrichment, and scoring. Returns fully annotated POIs with contact info, thumbnails, and source metadata.
+
+<Callout type="info">
+  See [How it works](/docs/algorithm) for a detailed explanation of the fan-out pipeline, deduplication passes, and scoring formula.
+</Callout>
+
+---
+
+## Query parameters
+
+| Name | Type | Required | Default | Description |
+|------|------|:--------:|---------|-------------|
+| `mode` | string | — | `radius` | `radius` · `polygon` · `district` |
+| `lat` | float | radius | — | Latitude WGS-84 |
+| `lng` | float | radius | — | Longitude WGS-84 |
+| `radius` | int | no | `5000` | Search radius in metres (max 50 000). `radius` mode only. |
+| `polygon` | string | polygon | — | Space-separated `lat lng` pairs |
+| `district` | string | district | — | District or city name |
+| `providers` | string[] | no | all | Filter to specific providers, e.g. `providers=wikivoyage` |
+| `types` | string[] | no | all | Filter POI types. Returns **only** these types when set. Mutually exclusive with `weights`. |
+| `weights` | JSON | no | — | Type → weight map in `[0, 1]`, e.g. `{"see":1,"eat":0.5}`. Mutually exclusive with `types`. |
+| `lang` | string | no | `en` | ISO 639-1 language code |
+| `limit` | int | no | `20` | Max results (max 100) |
+| `offset` | int | no | `0` | Pagination offset |
+| `min_score` | float | no | `0` | Minimum relevance score 0–100 |
+
+<Callout type="warn">
+  `types` and `weights` are **mutually exclusive**. Use `types` to hard-filter by category, or `weights` to reorder scoring without filtering. Sending both returns `400`.
+</Callout>
+
+---
+
+## Response `200`
+
+```json
+{
+  "query": {
+    "mode": "radius",
+    "lat": 48.8566,
+    "lng": 2.3522,
+    "radius": 2000
+  },
+  "total": 42,
+  "results": [
+    {
+      "id":          "overpass:201611261",
+      "name":        "Cathédrale Notre-Dame de Paris",
+      "type":        "see",
+      "score":       97.0,
+      "coords":      { "lat": 48.8530, "lng": 2.3499, "approximate": false },
+      "distance":    840.2,
+      "description": "Gothic cathedral on the Île de la Cité, under restoration since the 2019 fire.",
+      "thumbnail":   "https://upload.wikimedia.org/…",
+      "contact": {
+        "website":       "https://www.notredamedeparis.fr",
+        "phone":         "+33 1 42 34 56 10",
+        "opening_hours": "08:00-18:45"
+      },
+      "sources":     ["overpass", "wikivoyage", "geonames"],
+      "wikidata_id": "Q2981"
+    }
+  ]
+}
+```
+
+### `EnrichedPoi` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Namespaced ID from the primary provider (`{provider}:{native_id}`) |
+| `name` | string | POI name from the highest-priority provider |
+| `type` | string | POI category — `see`, `eat`, `drink`, `do`, `buy`, `sleep`, `generic` |
+| `score` | float | Relevance score in [0, 100] |
+| `coords` | object | `lat`, `lng`, `approximate` |
+| `distance` | float | Distance in metres from the query centre |
+| `description` | string | First non-empty description across providers |
+| `thumbnail` | string | Image URL |
+| `contact` | object | `website`, `phone`, `opening_hours`, `email` |
+| `sources` | string[] | All contributing providers |
+| `wikidata_id` | string | Wikidata entity ID (e.g. `Q90`) |
+
+---
+
+## Error responses
+
+| Status | Condition |
+|--------|-----------|
+| `400` | Missing required parameters, invalid mode, `types` + `weights` both set, weight out of `[0, 1]` |
+| `429` | Rate limit exceeded |
+| `500` | Internal server error |
+
+---
+
+## Try it
+
+<TryPois />

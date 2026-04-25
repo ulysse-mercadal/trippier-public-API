@@ -1,0 +1,88 @@
+---
+title: Overview
+description: Two services — POI search and itinerary generation — powering personalised travel experiences.
+---
+
+import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Callout } from 'fumadocs-ui/components/callout';
+
+<Cards>
+  <Card
+    title="POI API"
+    description="Search points of interest from OpenStreetMap, Wikivoyage, GeoNames and Wikipedia. Returns enriched, deduplicated, scored results."
+    href="/docs/api/poi-search"
+  />
+  <Card
+    title="Itinerary API"
+    description="Generate day-by-day travel itineraries with geographic clustering and nearest-neighbour routing."
+    href="/docs/api/itinerary"
+  />
+  <Card
+    title="How it works"
+    description="Fan-out pipeline, Wikidata deduplication, Jaro-Winkler name matching, multi-signal scoring."
+    href="/docs/algorithm"
+  />
+</Cards>
+
+---
+
+## Authentication
+
+POI and Itinerary endpoints require an **`X-API-Key`** header. Obtain a key from the dashboard after creating an account.
+
+```bash
+curl http://localhost:8080/pois/search \
+  -H "X-API-Key: trp_your_key_here" \
+  -G \
+  -d lat=48.8566 \
+  -d lng=2.3522 \
+  -d mode=radius \
+  -d radius=2000
+```
+
+<Callout type="info">
+  Requests made from this documentation page are signed server-side with `X-Internal-Auth` and do **not** consume your token budget.
+</Callout>
+
+---
+
+## Rate limiting
+
+Every API key is backed by a **token bucket**. Accounts receive **1 000 tokens / month** shared across all keys. When a limit is exceeded the API returns `429 Too Many Requests`:
+
+```http
+HTTP/1.1 429 Too Many Requests
+X-RateLimit-Remaining: 0
+X-RateLimit-Reset: 1735689600
+Retry-After: 86400
+
+{ "error": "rate limit exceeded", "resets_in_secs": 86400 }
+```
+
+Successful requests include `X-RateLimit-Limit` and `X-RateLimit-Remaining` response headers.
+
+---
+
+## POI types
+
+| Value | Description |
+|-------|-------------|
+| `see` | Sights, monuments, museums |
+| `eat` | Restaurants, cafés, food markets |
+| `drink` | Bars, pubs, clubs |
+| `do` | Activities, sports, tours |
+| `buy` | Shops, markets |
+| `sleep` | Hotels, hostels, campsites |
+| `generic` | Uncategorised geographic features |
+| `event` | Cultural festivals and recurring events |
+
+---
+
+## Base URLs
+
+| Service | Default |
+|---------|---------|
+| POI API | `http://localhost:8080` |
+| Itinerary API | `http://localhost:8000` |
+
+Both URLs are configurable via the `FRONTEND_POI_API_URL` and `FRONTEND_ITINERARY_API_URL` environment variables.

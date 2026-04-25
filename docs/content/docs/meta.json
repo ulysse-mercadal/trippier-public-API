@@ -1,0 +1,4 @@
+{
+  "title": "Documentation",
+  "pages": ["index", "algorithm", "poi-api", "itinerary-api"]
+}

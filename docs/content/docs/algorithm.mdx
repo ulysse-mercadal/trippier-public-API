@@ -1,0 +1,204 @@
+---
+title: How it works
+description: Fan-out pipeline, Wikidata deduplication, Jaro-Winkler name matching, and multi-signal scoring.
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+The POI API does not rely on a single data source. It fans out queries across multiple independent providers, merges duplicates, then ranks results by a multi-signal score. The result is richer, more accurate, and more complete than any single provider could deliver.
+
+---
+
+## Pipeline
+
+<div className="pipeline-grid">
+  <div className="pipeline-step">
+    <div className="step-num">Step 1</div>
+    <div className="step-title">Fan-out</div>
+    <div className="step-desc">The query is dispatched in parallel to all enabled providers. Each returns raw POIs independently.</div>
+  </div>
+  <div className="pipeline-step">
+    <div className="step-num">Step 2</div>
+    <div className="step-title">Deduplication</div>
+    <div className="step-desc">POIs from different sources describing the same place are merged into a single record using Wikidata IDs, proximity, and name similarity.</div>
+  </div>
+  <div className="pipeline-step">
+    <div className="step-num">Step 3</div>
+    <div className="step-title">Enrichment</div>
+    <div className="step-desc">Merged records are enriched: the best coordinates, description, thumbnail, and contact details are selected from each contributing provider.</div>
+  </div>
+  <div className="pipeline-step">
+    <div className="step-num">Step 4</div>
+    <div className="step-title">Scoring & ranking</div>
+    <div className="step-desc">Each POI receives a relevance score in [0, 100]. Results are sorted descending and paginated.</div>
+  </div>
+</div>
+
+---
+
+## Data providers
+
+<div className="provider-grid">
+  <div className="provider-card">
+    <div className="provider-name">OpenStreetMap / Overpass</div>
+    <div className="step-desc">Overpass QL queries OSM for nodes and ways matching tourism, amenity, leisure, and shop tags.</div>
+    <div className="provider-modes">
+      <span className="mode-pill">radius</span>
+      <span className="mode-pill">polygon</span>
+      <span className="mode-pill">district</span>
+    </div>
+  </div>
+  <div className="provider-card">
+    <div className="provider-name">Wikivoyage</div>
+    <div className="step-desc">Parses <code>&#123;&#123;see&#125;&#125;</code>, <code>&#123;&#123;eat&#125;&#125;</code>, <code>&#123;&#123;do&#125;&#125;</code> and other listing templates from Wikivoyage articles.</div>
+    <div className="provider-modes">
+      <span className="mode-pill">radius</span>
+      <span className="mode-pill">district</span>
+    </div>
+  </div>
+  <div className="provider-card">
+    <div className="provider-name">GeoNames</div>
+    <div className="step-desc">Provides precise coordinates and feature classes for cities and landmarks worldwide. Requires <code>POI_GEONAMES_USERNAME</code>.</div>
+    <div className="provider-modes">
+      <span className="mode-pill">radius</span>
+    </div>
+  </div>
+  <div className="provider-card">
+    <div className="provider-name">Wikipedia Events</div>
+    <div className="step-desc">Wikipedia geosearch filtered via Wikidata SPARQL to cultural festivals (class Q132241 and subclasses).</div>
+    <div className="provider-modes">
+      <span className="mode-pill">radius</span>
+      <span className="mode-pill">district</span>
+    </div>
+  </div>
+</div>
+
+### Overpass key design
+
+- Nodes (individual POIs) and ways (enclosed areas like cathedrals, parks) are queried in **separate named sets** (`-> .n` and `-> .w`) with independent output limits. Without this, Overpass returns all nodes before any way, cutting off large landmarks with high OSM IDs (e.g. Notre-Dame de Paris: way `201611261`).
+- Results are filtered to elements with a `name` tag — eliminates unmarked infrastructure and temporary objects.
+
+### Wikivoyage key design
+
+- In `radius` mode the nearest Wikivoyage article is resolved via `geosearch` with a fixed 10 km lookup (larger than the POI radius so neighbourhood articles are always found).
+- Wiki link markup (`[[Target|Display]]`, broken fragments truncated by `|`) is stripped. Listings with unresolvable names are dropped.
+- Listings without explicit coordinates receive `Approximate: true` — they join results but are never used as a geographic anchor in deduplication.
+
+---
+
+## Deduplication
+
+All raw POIs are merged into groups. Each group becomes one `EnrichedPoi`.
+
+### Pass 1 — Wikidata ID exact match
+
+If both POIs carry the same non-empty Wikidata ID (e.g. `Q90`), they are unconditionally merged. This is the most reliable signal: a globally unique identifier assigned by a human editor.
+
+### Pass 2 — Proximity + Jaro-Winkler
+
+For POIs with **precise coordinates** on both sides:
+
+1. Compute Haversine distance. If `distance ≥ 150 m`, skip.
+2. Normalise names: lowercase, strip diacritics (`é→e`, `ç→c`, …), replace hyphens with spaces.
+3. If Jaro-Winkler similarity `≥ 0.80`, merge — guarded by token-overlap ratio to prevent prefix-bonus false positives (e.g. "Hôtel A" vs "Hôtel B").
+
+The 150 m threshold covers large landmarks whose entrance and centroid are reported at different offsets by different providers.
+
+<Callout type="warn">
+  Wikivoyage zone-level entries have `Approximate: true`. They are **never** used as a geographic anchor. Name similarity alone at scale causes false positives (short names, shared type prefixes). Approximate-coord POIs can only be merged via Wikidata ID.
+</Callout>
+
+### Pass 3 — Sub-name containment
+
+After normalisation, if the **shorter** name (≥ 8 characters) is a substring of the longer name, the pair is merged. This captures the common case where one provider uses the full official name:
+
+```
+cathedrale notre dame de paris
+        notre dame de paris      ← substring match ✓
+```
+
+### Merge policy
+
+| Field | Rule |
+|-------|------|
+| `id`, `name`, `type` | Taken from the **highest-priority** provider in the group |
+| `coords` | Taken from the highest-priority provider that has coordinates |
+| `description` | First non-empty across providers |
+| `thumbnail` | First non-empty across providers |
+| `contact` | Fields merged individually: first non-empty `website`, `phone`, `hours`, `email` |
+| `sources` | Array of all contributing providers |
+
+**Provider priority (highest first):** Overpass → Wikivoyage → Wikipedia → GeoNames
+
+---
+
+## Scoring
+
+Each merged POI receives a score in **[0, 100]**:
+
+<div className="score-grid">
+  <div className="score-box">
+    <div className="score-pct">50%</div>
+    <div className="score-label">Source count</div>
+  </div>
+  <div className="score-box">
+    <div className="score-pct">30%</div>
+    <div className="score-label">POI type</div>
+  </div>
+  <div className="score-box">
+    <div className="score-pct">10%</div>
+    <div className="score-label">Distance</div>
+  </div>
+  <div className="score-box">
+    <div className="score-pct">10%</div>
+    <div className="score-label">Coord precision</div>
+  </div>
+</div>
+
+### Source count (50%)
+
+Multi-source confirmation is the primary ranking signal. A place mentioned by Overpass, Wikivoyage, and GeoNames is almost certainly a landmark worth visiting.
+
+| Sources | Factor |
+|---------|--------|
+| 1 | 0.25 |
+| 2 | 0.70 |
+| 3+ | 1.00 |
+
+The stepped function ensures a 2-source POI always outranks any 1-source POI regardless of distance or type bonuses.
+
+### POI type (30%)
+
+Default weights by tourist relevance. Override with the `weights` query parameter.
+
+| Type | Weight |
+|------|--------|
+| `see` | 1.0 |
+| `do` | 0.8 |
+| `eat` | 0.6 |
+| `drink` | 0.5 |
+| `sleep` | 0.4 |
+| `buy` | 0.4 |
+| `generic` | 0.5 |
+
+### Distance (10%)
+
+Linear decay from 0 (at the edge of the search radius) to 1 (at the centre). Signal is zeroed for `polygon` and `district` modes.
+
+### Coordinate precision (10%)
+
+Precise GPS coordinates score 1.0. Approximate (zone-level) coordinates score 0.5. No coordinates score 0.
+
+---
+
+## Score example
+
+A café confirmed by Overpass + Wikivoyage, 200 m from the query centre, inside a 2 000 m radius:
+
+| Component | Calculation | Points |
+|-----------|-------------|--------|
+| Source count (×50) | 2 sources → 0.70 × 50 | 35.0 |
+| Type (×30) | `eat` → 0.6 × 30 | 18.0 |
+| Distance (×10) | (1 − 200/2000) × 10 | 9.0 |
+| Coord precision (×10) | precise → 1.0 × 10 | 10.0 |
+| **Total** | | **72.0** |

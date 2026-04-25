@@ -1,0 +1,132 @@
+---
+title: POST /itinerary/generate
+description: Generate day-by-day travel itineraries with geographic clustering and nearest-neighbour routing.
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+<div className="endpoint-head">
+  <span className="method-badge method-post">POST</span>
+  <code>/itinerary/generate</code>
+  <span className="auth-tag">requires X-API-Key</span>
+</div>
+
+Generate day-by-day travel itineraries with geographic clustering and nearest-neighbour routing. Supply either a `poi_query` (the service fetches POIs from the POI API automatically) or a `pois` array directly.
+
+<Callout type="info">
+  Days are clustered geographically using K-means, then each day is ordered by a nearest-neighbour tour starting from `start_location` (or the geographic centroid when not provided).
+</Callout>
+
+**Base URL:** `http://localhost:8000`
+
+---
+
+## Request body
+
+```json
+{
+  "pois": [
+    {
+      "id":     "wikivoyage:Paris/Eiffel_Tower",
+      "name":   "Tour Eiffel",
+      "type":   "see",
+      "coords": { "lat": 48.8584, "lng": 2.2945 }
+    }
+  ],
+  "poi_query": {
+    "lat": 48.8566,
+    "lng": 2.3522,
+    "radius": 3000,
+    "mode": "radius"
+  },
+  "days": 3,
+  "start_location": { "lat": 48.8566, "lng": 2.3522 },
+  "preferences": {
+    "pace":       "moderate",
+    "priorities": ["see", "eat"],
+    "avoid":      ["sleep", "buy"],
+    "start_time": "09:00",
+    "end_time":   "21:00"
+  }
+}
+```
+
+### Fields
+
+| Field | Type | Required | Default | Description |
+|-------|------|:--------:|---------|-------------|
+| `pois` | POI[] | either/or | — | POIs to plan. When provided, `poi_query` is ignored. |
+| `poi_query` | object | either/or | — | Forwarded to `GET /pois/search` when `pois` is absent. |
+| `days` | int | no | `1` | Number of days (1–30) |
+| `start_location` | Coordinates | no | — | Starting point for day 1's tour ordering |
+| `preferences.pace` | string | no | `moderate` | `relaxed` · `moderate` · `intensive` — affects estimated duration |
+| `preferences.priorities` | string[] | no | `[]` | POI types to schedule first each day |
+| `preferences.avoid` | string[] | no | `[]` | POI types to exclude entirely |
+| `preferences.start_time` | string | no | `09:00` | Day start time `HH:MM` |
+| `preferences.end_time` | string | no | `21:00` | Day end time `HH:MM` |
+
+<Callout type="warn">
+  Either `pois` or `poi_query` must be provided. When both are sent, `pois` takes precedence and `poi_query` is ignored.
+</Callout>
+
+---
+
+## Response `200`
+
+```json
+{
+  "days": [
+    {
+      "day": 1,
+      "pois": [
+        {
+          "id":     "wikivoyage:Paris/Eiffel_Tower",
+          "name":   "Tour Eiffel",
+          "type":   "see",
+          "coords": { "lat": 48.8584, "lng": 2.2945 }
+        },
+        {
+          "id":     "overpass:201611261",
+          "name":   "Cathédrale Notre-Dame de Paris",
+          "type":   "see",
+          "coords": { "lat": 48.8530, "lng": 2.3499 }
+        }
+      ],
+      "estimated_duration_hours": 7.5
+    },
+    {
+      "day": 2,
+      "pois": [...],
+      "estimated_duration_hours": 6.0
+    }
+  ],
+  "total_pois": 12
+}
+```
+
+### Response fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `days` | Day[] | Ordered list of days |
+| `days[].day` | int | Day number (1-based) |
+| `days[].pois` | POI[] | Ordered POIs for that day (nearest-neighbour tour) |
+| `days[].estimated_duration_hours` | float | Estimated visit duration based on pace and POI count |
+| `total_pois` | int | Total number of POIs across all days |
+
+---
+
+## Error responses
+
+| Status | Condition |
+|--------|-----------|
+| `422` | Neither `pois` nor `poi_query` provided · `days > 30` · invalid `pace` value · validation failure |
+| `404` | `poi_query` returned no results |
+| `429` | Rate limit exceeded |
+| `503` | POI API unreachable (when using `poi_query`) |
+
+---
+
+## Try it
+
+<TryItinerary />

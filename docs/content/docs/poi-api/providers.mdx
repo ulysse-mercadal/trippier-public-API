@@ -1,0 +1,59 @@
+---
+title: GET /pois/providers
+description: Lists all data providers registered on this instance with availability status and latency.
+---
+
+<div className="endpoint-head">
+  <span className="method-badge method-get">GET</span>
+  <code>/pois/providers</code>
+  <span className="auth-tag open">public</span>
+</div>
+
+Lists all data providers registered on this instance and probes each one for availability and latency. No authentication required.
+
+Each provider is queried with a lightweight test search (`radius=500`, `limit=1` around Paris) and the result is returned synchronously. Use this endpoint for health dashboards and load-balancer readiness checks.
+
+---
+
+## Response `200`
+
+```json
+[
+  {
+    "name":       "overpass",
+    "available":  true,
+    "latency_ms": 145
+  },
+  {
+    "name":       "wikivoyage",
+    "available":  true,
+    "latency_ms": 312
+  },
+  {
+    "name":       "geonames",
+    "available":  true,
+    "latency_ms": 89
+  },
+  {
+    "name":       "wikipedia",
+    "available":  false,
+    "latency_ms": 5001,
+    "error":      "context deadline exceeded"
+  }
+]
+```
+
+### `ProviderStatus` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Provider identifier — `overpass`, `wikivoyage`, `geonames`, `wikipedia`, `wikipedia_events` |
+| `available` | bool | `true` if the last probe returned without error |
+| `latency_ms` | int | Round-trip time of the probe in milliseconds |
+| `error` | string | Error message when `available` is `false` |
+
+---
+
+## Try it
+
+<TryProviders />

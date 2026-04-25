@@ -1,0 +1,52 @@
+---
+title: GET /health
+description: Liveness probe used by Docker Compose, Kubernetes, and load balancers.
+---
+
+<div className="endpoint-head">
+  <span className="method-badge method-get">GET</span>
+  <code>/health</code>
+  <span className="auth-tag open">public</span>
+</div>
+
+Liveness probe used by Docker Compose, Kubernetes, and load balancers. No authentication required. Always returns `200 OK` if the process is running.
+
+---
+
+## Response `200`
+
+```json
+{ "status": "ok" }
+```
+
+---
+
+## Usage examples
+
+**Docker Compose healthcheck:**
+
+```yaml
+healthcheck:
+  test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+  interval: 10s
+  timeout: 5s
+  retries: 3
+```
+
+**Kubernetes liveness probe:**
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+```
+
+**curl:**
+
+```bash
+curl -s http://localhost:8080/health
+# {"status":"ok"}
+```
