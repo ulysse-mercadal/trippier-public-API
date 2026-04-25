@@ -1,5 +1,5 @@
-// Package search orchestrates all providers in parallel and returns a merged,
-// scored, and paginated list of EnrichedPoi results.
+// Package search orchestrates providers in parallel and returns merged, scored,
+// paginated POI results.
 package search
 
 import (
@@ -15,78 +15,45 @@ import (
 	"github.com/trippier/poi-api/internal/providers"
 	"github.com/trippier/poi-api/internal/scoring"
 	"github.com/trippier/poi-api/pkg/types"
+	"go.uber.org/zap"
 )
 
 // Service orchestrates the full POI search pipeline.
 type Service struct {
 	providers       map[types.Provider]providers.Provider
 	providerTimeout time.Duration
+	log             *zap.Logger
 }
 
-// NewService returns a Service wired with the given provider implementations.
-func NewService(pp []providers.Provider, providerTimeout time.Duration) *Service {
+// NewService returns a Service backed by the given providers.
+func NewService(pp []providers.Provider, timeout time.Duration, log *zap.Logger) *Service {
 	m := make(map[types.Provider]providers.Provider, len(pp))
 	for _, p := range pp {
 		m[p.Name()] = p
 	}
-	return &Service{providers: m, providerTimeout: providerTimeout}
+	return &Service{providers: m, providerTimeout: timeout, log: log}
 }
 
-// Search runs all requested providers in parallel, merges and scores results,
-// then applies pagination and minimum score filtering.
 func (s *Service) Search(ctx context.Context, q types.SearchQuery) (*types.SearchResult, error) {
-	s.applyDefaults(&q)
-
-	selected := s.selectProviders(q)
-	rawPois := s.fetchAll(ctx, q, selected)
-
-	rawPois = geo.SetDistances(rawPois, q.Lat, q.Lng)
-	if q.Mode == types.ModeRadius {
-		rawPois = geo.FilterByRadius(rawPois, q.Lat, q.Lng, float64(q.Radius))
-	}
-
-	merged := dedup.Merge(rawPois)
-
-	for i := range merged {
-		merged[i].Score = scoring.Score(merged[i], q)
-	}
-
-	sort.Slice(merged, func(i, j int) bool {
-		return merged[i].Score > merged[j].Score
-	})
-
-	filtered := s.applyFilters(merged, q)
-	total := len(filtered)
-
-	start := q.Offset
-	if start > total {
-		start = total
-	}
-	end := start + q.Limit
-	if end > total {
-		end = total
-	}
-
-	return &types.SearchResult{
-		Query:   q,
-		Total:   total,
-		Results: filtered[start:end],
-	}, nil
+	applyDefaults(&q, types.AllProviders)
+	merged := s.pipeline(ctx, q)
+	filtered := applyFilters(merged, q)
+	return paginate(filtered, q), nil
 }
 
-// ProvidersStatus returns availability and latency for each registered provider.
+func (s *Service) SearchEvents(ctx context.Context, q types.SearchQuery) (*types.SearchResult, error) {
+	applyDefaults(&q, types.AllEventProviders)
+	merged := s.pipeline(ctx, q)
+	return paginate(merged, q), nil
+}
+
+// ProvidersStatus probes each provider and returns availability + latency.
 func (s *Service) ProvidersStatus(ctx context.Context) []types.ProviderStatus {
+	probe := types.SearchQuery{Mode: types.ModeRadius, Lat: 48.8566, Lng: 2.3522, Radius: 500, Limit: 1}
+
 	statuses := make([]types.ProviderStatus, 0, len(s.providers))
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-
-	probe := types.SearchQuery{
-		Mode:   types.ModeRadius,
-		Lat:    48.8566,
-		Lng:    2.3522,
-		Radius: 500,
-		Limit:  1,
-	}
 
 	for name, p := range s.providers {
 		wg.Add(1)
@@ -96,16 +63,12 @@ func (s *Service) ProvidersStatus(ctx context.Context) []types.ProviderStatus {
 			tctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 			_, err := p.Search(tctx, probe)
-			status := types.ProviderStatus{
-				Name:      name,
-				Available: err == nil,
-				LatencyMs: time.Since(start).Milliseconds(),
-			}
+			st := types.ProviderStatus{Name: name, Available: err == nil, LatencyMs: time.Since(start).Milliseconds()}
 			if err != nil {
-				status.Error = err.Error()
+				st.Error = err.Error()
 			}
 			mu.Lock()
-			statuses = append(statuses, status)
+			statuses = append(statuses, st)
 			mu.Unlock()
 		}(name, p)
 	}
@@ -114,7 +77,71 @@ func (s *Service) ProvidersStatus(ctx context.Context) []types.ProviderStatus {
 	return statuses
 }
 
-func (s *Service) applyDefaults(q *types.SearchQuery) {
+// pipeline runs providers, merges, scores, and sorts — shared by Search and SearchEvents.
+func (s *Service) pipeline(ctx context.Context, q types.SearchQuery) []types.EnrichedPoi {
+	// District mode has no lat/lng from the caller. Geocode the district name so
+	// that providers can apply geographic constraints and distances are meaningful.
+	if q.Mode == types.ModeDistrict {
+		if place, err := geo.GeocodeDistrict(ctx, q.District); err == nil {
+			q.Lat = place.Lat
+			q.Lng = place.Lng
+		} else {
+			s.log.Warn("geocode district failed", zap.String("district", q.District), zap.Error(err))
+		}
+	}
+
+	raw := s.fetchAll(ctx, q)
+	raw = geo.SetDistances(raw, q.Lat, q.Lng)
+	if q.Mode == types.ModeRadius {
+		raw = geo.FilterByRadius(raw, q.Lat, q.Lng, float64(q.Radius))
+	}
+	merged := dedup.Merge(raw)
+	for i := range merged {
+		merged[i].Score = scoring.Score(merged[i], q)
+	}
+	sort.Slice(merged, func(i, j int) bool { return merged[i].Score > merged[j].Score })
+	return merged
+}
+
+func (s *Service) fetchAll(ctx context.Context, q types.SearchQuery) []types.RawPoi {
+	selected := s.selectProviders(q)
+	results := make([][]types.RawPoi, len(selected))
+	var wg sync.WaitGroup
+
+	for i, p := range selected {
+		wg.Add(1)
+		go func(i int, p providers.Provider) {
+			defer wg.Done()
+			pctx, cancel := context.WithTimeout(ctx, s.providerTimeout)
+			defer cancel()
+			pois, err := p.Search(pctx, q)
+			if err != nil {
+				s.log.Warn("provider error", zap.String("provider", string(p.Name())), zap.Error(err))
+				return
+			}
+			results[i] = pois
+		}(i, p)
+	}
+
+	wg.Wait()
+	var all []types.RawPoi
+	for _, r := range results {
+		all = append(all, r...)
+	}
+	return all
+}
+
+func (s *Service) selectProviders(q types.SearchQuery) []providers.Provider {
+	var out []providers.Provider
+	for _, name := range q.Providers {
+		if p, ok := s.providers[name]; ok && p.SupportsMode(q.Mode) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func applyDefaults(q *types.SearchQuery, defaultProviders []types.Provider) {
 	if q.Mode == "" {
 		q.Mode = types.ModeRadius
 	}
@@ -128,62 +155,35 @@ func (s *Service) applyDefaults(q *types.SearchQuery) {
 		q.Lang = "en"
 	}
 	if len(q.Providers) == 0 {
-		q.Providers = types.AllProviders
+		q.Providers = defaultProviders
 	}
 }
 
-func (s *Service) selectProviders(q types.SearchQuery) []providers.Provider {
-	var selected []providers.Provider
-	for _, name := range q.Providers {
-		p, ok := s.providers[name]
-		if ok && p.SupportsMode(q.Mode) {
-			selected = append(selected, p)
-		}
+func applyFilters(pois []types.EnrichedPoi, q types.SearchQuery) []types.EnrichedPoi {
+	allowed := make(map[types.PoiType]bool, len(q.Types))
+	for _, t := range q.Types {
+		allowed[t] = true
 	}
-	return selected
-}
-
-func (s *Service) fetchAll(ctx context.Context, q types.SearchQuery, pp []providers.Provider) []types.RawPoi {
-	type result struct {
-		pois []types.RawPoi
-	}
-
-	results := make([]result, len(pp))
-	var wg sync.WaitGroup
-
-	for i, p := range pp {
-		wg.Add(1)
-		go func(i int, p providers.Provider) {
-			defer wg.Done()
-			pctx, cancel := context.WithTimeout(ctx, s.providerTimeout)
-			defer cancel()
-			pois, err := p.Search(pctx, q)
-			if err == nil {
-				results[i] = result{pois: pois}
-			}
-		}(i, p)
-	}
-
-	wg.Wait()
-
-	var all []types.RawPoi
-	for _, r := range results {
-		all = append(all, r.pois...)
-	}
-	return all
-}
-
-func (s *Service) applyFilters(pois []types.EnrichedPoi, q types.SearchQuery) []types.EnrichedPoi {
-	result := pois[:0]
+	out := pois[:0]
 	for _, p := range pois {
+		if len(allowed) > 0 && !allowed[p.Type] {
+			continue
+		}
 		if p.Score >= q.MinScore {
-			result = append(result, p)
+			out = append(out, p)
 		}
 	}
-	return result
+	return out
 }
 
-// ParseWeights deserialises the "weights" query parameter from its JSON form.
+func paginate(pois []types.EnrichedPoi, q types.SearchQuery) *types.SearchResult {
+	total := len(pois)
+	start := min(q.Offset, total)
+	end := min(start+q.Limit, total)
+	return &types.SearchResult{Query: q, Total: total, Results: pois[start:end]}
+}
+
+// ParseWeights deserialises the "weights" query param. All values must be in [0, 1].
 func ParseWeights(raw string) (map[types.PoiType]float64, error) {
 	if raw == "" {
 		return nil, nil
@@ -191,6 +191,11 @@ func ParseWeights(raw string) (map[types.PoiType]float64, error) {
 	var weights map[types.PoiType]float64
 	if err := json.Unmarshal([]byte(raw), &weights); err != nil {
 		return nil, fmt.Errorf("weights: invalid JSON: %w", err)
+	}
+	for t, v := range weights {
+		if v < 0 || v > 1 {
+			return nil, fmt.Errorf("weights: %q must be in [0, 1], got %g", t, v)
+		}
 	}
 	return weights, nil
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/trippier/poi-api/internal/providers"
 	"github.com/trippier/poi-api/internal/search"
 	"github.com/trippier/poi-api/pkg/types"
+	"go.uber.org/zap"
 )
 
 // mockProvider is a test double for providers.Provider.
@@ -55,7 +56,7 @@ func TestServiceSearch_BasicRadius(t *testing.T) {
 		pois:  pois,
 	}
 
-	svc := search.NewService([]providers.Provider{p}, 5*time.Second)
+	svc := search.NewService([]providers.Provider{p}, 5*time.Second, zap.NewNop())
 
 	q := types.SearchQuery{
 		Mode:      types.ModeRadius,
@@ -95,7 +96,7 @@ func TestServiceSearch_Pagination(t *testing.T) {
 		pois:  pois,
 	}
 
-	svc := search.NewService([]providers.Provider{p}, 5*time.Second)
+	svc := search.NewService([]providers.Provider{p}, 5*time.Second, zap.NewNop())
 
 	q := types.SearchQuery{
 		Mode:      types.ModeRadius,
@@ -130,7 +131,7 @@ func TestServiceSearch_UnsupportedModeSkipped(t *testing.T) {
 		},
 	}
 
-	svc := search.NewService([]providers.Provider{p}, 5*time.Second)
+	svc := search.NewService([]providers.Provider{p}, 5*time.Second, zap.NewNop())
 
 	q := types.SearchQuery{
 		Mode:      types.ModePolygon,
@@ -159,7 +160,7 @@ func TestServiceSearch_MinScore(t *testing.T) {
 		},
 	}
 
-	svc := search.NewService([]providers.Provider{p}, 5*time.Second)
+	svc := search.NewService([]providers.Provider{p}, 5*time.Second, zap.NewNop())
 
 	q := types.SearchQuery{
 		Mode:      types.ModeRadius,
@@ -188,7 +189,10 @@ func TestParseWeights(t *testing.T) {
 		wantErr bool
 	}{
 		{"", 0, false},
-		{`{"see":2,"eat":1}`, 2, false},
+		{`{"see":1,"eat":0.5}`, 2, false},
+		{`{"see":0,"do":0.8}`, 2, false},
+		{`{"see":2,"eat":1}`, 0, true},  // values > 1 are rejected
+		{`{"see":-0.1}`, 0, true},       // negative values are rejected
 		{`not-json`, 0, true},
 	}
 

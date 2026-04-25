@@ -22,6 +22,7 @@ func NewHandler(svc *Service) *Handler {
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/search", h.search)
 	rg.GET("/search/slim", h.searchSlim)
+	rg.GET("/events", h.events)
 	rg.GET("/providers", h.providers)
 	rg.GET("/:id", h.getByID)
 }
@@ -59,6 +60,10 @@ func (h *Handler) search(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return
 	}
+	if len(weights) > 0 && len(q.Types) > 0 {
+		c.JSON(http.StatusBadRequest, errorResponse{Error: "types and weights are mutually exclusive: use types to filter, or weights to reorder"})
+		return
+	}
 	q.Weights = weights
 
 	applyQueryDefaults(&q)
@@ -70,7 +75,7 @@ func (h *Handler) search(c *gin.Context) {
 
 	result, err := h.service.Search(c.Request.Context(), q)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		c.JSON(http.StatusInternalServerError, errorResponse{Error: "internal server error"})
 		return
 	}
 
@@ -109,7 +114,7 @@ func (h *Handler) searchSlim(c *gin.Context) {
 
 	result, err := h.service.Search(c.Request.Context(), q)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, errorResponse{Error: err.Error()})
+		c.JSON(http.StatusInternalServerError, errorResponse{Error: "internal server error"})
 		return
 	}
 
@@ -118,6 +123,47 @@ func (h *Handler) searchSlim(c *gin.Context) {
 		slim[i] = types.SlimPoi{Name: p.Name, Type: p.Type, Coords: p.Coords}
 	}
 	c.JSON(http.StatusOK, types.SlimResult{Total: result.Total, Results: slim})
+}
+
+// events godoc.
+// @Summary     Search for events near a location (festivals, cultural events)
+// @Description Returns cultural festivals and recurring events a traveller might
+// @Description attend if on site at the right date. Powered by Wikipedia/Wikidata.
+// @Tags        pois
+// @Produce     json
+// @Param       mode     query  string  true  "Search mode: radius | district"
+// @Param       lat      query  number  false "Latitude (required for mode=radius)"
+// @Param       lng      query  number  false "Longitude (required for mode=radius)"
+// @Param       radius   query  integer false "Search radius in meters (default 5000)"
+// @Param       district query  string  false "District or city name (mode=district)"
+// @Param       lang     query  string  false "Language code (default en)"
+// @Param       limit    query  integer false "Max results (default 20, max 100)"
+// @Param       offset   query  integer false "Pagination offset"
+// @Success     200  {object}  types.SearchResult
+// @Failure     400  {object}  errorResponse
+// @Failure     500  {object}  errorResponse
+// @Router      /pois/events [get]
+func (h *Handler) events(c *gin.Context) {
+	var q types.SearchQuery
+	if err := c.ShouldBindQuery(&q); err != nil {
+		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+
+	applyQueryDefaults(&q)
+
+	if err := Validate(q); err != nil {
+		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return
+	}
+
+	result, err := h.service.SearchEvents(c.Request.Context(), q)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, errorResponse{Error: "internal server error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
 }
 
 // providers godoc.
@@ -131,14 +177,7 @@ func (h *Handler) providers(c *gin.Context) {
 	c.JSON(http.StatusOK, statuses)
 }
 
-// getByID godoc.
-// @Summary  Retrieve a single POI by its namespaced ID
-// @Tags     pois
-// @Produce  json
-// @Param    id  path  string  true  "Namespaced POI ID e.g. overpass:123456"
-// @Success  200  {object}  types.EnrichedPoi
-// @Failure  404  {object}  errorResponse
-// @Router   /pois/{id} [get]
+// getByID is not yet implemented.
 func (h *Handler) getByID(c *gin.Context) {
 	c.JSON(http.StatusNotImplemented, errorResponse{Error: "not implemented"})
 }
