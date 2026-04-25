@@ -36,8 +36,27 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self._cost = cost
         self._client = httpx.AsyncClient(timeout=5.0)
 
+    @staticmethod
+    def _validate_internal_auth(header: str, secret: str) -> bool:
+        """Return True if the X-Internal-Auth header is valid and recent (±30 s)."""
+        try:
+            ts_str, sig = header.split(".", 1)
+            ts = int(ts_str)
+        except (ValueError, AttributeError):
+            return False
+        if abs(int(time.time()) - ts) > 30:
+            return False
+        expected = hmac.new(secret.encode(), ts_str.encode(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, sig)
+
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if request.url.path in EXEMPT_PATHS:
+            return await call_next(request)
+
+        # Requests signed with the shared internal secret (e.g. the official
+        # site's server-side proxy) bypass rate limiting entirely.
+        internal_auth = request.headers.get("X-Internal-Auth", "")
+        if internal_auth and self._validate_internal_auth(internal_auth, self._internal_secret):
             return await call_next(request)
 
         api_key = request.headers.get("X-API-Key")

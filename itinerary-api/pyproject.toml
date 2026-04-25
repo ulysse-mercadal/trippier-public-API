@@ -9,7 +9,15 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "ANN"]
-ignore = []
+# ANN101 (annotate `self`) was removed in ruff ≥ 0.5 — ignore for ruff 0.4.x.
+ignore = ["ANN101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test functions don't need return-type or argument annotations.
+"tests/*" = ["ANN201", "ANN001", "ANN002", "ANN003"]
 
 [tool.mypy]
 strict = true
@@ -18,3 +26,8 @@ python_version = "3.12"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+filterwarnings = [
+    # python-multipart ≥0.0.10 warns about the old 'multipart' import name;
+    # starlette 0.37 (bundled with fastapi 0.111) still uses it — fixed in starlette 0.41+.
+    "ignore:Please use `import python_multipart` instead:PendingDeprecationWarning",
+]
