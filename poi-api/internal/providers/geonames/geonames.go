@@ -55,6 +55,7 @@ type geonameItem struct {
 type Provider struct {
 	client   *http.Client
 	username string
+	baseURL  string
 }
 
 // New returns a Provider authenticated with the given GeoNames username.
@@ -62,6 +63,17 @@ func New(username string) *Provider {
 	return &Provider{
 		client:   &http.Client{Timeout: defaultTimeout},
 		username: username,
+		baseURL:  apiURL,
+	}
+}
+
+// NewWithURL returns a Provider targeting a custom API endpoint.
+// Intended for testing against a local httptest server.
+func NewWithURL(baseURL, username string) *Provider {
+	return &Provider{
+		client:   &http.Client{Timeout: defaultTimeout},
+		username: username,
+		baseURL:  baseURL,
 	}
 }
 
@@ -89,17 +101,35 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 			"username": {p.username},
 		}
 	case types.ModeDistrict:
-		endpoint = "/searchJSON"
-		params = url.Values{
-			"q":        {q.District},
-			"maxRows":  {strconv.Itoa(maxRows)},
-			"username": {p.username},
+		// Prefer a coordinate-based nearby search when geocoded lat/lng are
+		// available (set by the service after resolving the district name via
+		// Nominatim). Fall back to a text search otherwise.
+		if q.Lat != 0 || q.Lng != 0 {
+			endpoint = "/findNearbyJSON"
+			radius := q.Radius / 1000
+			if radius == 0 {
+				radius = 5
+			}
+			params = url.Values{
+				"lat":      {fmt.Sprintf("%.6f", q.Lat)},
+				"lng":      {fmt.Sprintf("%.6f", q.Lng)},
+				"radius":   {strconv.Itoa(radius)},
+				"maxRows":  {strconv.Itoa(maxRows)},
+				"username": {p.username},
+			}
+		} else {
+			endpoint = "/searchJSON"
+			params = url.Values{
+				"q":        {q.District},
+				"maxRows":  {strconv.Itoa(maxRows)},
+				"username": {p.username},
+			}
 		}
 	default:
 		return nil, nil
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL+endpoint+"?"+params.Encode(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+endpoint+"?"+params.Encode(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("geonames: build request: %w", err)
 	}
@@ -125,6 +155,12 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 func (p *Provider) toRawPois(items []geonameItem) []types.RawPoi {
 	pois := make([]types.RawPoi, 0, len(items))
 	for _, item := range items {
+		// Skip feature codes not explicitly mapped — they are geographic
+		// entities (rivers, roads, historical areas…) not tourist POIs.
+		poiType, known := fcodeTypeMap[item.Fcode]
+		if !known {
+			continue
+		}
 		lat, err1 := strconv.ParseFloat(item.Lat, 64)
 		lng, err2 := strconv.ParseFloat(item.Lng, 64)
 		if err1 != nil || err2 != nil {
@@ -133,17 +169,10 @@ func (p *Provider) toRawPois(items []geonameItem) []types.RawPoi {
 		pois = append(pois, types.RawPoi{
 			ID:       fmt.Sprintf("geonames:%d", item.GeonameID),
 			Name:     item.Name,
-			Type:     p.resolveType(item.Fcode),
+			Type:     poiType,
 			Provider: types.ProviderGeoNames,
 			Coords:   &types.Coordinates{Lat: lat, Lng: lng},
 		})
 	}
 	return pois
-}
-
-func (p *Provider) resolveType(fcode string) types.PoiType {
-	if t, ok := fcodeTypeMap[fcode]; ok {
-		return t
-	}
-	return types.TypeGeneric
 }
