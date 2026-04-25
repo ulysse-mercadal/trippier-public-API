@@ -8,27 +8,49 @@ ITINERARY_IMAGE  = $(REGISTRY)/$(OWNER)/itinerary-api:$(TAG)
 FRONTEND_IMAGE   = $(REGISTRY)/$(OWNER)/frontend:$(TAG)
 
 UID_GID  := $(shell id -u):$(shell id -g)
+CACHE    := $(HOME)/.cache/trippier
+
 DRUN     := docker run --rm -u $(UID_GID)
-DRUN_GO  := $(DRUN) -e GOCACHE=/tmp/go-build -e GOPATH=/tmp/go -e GOLANGCI_LINT_CACHE=/tmp/golangci-cache
+DRUN_GO  := $(DRUN) \
+	-e GOCACHE=/cache/go-build \
+	-e GOPATH=/cache/go \
+	-e GOLANGCI_LINT_CACHE=/cache/golangci \
+	-v $(CACHE)/go-build:/cache/go-build \
+	-v $(CACHE)/go:/cache/go \
+	-v $(CACHE)/golangci:/cache/golangci
 DRUN_PY  := docker run --rm
 
-.PHONY: dev dev-stop \
-        prod-build prod-up prod-stop \
-        test-go-poi test-go-auth test-python test \
-        lint-go-poi lint-go-auth lint-python lint \
-        push tidy
+.PHONY: dev              \
+		dev-stop         \
+		docs             \
+		docs-build       \
+		prod-build       \
+		prod-up          \
+		prod-stop        \
+        test-go-poi      \
+		test-go-auth     \
+		test-python test \
+        lint-go-poi      \
+		lint-go-auth     \
+		lint-python lint \
+        push			 \
+		tidy
 
 # ── Dev (hot reload) ──────────────────────────────────────────────────────────
-# All services reload on file changes:
-#   Go (auth-api, poi-api) → air
-#   Python (itinerary-api) → uvicorn --reload
-#   Frontend               → Vite HMR on :3000  (websocket :24678)
 
 dev:
 	docker compose -f docker-compose.dev.yml up --build
 
 dev-stop:
 	docker compose -f docker-compose.dev.yml down -v
+
+# ── Docs ──────────────────────────────────────────────────────────────────────
+
+docs:
+	cd docs && bun run dev
+
+docs-build:
+	cd docs && bun run build
 
 # ── Production ────────────────────────────────────────────────────────────────
 
@@ -70,11 +92,11 @@ test: test-go-poi test-go-auth test-python
 
 lint-go-poi:
 	$(DRUN_GO) -v $(CURDIR)/poi-api:/app:z -w /app golangci/golangci-lint:v1.64 \
-		golangci-lint run
+		golangci-lint run --timeout 5m
 
 lint-go-auth:
 	$(DRUN_GO) -v $(CURDIR)/auth-api:/app:z -w /app golangci/golangci-lint:v1.64 \
-		golangci-lint run
+		golangci-lint run --timeout 5m
 
 lint-python:
 	$(DRUN_PY) -v $(CURDIR)/itinerary-api:/app:z -w /app python:3.12-slim \
