@@ -1,5 +1,4 @@
-// Package dedup merges duplicate POIs collected from multiple providers into
-// unified EnrichedPoi records, using Wikidata ID matching and proximity + name similarity.
+// Package dedup merges POIs from multiple providers into deduplicated EnrichedPoi records.
 package dedup
 
 import (
@@ -10,7 +9,7 @@ import (
 )
 
 const (
-	proximityThresholdMeters = 50.0
+	proximityThresholdMeters = 150.0
 	nameSimilarityThreshold  = 0.80
 )
 
@@ -40,13 +39,24 @@ func group(pois []types.RawPoi) [][]types.RawPoi {
 			continue
 		}
 		g := []types.RawPoi{pois[i]}
+		used[i] = true
 		for j := i + 1; j < len(pois); j++ {
-			if !used[j] && areDuplicates(pois[i], pois[j]) {
-				g = append(g, pois[j])
-				used[j] = true
+			if used[j] {
+				continue
+			}
+			// Only precise-coord members act as anchors; approximate-coord entries
+			// (zone-level Wikivoyage) cannot bridge two distant POIs transitively.
+			for _, member := range g {
+				if member.Coords == nil || member.Coords.Approximate {
+					continue
+				}
+				if areDuplicates(member, pois[j]) {
+					g = append(g, pois[j])
+					used[j] = true
+					break
+				}
 			}
 		}
-		used[i] = true
 		groups = append(groups, g)
 	}
 	return groups
@@ -56,33 +66,72 @@ func areDuplicates(a, b types.RawPoi) bool {
 	if a.WikidataID != "" && a.WikidataID == b.WikidataID {
 		return true
 	}
-	aApprox := a.Coords == nil || a.Coords.Approximate
-	bApprox := b.Coords == nil || b.Coords.Approximate
-
-	// When both POIs have precise coordinates, check proximity first — it is
-	// cheaper than JaroWinkler and quickly eliminates distant duplicates.
-	if !aApprox && !bApprox {
-		dist := mathutil.Haversine(a.Coords.Lat, a.Coords.Lng, b.Coords.Lat, b.Coords.Lng)
-		if dist >= proximityThresholdMeters {
-			return false
-		}
+	if a.Coords == nil || a.Coords.Approximate || b.Coords == nil || b.Coords.Approximate {
+		return false
+	}
+	if mathutil.Haversine(a.Coords.Lat, a.Coords.Lng, b.Coords.Lat, b.Coords.Lng) >= proximityThresholdMeters {
+		return false
 	}
 
-	// Name similarity decides the final outcome.
-	similarity := mathutil.JaroWinkler(
-		strings.ToLower(strings.TrimSpace(a.Name)),
-		strings.ToLower(strings.TrimSpace(b.Name)),
-	)
-	return similarity >= nameSimilarityThreshold
+	an, bn := normalizeName(a.Name), normalizeName(b.Name)
+
+	if mathutil.JaroWinkler(an, bn) >= nameSimilarityThreshold {
+		return tokenOverlapOK(an, bn)
+	}
+
+	short, long := an, bn
+	if len(short) > len(long) {
+		short, long = long, short
+	}
+	return len(short) >= 8 && strings.Contains(long, short)
+}
+
+// tokenOverlapOK guards against JW prefix-bonus false positives (e.g. "Hotel A"
+// vs "Hotel B"). Requires shared_words/min(|a|,|b|) > 0.5 when both names
+// have ≥ 2 words; single-word names rely on JW alone.
+func tokenOverlapOK(a, b string) bool {
+	wa, wb := strings.Fields(a), strings.Fields(b)
+	if len(wa) < 2 || len(wb) < 2 {
+		return true
+	}
+	set := make(map[string]bool, len(wb))
+	for _, w := range wb {
+		set[w] = true
+	}
+	shared := 0
+	for _, w := range wa {
+		if set[w] {
+			shared++
+		}
+	}
+	return float64(shared)/float64(min(len(wa), len(wb))) > 0.5
+}
+
+var diacriticReplacer = strings.NewReplacer(
+	"é", "e", "è", "e", "ê", "e", "ë", "e",
+	"à", "a", "â", "a", "ä", "a",
+	"ô", "o", "ö", "o", "œ", "oe",
+	"û", "u", "ù", "u", "ü", "u",
+	"î", "i", "ï", "i",
+	"ç", "c",
+	"-", " ",
+)
+
+func normalizeName(s string) string {
+	return diacriticReplacer.Replace(strings.ToLower(strings.TrimSpace(s)))
 }
 
 func toEnriched(group []types.RawPoi) types.EnrichedPoi {
 	primary := primaryPoi(group)
 	sources := make([]types.Provider, 0, len(group))
 	data := make(map[types.Provider]types.RawPoi, len(group))
+	seen := make(map[types.Provider]bool, len(group))
 
 	for _, p := range group {
-		sources = append(sources, p.Provider)
+		if !seen[p.Provider] {
+			sources = append(sources, p.Provider)
+			seen[p.Provider] = true
+		}
 		data[p.Provider] = p
 	}
 
