@@ -10,17 +10,17 @@ import (
 	"github.com/trippier/poi-api/pkg/types"
 )
 
-// geosearchResp returns a minimal Wikimedia geosearch API response.
+// ── Shared fixtures ───────────────────────────────────────────────────────────
+
 const geosearchResp = `{
   "query": {
     "geosearch": [
-      {"pageid": 1, "title": "Eiffel Tower", "lat": 48.8584, "lon": 2.2945, "dist": 50.5},
-      {"pageid": 2, "title": "Champ de Mars",  "lat": 48.8555, "lon": 2.2988, "dist": 300.0}
+      {"pageid": 1, "title": "Eiffel Tower",  "lat": 48.8584, "lon": 2.2945, "dist": 50.5},
+      {"pageid": 2, "title": "Champ de Mars", "lat": 48.8555, "lon": 2.2988, "dist": 300.0}
     ]
   }
 }`
 
-// enrichResp returns a minimal pages enrichment response.
 const enrichResp = `{
   "query": {
     "pages": {
@@ -41,34 +41,52 @@ const enrichResp = `{
   }
 }`
 
-func newMultiHandler(geosearch, enrich string) http.Handler {
+// sparqlNone is a SPARQL result with no matching entities.
+const sparqlNone = `{"results":{"bindings":[]}}`
+
+// sparqlMatchQ243 simulates SPARQL classifying Q243 as matching the queried class.
+const sparqlMatchQ243 = `{
+  "results": {
+    "bindings": [
+      {"item": {"type": "uri", "value": "http://www.wikidata.org/entity/Q243"}}
+    ]
+  }
+}`
+
+// newWikipediaHandler sequences responses: first call → geosearch, second → enrich.
+func newWikipediaHandler(geosearch, enrich string) http.Handler {
 	call := 0
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		call++
-		if call == 1 {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(geosearch))
-			return
-		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(enrich))
+		if call == 1 {
+			_, _ = w.Write([]byte(geosearch))
+		} else {
+			_, _ = w.Write([]byte(enrich))
+		}
 	})
 }
 
-func TestSearch_ReturnsEnrichedPois(t *testing.T) {
-	srv := httptest.NewServer(newMultiHandler(geosearchResp, enrichResp))
-	defer srv.Close()
+func newSPARQLHandler(body string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(body))
+	})
+}
 
-	p := wikipedia.NewWithBaseURL(srv.URL)
+var testQuery = types.SearchQuery{Mode: types.ModeRadius, Lat: 48.8566, Lng: 2.3522, Radius: 5000}
 
-	q := types.SearchQuery{
-		Mode:   types.ModeRadius,
-		Lat:    48.8566,
-		Lng:    2.3522,
-		Radius: 5000,
-	}
+// ── Provider (places) tests ───────────────────────────────────────────────────
 
-	pois, err := p.Search(context.Background(), q)
+func TestProvider_ReturnsEnrichedPois(t *testing.T) {
+	wikiSrv := httptest.NewServer(newWikipediaHandler(geosearchResp, enrichResp))
+	defer wikiSrv.Close()
+	sparqlSrv := httptest.NewServer(newSPARQLHandler(sparqlNone))
+	defer sparqlSrv.Close()
+
+	p := wikipedia.NewWithURLs(wikiSrv.URL, sparqlSrv.URL)
+
+	pois, err := p.Search(context.Background(), testQuery)
 	if err != nil {
 		t.Fatalf("Search error: %v", err)
 	}
@@ -95,20 +113,40 @@ func TestSearch_ReturnsEnrichedPois(t *testing.T) {
 	if eiffel.Thumbnail == "" {
 		t.Error("thumbnail should be set")
 	}
+	if eiffel.Type != types.TypeSee {
+		t.Errorf("type = %q, want %q", eiffel.Type, types.TypeSee)
+	}
 }
 
-func TestSearch_EmptyGeosearch(t *testing.T) {
+func TestProvider_ReturnsAllGeosearchResults(t *testing.T) {
+	// The places Provider no longer filters by Wikidata — it is excluded from
+	// AllProviders and used only for enrichment. All geosearch results are returned.
+	wikiSrv := httptest.NewServer(newWikipediaHandler(geosearchResp, enrichResp))
+	defer wikiSrv.Close()
+	sparqlSrv := httptest.NewServer(newSPARQLHandler(sparqlMatchQ243))
+	defer sparqlSrv.Close()
+
+	p := wikipedia.NewWithURLs(wikiSrv.URL, sparqlSrv.URL)
+
+	pois, err := p.Search(context.Background(), testQuery)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(pois) != 2 {
+		t.Fatalf("expected 2 POIs (no filtering), got %d", len(pois))
+	}
+}
+
+func TestProvider_EmptyGeosearch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"query":{"geosearch":[]}}`))
 	}))
 	defer srv.Close()
 
-	p := wikipedia.NewWithBaseURL(srv.URL)
+	p := wikipedia.NewWithURLs(srv.URL, srv.URL)
 
-	q := types.SearchQuery{Mode: types.ModeRadius, Lat: 0, Lng: 0, Radius: 100}
-
-	pois, err := p.Search(context.Background(), q)
+	pois, err := p.Search(context.Background(), types.SearchQuery{Mode: types.ModeRadius, Lat: 0, Lng: 0, Radius: 100})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -117,8 +155,65 @@ func TestSearch_EmptyGeosearch(t *testing.T) {
 	}
 }
 
-func TestSupportsMode(t *testing.T) {
-	p := wikipedia.NewWithBaseURL("http://example.com")
+func TestProvider_SupportsMode(t *testing.T) {
+	p := wikipedia.NewWithURLs("http://example.com", "http://example.com")
+	if !p.SupportsMode(types.ModeRadius) {
+		t.Error("should support radius mode")
+	}
+	if p.SupportsMode(types.ModePolygon) {
+		t.Error("should NOT support polygon mode")
+	}
+}
+
+// ── EventProvider (festivals) tests ──────────────────────────────────────────
+
+func TestEventProvider_ReturnsFestivals(t *testing.T) {
+	wikiSrv := httptest.NewServer(newWikipediaHandler(geosearchResp, enrichResp))
+	defer wikiSrv.Close()
+	// SPARQL reports Q243 as a festival → Eiffel Tower is kept as an event POI.
+	sparqlSrv := httptest.NewServer(newSPARQLHandler(sparqlMatchQ243))
+	defer sparqlSrv.Close()
+
+	p := wikipedia.NewEventProviderWithURLs(wikiSrv.URL, sparqlSrv.URL)
+
+	pois, err := p.Search(context.Background(), testQuery)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(pois) != 1 {
+		t.Fatalf("expected 1 festival POI, got %d", len(pois))
+	}
+	if pois[0].Type != types.TypeEvent {
+		t.Errorf("type = %q, want %q", pois[0].Type, types.TypeEvent)
+	}
+	if pois[0].Provider != types.ProviderWikipediaEvents {
+		t.Errorf("provider = %q, want %q", pois[0].Provider, types.ProviderWikipediaEvents)
+	}
+	if !pois[0].Recurring {
+		t.Error("recurring should be true for festival POIs")
+	}
+}
+
+func TestEventProvider_NonFestivalsAreExcluded(t *testing.T) {
+	wikiSrv := httptest.NewServer(newWikipediaHandler(geosearchResp, enrichResp))
+	defer wikiSrv.Close()
+	// SPARQL finds no festivals → nothing is returned.
+	sparqlSrv := httptest.NewServer(newSPARQLHandler(sparqlNone))
+	defer sparqlSrv.Close()
+
+	p := wikipedia.NewEventProviderWithURLs(wikiSrv.URL, sparqlSrv.URL)
+
+	pois, err := p.Search(context.Background(), testQuery)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(pois) != 0 {
+		t.Errorf("expected 0 non-festival POIs, got %d", len(pois))
+	}
+}
+
+func TestEventProvider_SupportsMode(t *testing.T) {
+	p := wikipedia.NewEventProviderWithURLs("http://example.com", "http://example.com")
 	if !p.SupportsMode(types.ModeRadius) {
 		t.Error("should support radius mode")
 	}

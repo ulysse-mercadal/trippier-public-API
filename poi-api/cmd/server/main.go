@@ -46,7 +46,7 @@ func main() {
 	}
 
 	pp := buildProviders(cfg)
-	svc := search.NewService(pp, time.Duration(cfg.ProviderTimeout)*time.Second)
+	svc := search.NewService(pp, time.Duration(cfg.ProviderTimeout)*time.Second, log)
 	handler := search.NewHandler(svc)
 
 	gin.SetMode(gin.ReleaseMode)
@@ -104,6 +104,7 @@ func buildProviders(cfg *config.Config) []providers.Provider {
 		overpass.New(),
 		wikivoyage.New(cfg.Lang),
 		wikipedia.New(cfg.Lang),
+		wikipedia.NewEventProvider(cfg.Lang),
 	}
 	if cfg.GeoNamesUsername != "" {
 		pp = append(pp, geonames.New(cfg.GeoNamesUsername))
