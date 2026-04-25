@@ -5,11 +5,11 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: trippier
-      POSTGRES_PASSWORD: trippier
-      POSTGRES_DB: trippier
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U trippier"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -37,16 +37,16 @@ services:
     ports:
       - "8081:8081"
     volumes:
-      - ./auth-api:/app          # mount source for hot reload
-      - auth-api-tmp:/app/tmp    # keep compiled binary off the host mount
+      - ./auth-api:/app
+      - auth-api-tmp:/app/tmp
     env_file:
-      - .env.example
+      - .env
     environment:
-      AUTH_DATABASE_URL: postgres://trippier:trippier@postgres:5432/trippier?sslmode=disable
+      AUTH_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
       AUTH_REDIS_URL: redis://redis:6379
-      AUTH_INTERNAL_SECRET: ${INTERNAL_SECRET:-change-me-internal-secret}
+      AUTH_INTERNAL_SECRET: ${INTERNAL_SECRET}
       AUTH_SMTP_HOST: mailhog
-      AUTH_APP_URL: http://localhost:3000
+      AUTH_APP_URL: ${APP_URL:-http://localhost:3000}
     depends_on:
       postgres:
         condition: service_healthy
@@ -65,11 +65,11 @@ services:
       - ./poi-api:/app
       - poi-api-tmp:/app/tmp
     env_file:
-      - .env.example
+      - .env
     environment:
       POI_REDIS_URL: redis://redis:6379
       POI_AUTH_API_URL: http://auth-api:8081
-      POI_INTERNAL_SECRET: ${INTERNAL_SECRET:-change-me-internal-secret}
+      POI_INTERNAL_SECRET: ${INTERNAL_SECRET}
       POI_LOG_LEVEL: debug
     depends_on:
       redis:
@@ -87,15 +87,34 @@ services:
     volumes:
       - ./itinerary-api:/app
     env_file:
-      - .env.example
+      - .env
     environment:
       POI_API_URL: http://poi-api:8080
       AUTH_API_URL: http://auth-api:8081
-      INTERNAL_SECRET: ${INTERNAL_SECRET:-change-me-internal-secret}
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - poi-api
       - auth-api
+
+  # ── docs — Fumadocs / Next.js dev server ────────────────────────────────────
+
+  docs:
+    image: oven/bun:1-alpine
+    working_dir: /app
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./docs:/app
+      - docs-modules:/app/node_modules
+    environment:
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      FRONTEND_POI_API_URL: http://poi-api:8080
+      FRONTEND_ITINERARY_API_URL: http://itinerary-api:8000
+    command: sh -c "bun install && bun run dev"
+    depends_on:
+      - poi-api
+      - itinerary-api
 
   # ── frontend — bun dev with Vite HMR ────────────────────────────────────────
 
@@ -104,14 +123,15 @@ services:
     working_dir: /app
     ports:
       - "3000:3000"
-      - "24678:24678"   # Vite HMR websocket
+      - "24678:24678"
     volumes:
       - ./frontend:/app
       - frontend-modules:/app/node_modules
     environment:
       AUTH_API_URL: http://auth-api:8081
-      POI_API_URL: http://poi-api:8080
-      ITINERARY_API_URL: http://itinerary-api:8000
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      FRONTEND_POI_API_URL: http://poi-api:8080
+      FRONTEND_ITINERARY_API_URL: http://itinerary-api:8000
     command: sh -c "bun install --frozen-lockfile && bunx svelte-kit sync && bun run dev --host"
     depends_on:
       - auth-api
@@ -121,3 +141,4 @@ volumes:
   auth-api-tmp:
   poi-api-tmp:
   frontend-modules:
+  docs-modules:

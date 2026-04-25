@@ -4,7 +4,7 @@
 */bin/
 */vendor/
 */*.out
-*/tmp/          # air hot-reload build artifacts
+*/tmp/
 
 # Python
 __pycache__/
@@ -21,8 +21,6 @@ node_modules/
 .next/
 .svelte-kit/
 build/
-# bun.lockb is binary — commit it so installs are reproducible
-# (do NOT add it here)
 
 # IDE
 .idea/

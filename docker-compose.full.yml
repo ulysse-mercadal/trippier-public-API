@@ -5,13 +5,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: trippier
-      POSTGRES_PASSWORD: trippier
-      POSTGRES_DB: trippier
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U trippier"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -31,8 +31,8 @@ services:
   mailhog:
     image: mailhog/mailhog:latest
     ports:
-      - "${MAILHOG_SMTP_PORT:-1025}:1025"   # SMTP
-      - "${MAILHOG_UI_PORT:-8025}:8025"      # Web UI
+      - "${MAILHOG_SMTP_PORT:-1025}:1025"
+      - "${MAILHOG_UI_PORT:-8025}:8025"
     restart: unless-stopped
 
   # ── Auth API (Go) ───────────────────────────────────────────────────────────
@@ -44,12 +44,12 @@ services:
     ports:
       - "${AUTH_API_PORT:-8081}:8081"
     env_file:
-      - .env.example
+      - .env
     environment:
-      AUTH_DATABASE_URL: postgres://trippier:trippier@postgres:5432/trippier?sslmode=disable
+      AUTH_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
       AUTH_REDIS_URL: redis://redis:6379
-      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-change-me-in-production-32-chars!!}
-      AUTH_INTERNAL_SECRET: ${INTERNAL_SECRET:-change-me-internal-secret}
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
+      AUTH_INTERNAL_SECRET: ${INTERNAL_SECRET}
       AUTH_SMTP_HOST: mailhog
       AUTH_SMTP_PORT: 1025
       AUTH_APP_URL: ${APP_URL:-http://localhost:3000}
@@ -69,11 +69,11 @@ services:
     ports:
       - "${POI_API_PORT:-8080}:8080"
     env_file:
-      - .env.example
+      - .env
     environment:
       POI_REDIS_URL: redis://redis:6379
       POI_AUTH_API_URL: http://auth-api:8081
-      POI_INTERNAL_SECRET: ${INTERNAL_SECRET:-change-me-internal-secret}
+      POI_INTERNAL_SECRET: ${INTERNAL_SECRET}
     depends_on:
       redis:
         condition: service_healthy
@@ -90,11 +90,11 @@ services:
     ports:
       - "${ITINERARY_API_PORT:-8000}:8000"
     env_file:
-      - .env.example
+      - .env
     environment:
       POI_API_URL: http://poi-api:8080
       AUTH_API_URL: http://auth-api:8081
-      INTERNAL_SECRET: ${INTERNAL_SECRET:-change-me-internal-secret}
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
     depends_on:
       - poi-api
       - auth-api
@@ -109,10 +109,10 @@ services:
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     environment:
-      # The frontend proxies /api/auth → auth-api via its server-side routes.
       AUTH_API_URL: http://auth-api:8081
-      POI_API_URL: http://poi-api:8080
-      ITINERARY_API_URL: http://itinerary-api:8000
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      FRONTEND_POI_API_URL: http://poi-api:8080
+      FRONTEND_ITINERARY_API_URL: http://itinerary-api:8000
     depends_on:
       - auth-api
       - poi-api
