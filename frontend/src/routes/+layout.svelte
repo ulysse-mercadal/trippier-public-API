@@ -5,6 +5,9 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
+	import { env } from '$env/dynamic/public';
+
+	const docsUrl = env.PUBLIC_DOCS_URL ?? 'http://localhost:5173';
 
 	$: isDashboard = $page.url.pathname.startsWith('/dashboard');
 
@@ -21,6 +24,7 @@
 		<a href="/" class="logo">tripp<em>ier</em></a>
 
 		<div class="nav-right">
+			<a href={docsUrl} class="btn btn-ghost btn-sm" target="_blank" rel="noopener noreferrer">Docs</a>
 			{#if $auth.user}
 				<span class="nav-email">{$auth.user.email}</span>
 				<button class="btn btn-ghost btn-sm" on:click={handleLogout}>Sign out</button>

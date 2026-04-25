@@ -106,7 +106,7 @@
 	<!-- Create section -->
 	<div class="section">
 		<h2>API Keys</h2>
-		<p class="section-hint">Each key gets <strong>1 000 tokens / hour</strong>. Use the key in the <code>X-API-Key</code> header.</p>
+		<p class="section-hint">Each account gets <strong>1 000 tokens / month</strong>, shared across all keys. Use the key in the <code>X-API-Key</code> header.</p>
 
 		<div class="create-row">
 			<input
@@ -201,9 +201,13 @@
 
 	/* Reveal banner */
 	.reveal-banner {
-		background: var(--accent-glow);
-		border: 1px solid rgba(16,185,129,0.3);
-		border-radius: var(--radius);
+		position: relative;
+		isolation: isolate;
+		background: rgba(10, 10, 10, 0.62);
+		backdrop-filter: blur(20px);
+		-webkit-backdrop-filter: blur(20px);
+		border: 1px solid rgba(16,185,129,0.25);
+		border-radius: 14px;
 		padding: 1rem 1.25rem;
 		display: flex;
 		flex-direction: column;
@@ -254,9 +258,13 @@
 	/* Key list */
 	.key-list { list-style: none; display: flex; flex-direction: column; gap: 0.75rem; }
 	.key-item {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
+		position: relative;
+		isolation: isolate;
+		background: rgba(10, 10, 10, 0.62);
+		backdrop-filter: blur(20px);
+		-webkit-backdrop-filter: blur(20px);
+		border: 1px solid rgba(255, 255, 255, 0.07);
+		border-radius: 14px;
 		padding: 1rem 1.25rem;
 		display: flex;
 		flex-direction: column;
@@ -292,9 +300,13 @@
 	.quickstart { display: flex; flex-direction: column; gap: 1rem; }
 	.quickstart h2 { font-size: 1.1rem; font-weight: 700; }
 	.code-block {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
+		position: relative;
+		isolation: isolate;
+		background: rgba(10, 10, 10, 0.62);
+		backdrop-filter: blur(20px);
+		-webkit-backdrop-filter: blur(20px);
+		border: 1px solid rgba(255, 255, 255, 0.07);
+		border-radius: 14px;
 		overflow: hidden;
 	}
 	.code-label {
