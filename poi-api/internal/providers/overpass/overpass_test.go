@@ -2,13 +2,27 @@ package overpass_test
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/trippier/poi-api/internal/providers/overpass"
 	"github.com/trippier/poi-api/pkg/types"
 )
+
+func newCtx() context.Context { return context.Background() }
+
+func newTestServerCapture(out *string, body string, status int) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		vals, _ := url.ParseQuery(string(b))
+		*out = vals.Get("data")
+		w.WriteHeader(status)
+		w.Write([]byte(body)) //nolint:errcheck
+	}))
+}
 
 const sampleOverpassResponse = `{
   "elements": [
