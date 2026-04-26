@@ -1,5 +1,3 @@
-// Package search orchestrates providers in parallel and returns merged, scored,
-// paginated POI results.
 package search
 
 import (
@@ -34,16 +32,23 @@ func NewService(pp []providers.Provider, timeout time.Duration, log *zap.Logger)
 	return &Service{providers: m, providerTimeout: timeout, log: log}
 }
 
+// Search runs the full POI pipeline for the given query and returns paginated, scored results.
 func (s *Service) Search(ctx context.Context, q types.SearchQuery) (*types.SearchResult, error) {
 	applyDefaults(&q, types.AllProviders)
-	merged := s.pipeline(ctx, q)
+	merged := s.pipeline(ctx, &q)
 	filtered := applyFilters(merged, q)
 	return paginate(filtered, q), nil
 }
 
+// SearchEvents runs the POI pipeline restricted to event providers and returns paginated results.
+// The radius is forced to a minimum of 50 km because Ticketmaster and Eventbrite return
+// few or no results at smaller radii.
 func (s *Service) SearchEvents(ctx context.Context, q types.SearchQuery) (*types.SearchResult, error) {
 	applyDefaults(&q, types.AllEventProviders)
-	merged := s.pipeline(ctx, q)
+	if q.Radius < 50_000 {
+		q.Radius = 50_000
+	}
+	merged := s.pipeline(ctx, &q)
 	return paginate(merged, q), nil
 }
 
@@ -62,7 +67,12 @@ func (s *Service) ProvidersStatus(ctx context.Context) []types.ProviderStatus {
 			start := time.Now()
 			tctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
-			_, err := p.Search(tctx, probe)
+			var err error
+			if pp, ok := p.(providers.Pingable); ok {
+				err = pp.Ping(tctx)
+			} else {
+				_, err = p.Search(tctx, probe)
+			}
 			st := types.ProviderStatus{Name: name, Available: err == nil, LatencyMs: time.Since(start).Milliseconds()}
 			if err != nil {
 				st.Error = err.Error()
@@ -77,10 +87,10 @@ func (s *Service) ProvidersStatus(ctx context.Context) []types.ProviderStatus {
 	return statuses
 }
 
-// pipeline runs providers, merges, scores, and sorts — shared by Search and SearchEvents.
-func (s *Service) pipeline(ctx context.Context, q types.SearchQuery) []types.EnrichedPoi {
-	// District mode has no lat/lng from the caller. Geocode the district name so
-	// that providers can apply geographic constraints and distances are meaningful.
+// pipeline fetches from all providers, geocodes district queries, deduplicates, scores, sorts.
+// q is passed as a pointer so that district geocoding is reflected in the caller's query
+// (and therefore in the SearchResult.Query returned to the client).
+func (s *Service) pipeline(ctx context.Context, q *types.SearchQuery) []types.EnrichedPoi {
 	if q.Mode == types.ModeDistrict {
 		if place, err := geo.GeocodeDistrict(ctx, q.District); err == nil {
 			q.Lat = place.Lat
@@ -90,19 +100,20 @@ func (s *Service) pipeline(ctx context.Context, q types.SearchQuery) []types.Enr
 		}
 	}
 
-	raw := s.fetchAll(ctx, q)
+	raw := s.fetchAll(ctx, *q)
 	raw = geo.SetDistances(raw, q.Lat, q.Lng)
 	if q.Mode == types.ModeRadius {
 		raw = geo.FilterByRadius(raw, q.Lat, q.Lng, float64(q.Radius))
 	}
 	merged := dedup.Merge(raw)
 	for i := range merged {
-		merged[i].Score = scoring.Score(merged[i], q)
+		merged[i].Score = scoring.Score(merged[i], *q)
 	}
 	sort.Slice(merged, func(i, j int) bool { return merged[i].Score > merged[j].Score })
 	return merged
 }
 
+// fetchAll fans out the search query to all selected providers concurrently and collects raw results.
 func (s *Service) fetchAll(ctx context.Context, q types.SearchQuery) []types.RawPoi {
 	selected := s.selectProviders(q)
 	results := make([][]types.RawPoi, len(selected))
@@ -131,6 +142,7 @@ func (s *Service) fetchAll(ctx context.Context, q types.SearchQuery) []types.Raw
 	return all
 }
 
+// selectProviders filters the registered providers to those listed in q.Providers that support q.Mode.
 func (s *Service) selectProviders(q types.SearchQuery) []providers.Provider {
 	var out []providers.Provider
 	for _, name := range q.Providers {
@@ -141,6 +153,7 @@ func (s *Service) selectProviders(q types.SearchQuery) []providers.Provider {
 	return out
 }
 
+// applyDefaults fills in zero-value fields of q with sensible defaults before the pipeline runs.
 func applyDefaults(q *types.SearchQuery, defaultProviders []types.Provider) {
 	if q.Mode == "" {
 		q.Mode = types.ModeRadius
@@ -159,6 +172,7 @@ func applyDefaults(q *types.SearchQuery, defaultProviders []types.Provider) {
 	}
 }
 
+// applyFilters removes POIs that do not match the requested types or fall below the minimum score.
 func applyFilters(pois []types.EnrichedPoi, q types.SearchQuery) []types.EnrichedPoi {
 	allowed := make(map[types.PoiType]bool, len(q.Types))
 	for _, t := range q.Types {
@@ -176,6 +190,7 @@ func applyFilters(pois []types.EnrichedPoi, q types.SearchQuery) []types.Enriche
 	return out
 }
 
+// paginate slices the scored list according to q.Offset and q.Limit and wraps it in a SearchResult.
 func paginate(pois []types.EnrichedPoi, q types.SearchQuery) *types.SearchResult {
 	total := len(pois)
 	start := min(q.Offset, total)

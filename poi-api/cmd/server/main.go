@@ -19,8 +19,10 @@ import (
 	"github.com/trippier/poi-api/internal/config"
 	"github.com/trippier/poi-api/internal/middleware"
 	"github.com/trippier/poi-api/internal/providers"
+	"github.com/trippier/poi-api/internal/providers/eventbrite"
 	"github.com/trippier/poi-api/internal/providers/geonames"
 	"github.com/trippier/poi-api/internal/providers/overpass"
+	"github.com/trippier/poi-api/internal/providers/ticketmaster"
 	"github.com/trippier/poi-api/internal/providers/wikipedia"
 	"github.com/trippier/poi-api/internal/providers/wikivoyage"
 	"github.com/trippier/poi-api/internal/search"
@@ -40,6 +42,7 @@ func main() {
 		log.Info("POI_GEONAMES_USERNAME not set — geonames provider will be disabled")
 	}
 
+
 	rdb, err := buildRedis(cfg.RedisURL)
 	if err != nil {
 		log.Fatal("redis url", zap.Error(err))
@@ -57,17 +60,21 @@ func main() {
 		middleware.SecureHeaders(),
 		middleware.RequestID(),
 		middleware.Logger(log),
-		middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 1, "/health"),
+		middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 1, "/health", "/pois/events", "/pois/events/slim"),
 	)
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	pois := r.Group("/pois")
 	cacheTTL := time.Duration(cfg.CacheTTLSeconds) * time.Second
+	pois := r.Group("/pois")
 	pois.Use(middleware.Cache(rdb, cacheTTL))
 	handler.RegisterRoutes(pois)
+
+	events := pois.Group("/events")
+	events.Use(middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 10))
+	handler.RegisterEventRoutes(events)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.Port),
@@ -77,7 +84,6 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start server in a goroutine so the shutdown listener is non-blocking.
 	go func() {
 		log.Info("poi-api starting", zap.String("addr", srv.Addr))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -85,7 +91,6 @@ func main() {
 		}
 	}()
 
-	// Graceful shutdown on SIGINT / SIGTERM.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -99,6 +104,8 @@ func main() {
 	log.Info("server stopped")
 }
 
+// buildProviders constructs the list of active POI and event providers based on config.
+// GeoNames, Ticketmaster, and Eventbrite are only added when their credentials are configured.
 func buildProviders(cfg *config.Config) []providers.Provider {
 	pp := []providers.Provider{
 		overpass.New(),
@@ -109,9 +116,16 @@ func buildProviders(cfg *config.Config) []providers.Provider {
 	if cfg.GeoNamesUsername != "" {
 		pp = append(pp, geonames.New(cfg.GeoNamesUsername))
 	}
+	if cfg.TicketmasterAPIKey != "" {
+		pp = append(pp, ticketmaster.New(cfg.TicketmasterAPIKey))
+	}
+	if cfg.EventbriteToken != "" {
+		pp = append(pp, eventbrite.New(cfg.EventbriteToken))
+	}
 	return pp
 }
 
+// buildLogger returns a production zap logger, or a development logger when level is "debug".
 func buildLogger(level string) *zap.Logger {
 	var cfg zap.Config
 	if level == "debug" {
@@ -126,6 +140,7 @@ func buildLogger(level string) *zap.Logger {
 	return log
 }
 
+// buildRedis parses a Redis URL and returns a connected client.
 func buildRedis(redisURL string) (*redis.Client, error) {
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {

@@ -14,10 +14,12 @@ const (
 )
 
 var providerPriority = map[types.Provider]int{
-	types.ProviderOverpass:   4,
-	types.ProviderWikivoyage: 3,
-	types.ProviderWikipedia:  2,
-	types.ProviderGeoNames:   1,
+	types.ProviderOverpass:        4,
+	types.ProviderWikivoyage:      3,
+	types.ProviderWikipedia:       2,
+	types.ProviderGeoNames:        1,
+	types.ProviderTicketmaster:    3,
+	types.ProviderEventbrite:      3,
 }
 
 // Merge groups raw POIs from all providers into deduplicated EnrichedPoi records.
@@ -30,6 +32,7 @@ func Merge(pois []types.RawPoi) []types.EnrichedPoi {
 	return result
 }
 
+// group clusters raw POIs into duplicate groups using a greedy pairwise match.
 func group(pois []types.RawPoi) [][]types.RawPoi {
 	used := make([]bool, len(pois))
 	groups := make([][]types.RawPoi, 0, len(pois))
@@ -44,8 +47,6 @@ func group(pois []types.RawPoi) [][]types.RawPoi {
 			if used[j] {
 				continue
 			}
-			// Only precise-coord members act as anchors; approximate-coord entries
-			// (zone-level Wikivoyage) cannot bridge two distant POIs transitively.
 			for _, member := range g {
 				if member.Coords == nil || member.Coords.Approximate {
 					continue
@@ -62,6 +63,9 @@ func group(pois []types.RawPoi) [][]types.RawPoi {
 	return groups
 }
 
+// areDuplicates returns true when two POIs refer to the same place or event.
+// For events (those with a DateStart), two POIs are only duplicates when they
+// also share the same start date — different dates mean different occurrences.
 func areDuplicates(a, b types.RawPoi) bool {
 	if a.WikidataID != "" && a.WikidataID == b.WikidataID {
 		return true
@@ -71,6 +75,15 @@ func areDuplicates(a, b types.RawPoi) bool {
 	}
 	if mathutil.Haversine(a.Coords.Lat, a.Coords.Lng, b.Coords.Lat, b.Coords.Lng) >= proximityThresholdMeters {
 		return false
+	}
+
+	// Events at the same venue are only duplicates if they start on the same day.
+	if a.DateStart != nil && b.DateStart != nil {
+		ay, am, ad := a.DateStart.Date()
+		by, bm, bd := b.DateStart.Date()
+		if ay != by || am != bm || ad != bd {
+			return false
+		}
 	}
 
 	an, bn := normalizeName(a.Name), normalizeName(b.Name)
@@ -117,10 +130,12 @@ var diacriticReplacer = strings.NewReplacer(
 	"-", " ",
 )
 
+// normalizeName lowercases, trims, and replaces diacritics and hyphens for comparison.
 func normalizeName(s string) string {
 	return diacriticReplacer.Replace(strings.ToLower(strings.TrimSpace(s)))
 }
 
+// toEnriched builds an EnrichedPoi from a group by picking the highest-priority provider as primary.
 func toEnriched(group []types.RawPoi) types.EnrichedPoi {
 	primary := primaryPoi(group)
 	sources := make([]types.Provider, 0, len(group))
@@ -147,9 +162,13 @@ func toEnriched(group []types.RawPoi) types.EnrichedPoi {
 		Contact:       mergeContact(group),
 		Sources:       sources,
 		ProvidersData: data,
+		DateStart:     primary.DateStart,
+		DateEnd:       primary.DateEnd,
+		Recurring:     primary.Recurring,
 	}
 }
 
+// primaryPoi returns the group member from the highest-priority provider.
 func primaryPoi(group []types.RawPoi) types.RawPoi {
 	best := group[0]
 	for _, p := range group[1:] {
@@ -160,6 +179,7 @@ func primaryPoi(group []types.RawPoi) types.RawPoi {
 	return best
 }
 
+// bestCoords returns the coordinates from the highest-priority provider that has them.
 func bestCoords(group []types.RawPoi) *types.Coordinates {
 	var best *types.Coordinates
 	bestPrio := -1
@@ -172,6 +192,7 @@ func bestCoords(group []types.RawPoi) *types.Coordinates {
 	return best
 }
 
+// mergeContact fills each Contact field with the first non-empty value across the group.
 func mergeContact(group []types.RawPoi) types.Contact {
 	var c types.Contact
 	for _, p := range group {
@@ -191,6 +212,7 @@ func mergeContact(group []types.RawPoi) types.Contact {
 	return c
 }
 
+// firstNonEmpty returns the first non-empty string extracted from the group by fn.
 func firstNonEmpty(group []types.RawPoi, fn func(types.RawPoi) string) string {
 	for _, p := range group {
 		if v := fn(p); v != "" {

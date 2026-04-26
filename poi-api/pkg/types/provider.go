@@ -9,6 +9,8 @@ const (
 	ProviderGeoNames        Provider = "geonames"
 	ProviderWikipedia       Provider = "wikipedia"
 	ProviderWikipediaEvents Provider = "wikipedia_events"
+	ProviderTicketmaster    Provider = "ticketmaster"
+	ProviderEventbrite      Provider = "eventbrite"
 )
 
 // AllProviders is the default set used when no providers are specified on a places search.
@@ -22,8 +24,11 @@ var AllProviders = []Provider{
 }
 
 // AllEventProviders is the default set used when no providers are specified on an events search.
+// Includes live event providers (Ticketmaster, Eventbrite) alongside Wikipedia festivals.
 var AllEventProviders = []Provider{
 	ProviderWikipediaEvents,
+	ProviderTicketmaster,
+	ProviderEventbrite,
 }
 
 // ProviderStatus is returned by GET /pois/providers.
