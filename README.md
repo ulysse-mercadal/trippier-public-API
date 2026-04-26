@@ -1,6 +1,6 @@
 # trippier — travel API platform
 
-Self-hosted backend that exposes a POI search API and an itinerary generator behind API-key auth. Sign up, verify your email, grab your key, start querying.
+Self-hosted backend that exposes a POI search API and an itinerary generator. Run the full stack with auth and rate limiting, or drop into standalone mode and query without any account.
 
 ---
 
@@ -11,7 +11,7 @@ Four services behind a single Docker Compose stack:
 | Service | Language | Role |
 |---|---|---|
 | `auth-api` | Go 1.23 · Gin | Registration, email verification, JWT login, API key management |
-| `poi-api` | Go 1.23 · Gin | Point-of-interest search — OpenStreetMap, Wikipedia, Wikivoyage, GeoNames |
+| `poi-api` | Go 1.23 · Gin | Point-of-interest search — OpenStreetMap, Wikipedia, Wikivoyage, GeoNames, Ticketmaster, Eventbrite |
 | `itinerary-api` | Python 3.12 · FastAPI | Day-by-day itinerary generation from a POI list |
 | `frontend` | SvelteKit · Bun | Landing page + auth + dashboard |
 
@@ -20,6 +20,21 @@ Supporting infra: PostgreSQL 16, Redis 7, MailHog (SMTP in dev).
 ---
 
 ## Quick start
+
+### Standalone (no auth, no rate limiting)
+
+The fastest way to run the API. No account, no keys — just the Docker images straight from GHCR:
+
+```bash
+docker compose -f docker-compose.standalone.yml up
+```
+
+- `http://localhost:8080` — poi-api
+- `http://localhost:8000` — itinerary-api
+
+The standalone stack sets `POI_AUTH_DISABLED=true`, so all endpoints are open. Ticketmaster and Eventbrite use BYOK (see below) — no server-side keys needed.
+
+### Full dev stack
 
 ```bash
 cp .env.example .env
@@ -43,7 +58,7 @@ make dev-stop     # tears down the stack and removes volumes
 
 ## API
 
-All API calls require `Authorization: Bearer <api-key>` except the health endpoints.
+All API calls require `Authorization: Bearer <api-key>` except health endpoints and standalone mode.
 
 ### POI search
 
@@ -51,9 +66,27 @@ All API calls require `Authorization: Bearer <api-key>` except the health endpoi
 GET /pois/search?lat=45.83&lng=6.87&radius=5000
 ```
 
-Aggregates geo-enriched POIs from multiple sources, deduplicates them, scores by relevance [0–100]. Supports radius, polygon, and district search modes. Results are Redis-cached.
+Aggregates geo-enriched POIs from multiple sources, deduplicates, scores by relevance [0–100]. Supports radius, polygon, and district modes. Results are Redis-cached.
 
 **Cost:** 1 token per request.
+
+### Events
+
+```
+GET /pois/events?lat=48.85&lng=2.35&radius=50000
+```
+
+Returns cultural events and festivals. Always includes Wikipedia/Wikidata (recurring festivals). Optionally activates Ticketmaster and Eventbrite via BYOK headers — the server never stores those keys:
+
+```bash
+curl http://localhost:8080/pois/events \
+  -H "X-Ticketmaster-Key: YOUR_TM_KEY" \
+  -H "X-Eventbrite-Token: YOUR_EB_TOKEN" \
+  -G -d lat=40.71 -d lng=-74.00 -d radius=50000
+```
+
+**Minimum radius:** 50 km (enforced server-side — paid event APIs return few results at smaller radii).  
+**Cost:** 10 tokens per request.
 
 ### Itinerary generation
 
@@ -94,13 +127,28 @@ Every account starts with **1 000 tokens per month**, shared across all API keys
 | Endpoint | Cost |
 |---|---|
 | `GET /pois/search` | 1 token |
+| `GET /pois/events` | 10 tokens |
+| `GET /pois/events/slim` | 10 tokens |
 | `POST /itinerary/generate` | 50 tokens |
+
+---
+
+## BYOK — Ticketmaster & Eventbrite
+
+The POI API stores **zero** third-party API keys. Ticketmaster and Eventbrite are always registered as providers but only activate when the caller passes their own key in the request headers:
+
+| Header | Provider |
+|---|---|
+| `X-Ticketmaster-Key` | Ticketmaster Discovery API |
+| `X-Eventbrite-Token` | Eventbrite private token |
+
+The cache key encodes *which* BYOK providers are active (not their values), so two users with different keys for the same location share the same cache slot — all paid event APIs return the same public event listings regardless of which dev key is used.
 
 ---
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in the values you actually need to change. The dev compose file uses `.env.example` directly so you can run `make dev` without touching anything.
+Copy `.env.example` to `.env` and fill in the values you actually need. The dev compose file uses `.env.example` directly so you can run `make dev` without touching anything.
 
 Required for a production deployment:
 
@@ -116,7 +164,10 @@ INTERNAL_SECRET=<shared secret between services>
 Optional:
 ```
 POI_GEONAMES_USERNAME=   # free account at geonames.org, enables GeoNames source
+POI_AUTH_DISABLED=true   # disables auth-api dependency — open access, no rate limiting
 ```
+
+Ticketmaster and Eventbrite require **no server configuration** — keys come from callers via request headers.
 
 ---
 
@@ -150,28 +201,38 @@ auth-api/           Go — auth, API key management, email
     ratelimit/      Redis token-bucket
 
 poi-api/            Go — POI aggregation + caching
+  internal/
+    byok/           context keys for per-request BYOK credentials
+    dedup/          duplicate merging (Wikidata ID + proximity + Jaro-Winkler)
+    providers/      overpass · wikivoyage · wikipedia · geonames · ticketmaster · eventbrite
+    scoring/        multi-signal relevance scoring
+    search/         fan-out pipeline, HTTP handlers
+  pkg/types/        shared domain types
+
 itinerary-api/      Python — itinerary logic (FastAPI)
 frontend/           SvelteKit app
 
-docker-compose.dev.yml    hot-reload dev stack
-docker-compose.full.yml   production-like stack
-Makefile                  dev / test / lint / push targets
+docker-compose.dev.yml        hot-reload dev stack
+docker-compose.full.yml       production-like stack
+docker-compose.standalone.yml poi-api + itinerary-api, no auth, pulls from GHCR
+Makefile                      dev / test / lint / push targets
 ```
 
 ---
 
 ## Docker Compose files
 
-There are two Compose files depending on what you need:
+| File | Purpose |
+|---|---|
+| `docker-compose.dev.yml` | Local development — source-mounted volumes, hot reload, MailHog |
+| `docker-compose.full.yml` | Production-like — no hot reload, Postgres/Redis on internal network only |
+| `docker-compose.standalone.yml` | Zero-config standalone — pulls GHCR images, no auth, no Postgres |
 
-- **`docker-compose.dev.yml`** — for local development. All services mount source code as volumes and reload on file changes (air, uvicorn --reload, Vite HMR). MailHog catches all outbound email.
-- **`docker-compose.full.yml`** — production-like. No hot reload, no MailHog, Postgres and Redis exposed only on the internal Docker network. Use this for staging or to smoke-test the final images before deploying.
-
-`make dev` and `make dev-stop` both target `docker-compose.dev.yml`. For the full stack, run Compose directly:
+`make dev` and `make dev-stop` both target `docker-compose.dev.yml`. For other stacks:
 
 ```bash
 docker compose -f docker-compose.full.yml up -d
-docker compose -f docker-compose.full.yml down -v
+docker compose -f docker-compose.standalone.yml up
 ```
 
 ---

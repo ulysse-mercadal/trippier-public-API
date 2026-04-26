@@ -3,6 +3,8 @@ title: GET /pois/providers
 description: Lists all data providers registered on this instance with availability status and latency.
 ---
 
+import { Callout } from 'fumadocs-ui/components/callout';
+
 <div className="endpoint-head">
   <span className="method-badge method-get">GET</span>
   <code>/pois/providers</code>
@@ -11,7 +13,9 @@ description: Lists all data providers registered on this instance with availabil
 
 Lists all data providers registered on this instance and probes each one for availability and latency. No authentication required.
 
-Each provider is queried with a lightweight test search (`radius=500`, `limit=1` around Paris) and the result is returned synchronously. Use this endpoint for health dashboards and load-balancer readiness checks.
+<Callout type="info">
+  **Ticketmaster** and **Eventbrite** always appear as available — they use BYOK (Bring Your Own Key) and require no server-side credentials. Their probe returns immediately without making an external HTTP call.
+</Callout>
 
 ---
 
@@ -19,27 +23,13 @@ Each provider is queried with a lightweight test search (`radius=500`, `limit=1`
 
 ```json
 [
-  {
-    "name":       "overpass",
-    "available":  true,
-    "latency_ms": 145
-  },
-  {
-    "name":       "wikivoyage",
-    "available":  true,
-    "latency_ms": 312
-  },
-  {
-    "name":       "geonames",
-    "available":  true,
-    "latency_ms": 89
-  },
-  {
-    "name":       "wikipedia",
-    "available":  false,
-    "latency_ms": 5001,
-    "error":      "context deadline exceeded"
-  }
+  { "name": "overpass",           "available": true,  "latency_ms": 145 },
+  { "name": "wikivoyage",         "available": true,  "latency_ms": 312 },
+  { "name": "wikipedia",          "available": true,  "latency_ms": 203 },
+  { "name": "wikipedia_events",   "available": true,  "latency_ms": 890 },
+  { "name": "geonames",           "available": true,  "latency_ms": 89  },
+  { "name": "ticketmaster",       "available": true,  "latency_ms": 0   },
+  { "name": "eventbrite",         "available": true,  "latency_ms": 0   }
 ]
 ```
 
@@ -47,10 +37,22 @@ Each provider is queried with a lightweight test search (`radius=500`, `limit=1`
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Provider identifier — `overpass`, `wikivoyage`, `geonames`, `wikipedia`, `wikipedia_events` |
-| `available` | bool | `true` if the last probe returned without error |
-| `latency_ms` | int | Round-trip time of the probe in milliseconds |
+| `name` | string | Provider identifier |
+| `available` | bool | `true` if the probe returned without error |
+| `latency_ms` | int | Round-trip time in milliseconds (`0` for BYOK providers) |
 | `error` | string | Error message when `available` is `false` |
+
+### Provider identifiers
+
+| Name | Source | Notes |
+|---|---|---|
+| `overpass` | OpenStreetMap / Overpass API | Always active |
+| `wikivoyage` | Wikivoyage MediaWiki API | Always active |
+| `wikipedia` | Wikipedia geosearch | Always active |
+| `wikipedia_events` | Wikipedia + Wikidata SPARQL | Always active — festivals only |
+| `geonames` | GeoNames API | Active only when `POI_GEONAMES_USERNAME` is set |
+| `ticketmaster` | Ticketmaster Discovery API v2 | BYOK — supply `X-Ticketmaster-Key` per request |
+| `eventbrite` | Eventbrite API v3 | BYOK — supply `X-Eventbrite-Token` per request |
 
 ---
 

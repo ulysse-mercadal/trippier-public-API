@@ -9,7 +9,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 <Cards>
   <Card
     title="POI API"
-    description="Search points of interest from OpenStreetMap, Wikivoyage, GeoNames and Wikipedia. Returns enriched, deduplicated, scored results."
+    description="Search points of interest from OpenStreetMap, Wikivoyage, GeoNames, Wikipedia, Ticketmaster and Eventbrite. Returns enriched, deduplicated, scored results."
     href="/docs/api/poi-search"
   />
   <Card
@@ -61,6 +61,33 @@ Retry-After: 86400
 
 Successful requests include `X-RateLimit-Limit` and `X-RateLimit-Remaining` response headers.
 
+| Endpoint | Cost |
+|---|---|
+| `GET /pois/search` | 1 token |
+| `GET /pois/search/slim` | 1 token |
+| `GET /pois/events` | 10 tokens |
+| `GET /pois/events/slim` | 10 tokens |
+| `POST /itinerary/generate` | 50 tokens |
+
+---
+
+## BYOK — Ticketmaster & Eventbrite
+
+The server stores **zero** third-party API keys. Ticketmaster and Eventbrite activate only when you pass your own key in the request headers. The key is used for a single HTTP round-trip and never logged, cached, or stored.
+
+| Header | Provider |
+|---|---|
+| `X-Ticketmaster-Key` | Ticketmaster Discovery API v2 |
+| `X-Eventbrite-Token` | Eventbrite private token |
+
+```bash
+curl http://localhost:8080/pois/events \
+  -H "X-API-Key: trp_your_key_here" \
+  -H "X-Ticketmaster-Key: YOUR_TM_KEY" \
+  -H "X-Eventbrite-Token: YOUR_EB_TOKEN" \
+  -G -d lat=48.8566 -d lng=2.3522 -d radius=50000
+```
+
 ---
 
 ## POI types
@@ -74,7 +101,7 @@ Successful requests include `X-RateLimit-Limit` and `X-RateLimit-Remaining` resp
 | `buy` | Shops, markets |
 | `sleep` | Hotels, hostels, campsites |
 | `generic` | Uncategorised geographic features |
-| `event` | Cultural festivals and recurring events |
+| `event` | Cultural festivals, recurring events, and ticketed live events |
 
 ---
 

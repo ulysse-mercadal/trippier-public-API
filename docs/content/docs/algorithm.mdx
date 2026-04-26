@@ -71,6 +71,22 @@ The POI API does not rely on a single data source. It fans out queries across mu
       <span className="mode-pill">district</span>
     </div>
   </div>
+  <div className="provider-card">
+    <div className="provider-name">Ticketmaster</div>
+    <div className="step-desc">Ticketmaster Discovery API v2. BYOK — activated by passing <code>X-Ticketmaster-Key</code> in the request. Returns concerts, sports, and theatre within a 50–100 km radius.</div>
+    <div className="provider-modes">
+      <span className="mode-pill">radius</span>
+      <span className="mode-pill">district</span>
+    </div>
+  </div>
+  <div className="provider-card">
+    <div className="provider-name">Eventbrite</div>
+    <div className="step-desc">Eventbrite API v3. BYOK — activated by passing <code>X-Eventbrite-Token</code> in the request. Returns community events, classes, and conferences.</div>
+    <div className="provider-modes">
+      <span className="mode-pill">radius</span>
+      <span className="mode-pill">district</span>
+    </div>
+  </div>
 </div>
 
 ### Overpass key design
@@ -104,6 +120,8 @@ For POIs with **precise coordinates** on both sides:
 
 The 150 m threshold covers large landmarks whose entrance and centroid are reported at different offsets by different providers.
 
+**Event deduplication guard:** two events at the same venue (within 150 m, similar name) are only merged if they also share the same calendar date. Different dates mean different occurrences — a Monday concert and a Tuesday concert at the same arena are never collapsed into one result.
+
 <Callout type="warn">
   Wikivoyage zone-level entries have `Approximate: true`. They are **never** used as a geographic anchor. Name similarity alone at scale causes false positives (short names, shared type prefixes). Approximate-coord POIs can only be merged via Wikidata ID.
 </Callout>
@@ -128,7 +146,7 @@ cathedrale notre dame de paris
 | `contact` | Fields merged individually: first non-empty `website`, `phone`, `hours`, `email` |
 | `sources` | Array of all contributing providers |
 
-**Provider priority (highest first):** Overpass → Wikivoyage → Wikipedia → GeoNames
+**Provider priority (highest first):** Overpass → Wikivoyage / Ticketmaster / Eventbrite → Wikipedia → GeoNames
 
 ---
 

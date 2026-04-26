@@ -44,8 +44,14 @@ CI runs lint and tests on every push and PR (see `.github/workflows/ci.yml`). A 
 
 1. Implement `providers.Provider` in `poi-api/internal/providers/<name>/`.
 2. Wire it up in `poi-api/cmd/server/main.go` → `buildProviders()`.
-3. Add the provider constant to `types.AllProviders` in `poi-api/pkg/types/`.
+3. Add the provider constant to `types.AllProviders` (or `types.AllEventProviders`) in `poi-api/pkg/types/`.
 4. Write at least one unit test using the `mockProvider` pattern in `search/service_test.go`.
+
+If the provider requires a per-user API key (BYOK pattern):
+- Define a context key in `poi-api/internal/byok/keys.go`.
+- Read the key from `ctx` at the top of `Search()` and return `nil, nil` when absent.
+- Extract the corresponding request header in `search/handler.go` → `byokContext()` and inject it via `context.WithValue`.
+- Do **not** add the key to `config.Config` — the server stores nothing.
 
 ## Opening a PR
 
