@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { statusClass } from '@/lib/status';
 
 export interface TryField {
   key: string;
@@ -21,12 +22,6 @@ interface TryBaseProps {
   fetchPath: (vals: Record<string, string>) => string;
   bodyMethod?: boolean;
   children?: ReactNode;
-}
-
-function statusClass(s: number) {
-  if (s >= 200 && s < 300) return 'ok';
-  if (s >= 400) return 'err';
-  return '';
 }
 
 export function TryBase({

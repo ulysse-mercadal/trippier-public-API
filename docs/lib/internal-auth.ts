@@ -15,8 +15,11 @@ function loadEnv(): Record<string, string> {
 
 const _env = loadEnv();
 
-export const INTERNAL_SECRET =
-  process.env.INTERNAL_SECRET ?? _env.INTERNAL_SECRET ?? 'change-me-internal-secret';
+const _secret = process.env.INTERNAL_SECRET ?? _env.INTERNAL_SECRET;
+if (!_secret) {
+  throw new Error('INTERNAL_SECRET is not set — refusing to start without a configured secret');
+}
+export const INTERNAL_SECRET: string = _secret;
 
 export const POI_URL =
   process.env.FRONTEND_POI_API_URL ?? _env.FRONTEND_POI_API_URL ?? 'http://localhost:8080';

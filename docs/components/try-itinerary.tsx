@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { statusClass } from '@/lib/status';
 
 const defaultBody = JSON.stringify(
   {
@@ -17,12 +18,6 @@ const defaultBody = JSON.stringify(
   null,
   2
 );
-
-function statusClass(s: number) {
-  if (s >= 200 && s < 300) return 'ok';
-  if (s >= 400) return 'err';
-  return '';
-}
 
 export function TryItinerary() {
   const [body, setBody] = useState(defaultBody);

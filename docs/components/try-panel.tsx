@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { statusClass } from '@/lib/status';
 
 interface TryPanelProps {
   method?: 'GET' | 'POST';
@@ -10,12 +11,6 @@ interface TryPanelProps {
   bodyMethod?: boolean;
   buildBody?: () => string;
   children?: ReactNode;
-}
-
-function statusClass(s: number) {
-  if (s >= 200 && s < 300) return 'ok';
-  if (s >= 400) return 'err';
-  return '';
 }
 
 export function TryPanel({

@@ -5,6 +5,7 @@ export async function GET(req: NextRequest) {
   const qs = req.nextUrl.searchParams.toString();
   try {
     const res = await fetch(`${POI_URL}/pois/search?${qs}`, {
+      signal: AbortSignal.timeout(30_000),
       headers: { 'X-Internal-Auth': internalAuth() },
     });
     const body = await res.text();

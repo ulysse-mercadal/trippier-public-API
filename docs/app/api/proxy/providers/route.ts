@@ -4,6 +4,7 @@ import { internalAuth, POI_URL } from '@/lib/internal-auth';
 export async function GET() {
   try {
     const res = await fetch(`${POI_URL}/pois/providers`, {
+      signal: AbortSignal.timeout(30_000),
       headers: { 'X-Internal-Auth': internalAuth() },
     });
     const body = await res.text();

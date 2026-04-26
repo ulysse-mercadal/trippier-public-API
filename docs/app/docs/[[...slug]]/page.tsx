@@ -13,6 +13,7 @@ import type { Metadata } from 'next';
 import { TryPois } from '@/components/try-pois';
 import { TryPoisSlim } from '@/components/try-pois-slim';
 import { TryEvents } from '@/components/try-events';
+import { TryEventsSlim } from '@/components/try-events-slim';
 import { TryProviders } from '@/components/try-providers';
 import { TryItinerary } from '@/components/try-itinerary';
 
@@ -20,6 +21,7 @@ const customComponents = {
   TryPois,
   TryPoisSlim,
   TryEvents,
+  TryEventsSlim,
   TryProviders,
   TryItinerary,
 };
