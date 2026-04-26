@@ -13,6 +13,7 @@ import (
 	rl "github.com/trippier/auth-api/internal/ratelimit"
 )
 
+// sha256Hex returns the SHA-256 hash of s as a lowercase hex string.
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
@@ -39,6 +40,7 @@ func (h *Handler) RegisterRoutes(keys gin.IRouter, internal gin.IRouter, jwtAuth
 	internal.POST("/check-rate-limit", h.checkRateLimit)
 }
 
+// create handles POST /keys: generates a new named API key and returns its plaintext value once.
 func (h *Handler) create(c *gin.Context) {
 	var body struct {
 		Name string `json:"name" binding:"required"`
@@ -61,6 +63,7 @@ func (h *Handler) create(c *gin.Context) {
 	})
 }
 
+// list handles GET /keys: returns all active API keys for the authenticated user with current usage data.
 func (h *Handler) list(c *gin.Context) {
 	userID := c.GetString(mw.UserIDKey)
 	keys, err := h.svc.List(c.Request.Context(), userID)
@@ -74,6 +77,7 @@ func (h *Handler) list(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"keys": keys})
 }
 
+// revoke handles DELETE /keys/:id: marks the key as revoked so it can no longer be used.
 func (h *Handler) revoke(c *gin.Context) {
 	userID := c.GetString(mw.UserIDKey)
 	keyID := c.Param("id")
@@ -90,6 +94,7 @@ func (h *Handler) revoke(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "key revoked"})
 }
 
+// checkRateLimit handles POST /internal/check-rate-limit: validates an API key and deducts tokens from the user-level bucket.
 func (h *Handler) checkRateLimit(c *gin.Context) {
 	var body struct {
 		APIKey string `json:"api_key" binding:"required"`
@@ -110,7 +115,6 @@ func (h *Handler) checkRateLimit(c *gin.Context) {
 		return
 	}
 
-	// All deductions go against the user-level bucket, shared across all keys.
 	remaining, ttlSecs, notFound, insufficient, err := rl.Deduct(
 		c.Request.Context(), h.svc.rdb, info.UserID, body.Cost,
 	)

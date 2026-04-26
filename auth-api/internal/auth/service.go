@@ -4,7 +4,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
-	"encoding/hex"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"strings"
@@ -20,10 +20,11 @@ import (
 
 var (
 	ErrEmailTaken     = errors.New("email already registered")
+	ErrWeakPassword   = errors.New("password must be at least 8 characters")
 	ErrNotFound       = errors.New("user not found")
 	ErrBadCredentials = errors.New("invalid email or password")
 	ErrNotVerified    = errors.New("email not verified")
-	ErrBadToken       = errors.New("invalid or expired verification token")
+	ErrBadToken       = errors.New("invalid or expired verification code")
 )
 
 // Service handles user auth operations.
@@ -39,10 +40,10 @@ func New(db *pgxpool.Pool, emailer *email.Sender, jwtSecret, appURL string) *Ser
 	return &Service{db: db, emailer: emailer, jwtSecret: jwtSecret, appURL: appURL}
 }
 
-// Register creates an unverified account and sends a verification email.
+// Register creates an unverified account and sends a 6-digit OTP code by email.
 func (s *Service) Register(ctx context.Context, emailAddr, password string) error {
 	if len(password) < 8 {
-		return errors.New("password must be at least 8 characters")
+		return ErrWeakPassword
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -50,15 +51,15 @@ func (s *Service) Register(ctx context.Context, emailAddr, password string) erro
 		return fmt.Errorf("bcrypt: %w", err)
 	}
 
-	token, err := randomHex(32)
+	code, err := randomCode()
 	if err != nil {
 		return err
 	}
 
 	_, err = s.db.Exec(ctx,
 		`INSERT INTO users (email, password_hash, verification_token, verification_token_expires_at)
-		 VALUES ($1, $2, $3, NOW() + INTERVAL '24 hours')`,
-		strings.ToLower(emailAddr), string(hash), token,
+		 VALUES ($1, $2, $3, NOW() + INTERVAL '15 minutes')`,
+		strings.ToLower(emailAddr), string(hash), code,
 	)
 	if err != nil {
 		if isDuplicateKey(err) {
@@ -67,31 +68,38 @@ func (s *Service) Register(ctx context.Context, emailAddr, password string) erro
 		return fmt.Errorf("insert user: %w", err)
 	}
 
-	verifyURL := fmt.Sprintf("%s/api/auth/verify-email?token=%s", s.appURL, token)
-	if err := s.emailer.SendVerification(emailAddr, verifyURL); err != nil {
-		return fmt.Errorf("send verification email: %w", err)
+	if err := s.emailer.SendOTPCode(emailAddr, code); err != nil {
+		return fmt.Errorf("send otp email: %w", err)
 	}
 
 	return nil
 }
 
-// VerifyEmail marks the account as verified and clears the token.
-func (s *Service) VerifyEmail(ctx context.Context, token string) error {
-	tag, err := s.db.Exec(ctx,
+// VerifyCode verifies the 6-digit OTP for the given email, marks the account as verified,
+// and returns a signed JWT so the user is immediately logged in.
+func (s *Service) VerifyCode(ctx context.Context, emailAddr, code string) (string, error) {
+	var userID string
+	err := s.db.QueryRow(ctx,
 		`UPDATE users
-		    SET verified = true, verification_token = NULL, verification_token_expires_at = NULL, updated_at = NOW()
-		  WHERE verification_token = $1
+		    SET verified = true,
+		        verification_token = NULL,
+		        verification_token_expires_at = NULL,
+		        updated_at = NOW()
+		  WHERE email = $1
+		    AND verification_token = $2
 		    AND verified = false
-		    AND verification_token_expires_at > NOW()`,
-		token,
-	)
+		    AND verification_token_expires_at > NOW()
+		  RETURNING id`,
+		strings.ToLower(emailAddr), code,
+	).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrBadToken
+	}
 	if err != nil {
-		return fmt.Errorf("update: %w", err)
+		return "", fmt.Errorf("verify code: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return ErrBadToken
-	}
-	return nil
+
+	return s.signJWT(userID)
 }
 
 // Login validates credentials and returns a signed JWT.
@@ -115,12 +123,7 @@ func (s *Service) Login(ctx context.Context, emailAddr, password string) (string
 		return "", ErrNotVerified
 	}
 
-	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": user.ID,
-		"exp": time.Now().Add(24 * time.Hour).Unix(),
-		"iat": time.Now().Unix(),
-	})
-	return tok.SignedString([]byte(s.jwtSecret))
+	return s.signJWT(user.ID)
 }
 
 // Me returns the user for a given ID.
@@ -139,13 +142,23 @@ func (s *Service) Me(ctx context.Context, userID string) (*models.User, error) {
 	return &u, nil
 }
 
-// randomHex returns n random bytes as a hex string.
-func randomHex(n int) (string, error) {
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
+// signJWT creates a signed JWT for the given user ID.
+func (s *Service) signJWT(userID string) (string, error) {
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": userID,
+		"exp": time.Now().Add(24 * time.Hour).Unix(),
+		"iat": time.Now().Unix(),
+	})
+	return tok.SignedString([]byte(s.jwtSecret))
+}
+
+// randomCode returns a uniformly random 6-digit decimal string (000000–999999).
+func randomCode() (string, error) {
+	var n uint32
+	if err := binary.Read(rand.Reader, binary.BigEndian, &n); err != nil {
 		return "", fmt.Errorf("rand: %w", err)
 	}
-	return hex.EncodeToString(b), nil
+	return fmt.Sprintf("%06d", n%1_000_000), nil
 }
 
 // isDuplicateKey detects PostgreSQL unique-constraint violations.

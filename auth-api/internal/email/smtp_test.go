@@ -111,57 +111,56 @@ func (f *fakeSMTP) serve() {
 	}
 }
 
-func TestSendVerification_BodyContainsURL(t *testing.T) {
+func TestSendOTPCode_BodyContainsCode(t *testing.T) {
 	srv := startFakeSMTP(t)
 
 	s := email.New(srv.host(), srv.port(), "noreply@trippier.dev")
-	verifyURL := "https://trippier.dev/api/auth/verify-email?token=abc123test456"
+	code := "482917"
 
-	if err := s.SendVerification("user@example.com", verifyURL); err != nil {
-		t.Fatalf("SendVerification: %v", err)
+	if err := s.SendOTPCode("user@example.com", code); err != nil {
+		t.Fatalf("SendOTPCode: %v", err)
 	}
 
 	body := srv.captured()
-	if !strings.Contains(body, verifyURL) {
-		t.Errorf("email body should contain the verify URL\nbody:\n%s", body)
+	if !strings.Contains(body, code) {
+		t.Errorf("email body should contain the OTP code\nbody:\n%s", body)
 	}
 }
 
-func TestSendVerification_BodyContainsSubject(t *testing.T) {
+func TestSendOTPCode_BodyContainsSubject(t *testing.T) {
 	srv := startFakeSMTP(t)
 
 	s := email.New(srv.host(), srv.port(), "noreply@trippier.dev")
-	if err := s.SendVerification("user@example.com", "https://example.com/verify"); err != nil {
-		t.Fatalf("SendVerification: %v", err)
+	if err := s.SendOTPCode("user@example.com", "123456"); err != nil {
+		t.Fatalf("SendOTPCode: %v", err)
 	}
 
 	body := srv.captured()
-	if !strings.Contains(body, "Confirm your Trippier account") {
-		t.Errorf("email body should contain subject line\nbody:\n%s", body)
+	if !strings.Contains(body, "verification code") {
+		t.Errorf("email body should contain 'verification code'\nbody:\n%s", body)
 	}
 }
 
-func TestSendVerification_URLAppearsInHTMLLink(t *testing.T) {
+func TestSendOTPCode_SubjectContainsCode(t *testing.T) {
 	srv := startFakeSMTP(t)
 
 	s := email.New(srv.host(), srv.port(), "noreply@trippier.dev")
-	verifyURL := "https://trippier.dev/verify?token=unique-token-xyz"
+	code := "739201"
 
-	if err := s.SendVerification("to@example.com", verifyURL); err != nil {
-		t.Fatalf("SendVerification: %v", err)
+	if err := s.SendOTPCode("to@example.com", code); err != nil {
+		t.Fatalf("SendOTPCode: %v", err)
 	}
 
 	body := srv.captured()
-	// URL should appear at least twice: once in the <a href> and once as fallback text.
-	count := strings.Count(body, verifyURL)
-	if count < 2 {
-		t.Errorf("expected URL to appear at least twice in body (href + fallback), got %d\nbody:\n%s", count, body)
+	// The Subject header should include the code for email preview snippets.
+	if !strings.Contains(body, "Subject:") || !strings.Contains(body, code) {
+		t.Errorf("email should contain Subject header with code\nbody:\n%s", body)
 	}
 }
 
 func TestNew_SMTP_Unreachable(t *testing.T) {
 	s := email.New("127.0.0.1", 1, "noreply@trippier.dev")
-	err := s.SendVerification("to@example.com", "https://example.com/verify")
+	err := s.SendOTPCode("to@example.com", "000000")
 	if err == nil {
 		t.Error("expected error when SMTP host is unreachable, got nil")
 	}

@@ -20,7 +20,6 @@ func IPRateLimit(rdb *redis.Client, limit int, window time.Duration) gin.Handler
 
 		count, err := rdb.Incr(ctx, key).Result()
 		if err != nil {
-			// Redis unavailable — fail open (allow request) to avoid locking users out
 			c.Next()
 			return
 		}

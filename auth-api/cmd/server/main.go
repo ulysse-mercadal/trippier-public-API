@@ -83,7 +83,6 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start server in a goroutine so the shutdown listener is non-blocking.
 	go func() {
 		log.Info("auth-api starting", zap.String("addr", srv.Addr))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -91,7 +90,6 @@ func main() {
 		}
 	}()
 
-	// Graceful shutdown on SIGINT / SIGTERM.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
@@ -105,6 +103,7 @@ func main() {
 	log.Info("server stopped")
 }
 
+// buildLogger returns a production zap logger, or a development logger when level is "debug".
 func buildLogger(level string) *zap.Logger {
 	var cfg zap.Config
 	if level == "debug" {

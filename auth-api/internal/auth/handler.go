@@ -22,11 +22,12 @@ func NewHandler(svc *Service, appURL string) *Handler {
 // RegisterRoutes mounts all auth endpoints on r.
 func (h *Handler) RegisterRoutes(r gin.IRouter, jwtAuth gin.HandlerFunc, loginLimiter gin.HandlerFunc, registerLimiter gin.HandlerFunc) {
 	r.POST("/register", registerLimiter, h.register)
-	r.GET("/verify-email", h.verifyEmail)
+	r.POST("/verify-code", registerLimiter, h.verifyCode)
 	r.POST("/login", loginLimiter, h.login)
 	r.GET("/me", jwtAuth, h.me)
 }
 
+// register handles POST /auth/register: creates an unverified account and sends a 6-digit OTP.
 func (h *Handler) register(c *gin.Context) {
 	var body struct {
 		Email    string `json:"email"    binding:"required,email"`
@@ -41,34 +42,42 @@ func (h *Handler) register(c *gin.Context) {
 		switch {
 		case errors.Is(err, ErrEmailTaken):
 			c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
-		default:
+		case errors.Is(err, ErrWeakPassword):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		default:
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		}
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "registration successful — check your email to verify your account"})
+	c.JSON(http.StatusCreated, gin.H{"message": "check your email for a 6-digit verification code"})
 }
 
-func (h *Handler) verifyEmail(c *gin.Context) {
-	token := c.Query("token")
-	if token == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "token required"})
+// verifyCode handles POST /auth/verify-code: checks the OTP and returns a JWT on success.
+func (h *Handler) verifyCode(c *gin.Context) {
+	var body struct {
+		Email string `json:"email" binding:"required,email"`
+		Code  string `json:"code"  binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	if err := h.svc.VerifyEmail(c.Request.Context(), token); err != nil {
+	token, err := h.svc.VerifyCode(c.Request.Context(), body.Email, body.Code)
+	if err != nil {
 		if errors.Is(err, ErrBadToken) {
-			c.Redirect(http.StatusSeeOther, h.appURL+"?verified=false")
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired code"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
-	c.Redirect(http.StatusSeeOther, h.appURL+"?verified=true")
+	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
+// login handles POST /auth/login: verifies credentials and returns a signed JWT on success.
 func (h *Handler) login(c *gin.Context) {
 	var body struct {
 		Email    string `json:"email"    binding:"required"`
@@ -95,6 +104,7 @@ func (h *Handler) login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
+// me handles GET /auth/me: returns the profile of the authenticated user.
 func (h *Handler) me(c *gin.Context) {
 	userID := c.GetString(mw.UserIDKey)
 	user, err := h.svc.Me(c.Request.Context(), userID)

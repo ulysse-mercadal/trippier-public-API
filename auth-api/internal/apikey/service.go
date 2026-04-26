@@ -76,8 +76,6 @@ func (s *Service) Create(ctx context.Context, userID, name string) (*CreateResul
 		return nil, fmt.Errorf("insert: %w", err)
 	}
 
-	// Prime the user-level bucket only if it does not already exist — a second
-	// key for the same user must not reset the remaining token count.
 	ttl := time.Duration(s.defaultInterval) * time.Second
 	if err := rl.InitBucket(ctx, s.rdb, userID, s.defaultLimit, ttl); err != nil {
 		s.log.Warn("could not prime redis bucket", zap.String("user_id", userID), zap.Error(err))
@@ -125,7 +123,6 @@ func (s *Service) List(ctx context.Context, userID string) ([]models.APIKeyWithU
 		return nil, err
 	}
 
-	// Fetch the shared user-level bucket once for all keys.
 	remaining, ttlSecs, err := rl.GetUsage(ctx, s.rdb, userID)
 	if err != nil || remaining == -1 {
 		remaining = s.defaultLimit
@@ -178,11 +175,9 @@ func (s *Service) ValidateBySHA256(ctx context.Context, sha256Hash string) (*mod
 		s.db.Exec(ctx2, `UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`, info.KeyID) //nolint:errcheck
 	}()
 
-	// Use global config for limit/interval — the bucket is per-user, not per-key.
 	info.TokensLimit = s.defaultLimit
 	info.TokensResetIntervalSecs = s.defaultInterval
 
-	// Prime the user bucket lazily if it disappeared from Redis.
 	remaining, _, err := rl.GetUsage(ctx, s.rdb, info.UserID)
 	if err != nil || remaining == -1 {
 		ttl := time.Duration(s.defaultInterval) * time.Second
@@ -193,6 +188,7 @@ func (s *Service) ValidateBySHA256(ctx context.Context, sha256Hash string) (*mod
 	return &info, nil
 }
 
+// randomBytes returns n random bytes encoded as a hex string.
 func randomBytes(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
