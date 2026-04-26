@@ -35,7 +35,7 @@ func TestValidate(t *testing.T) {
 		},
 		{
 			name:    "valid polygon",
-			q:       types.SearchQuery{Mode: types.ModePolygon, Polygon: "48.84 2.34 48.86 2.36"},
+			q:       types.SearchQuery{Mode: types.ModePolygon, Polygon: "48.84 2.34 48.86 2.36 48.85 2.35"},
 			wantErr: false,
 		},
 		{

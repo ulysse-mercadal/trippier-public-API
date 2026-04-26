@@ -22,6 +22,8 @@ func newRouter(pp ...providers.Provider) *gin.Engine {
 	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
 	pois := r.Group("/pois")
 	h.RegisterRoutes(pois)
+	events := pois.Group("/events")
+	h.RegisterEventRoutes(events)
 	return r
 }
 
@@ -186,15 +188,6 @@ func TestHandlerProviders_OK(t *testing.T) {
 	}
 	if len(statuses) != 1 {
 		t.Errorf("len(statuses) = %d, want 1", len(statuses))
-	}
-}
-
-// ── /pois/:id ────────────────────────────────────────────────────────────────
-
-func TestHandlerGetByID_NotImplemented(t *testing.T) {
-	w := get(newRouter(), "/pois/some-id")
-	if w.Code != http.StatusNotImplemented {
-		t.Errorf("status = %d, want 501", w.Code)
 	}
 }
 
