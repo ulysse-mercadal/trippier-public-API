@@ -14,12 +14,12 @@ const (
 )
 
 var providerPriority = map[types.Provider]int{
-	types.ProviderOverpass:        4,
-	types.ProviderWikivoyage:      3,
-	types.ProviderWikipedia:       2,
-	types.ProviderGeoNames:        1,
-	types.ProviderTicketmaster:    3,
-	types.ProviderEventbrite:      3,
+	types.ProviderOverpass:     4,
+	types.ProviderWikivoyage:   3,
+	types.ProviderWikipedia:    2,
+	types.ProviderGeoNames:     1,
+	types.ProviderTicketmaster: 3,
+	types.ProviderEventbrite:   3,
 }
 
 // Merge groups raw POIs from all providers into deduplicated EnrichedPoi records.

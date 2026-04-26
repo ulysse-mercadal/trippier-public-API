@@ -255,9 +255,9 @@ func TestSearch_WikiMarkupStripping(t *testing.T) {
 		{
 			// fieldRe captures up to `|`, so [[Article|Display]] is truncated to [[Article —
 			// a broken fragment that stripWikiMarkup clears → empty name → POI dropped.
-			desc:    "piped link truncated by field delimiter is dropped",
+			desc:     "piped link truncated by field delimiter is dropped",
 			wikitext: `{{see|name=[[Article|Musée d'Orsay]]|lat=48.86|long=2.32}}`,
-			wantLen: 0,
+			wantLen:  0,
 		},
 		{
 			desc:     "plain link without display",
@@ -278,9 +278,9 @@ func TestSearch_WikiMarkupStripping(t *testing.T) {
 			wantLen:  1,
 		},
 		{
-			desc:    "broken fragment truncated by pipe is dropped",
+			desc:     "broken fragment truncated by pipe is dropped",
 			wikitext: `{{see|name=[[Paris/4th|lat=48.85|long=2.35}}`,
-			wantLen: 0,
+			wantLen:  0,
 		},
 	}
 

@@ -191,8 +191,8 @@ func TestParseWeights(t *testing.T) {
 		{"", 0, false},
 		{`{"see":1,"eat":0.5}`, 2, false},
 		{`{"see":0,"do":0.8}`, 2, false},
-		{`{"see":2,"eat":1}`, 0, true},  // values > 1 are rejected
-		{`{"see":-0.1}`, 0, true},       // negative values are rejected
+		{`{"see":2,"eat":1}`, 0, true}, // values > 1 are rejected
+		{`{"see":-0.1}`, 0, true},      // negative values are rejected
 		{`not-json`, 0, true},
 	}
 

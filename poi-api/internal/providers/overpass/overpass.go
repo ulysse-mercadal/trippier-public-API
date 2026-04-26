@@ -54,7 +54,7 @@ var typeToOsmFilters = map[types.PoiType][]string{
 	types.TypeDrink: {`["amenity"~"bar|pub|nightclub|biergarten"]`},
 	types.TypeSleep: {`["tourism"~"hotel|hostel|guest_house|motel|camp_site"]`},
 	// park excluded: every urban green space matches, returning hundreds of minor squares.
-	types.TypeDo:  {`["tourism"~"theme_park|zoo|aquarium"]`, `["leisure"~"sports_centre|water_park|golf_course|marina"]`},
+	types.TypeDo: {`["tourism"~"theme_park|zoo|aquarium"]`, `["leisure"~"sports_centre|water_park|golf_course|marina"]`},
 	// ["shop"] without a value restriction returns every shop in the city.
 	types.TypeBuy: {`["shop"~"mall|department_store|market|souvenir|gift|bookstore"]`, `["amenity"="marketplace"]`},
 }

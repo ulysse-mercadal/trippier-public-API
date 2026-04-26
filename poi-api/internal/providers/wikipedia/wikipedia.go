@@ -90,12 +90,12 @@ func (b *base) geosearch(ctx context.Context, q types.SearchQuery) ([]geosearchP
 }
 
 type enrichedPage struct {
-	PageID    int
-	Title     string
-	Extract   string
-	Thumbnail string
+	PageID     int
+	Title      string
+	Extract    string
+	Thumbnail  string
 	WikidataID string
-	Geo       geosearchPage
+	Geo        geosearchPage
 }
 
 // enrich fetches extracts, thumbnails, and Wikidata IDs for a batch of geosearch pages.

@@ -42,7 +42,6 @@ func main() {
 		log.Info("POI_GEONAMES_USERNAME not set — geonames provider will be disabled")
 	}
 
-
 	rdb, err := buildRedis(cfg.RedisURL)
 	if err != nil {
 		log.Fatal("redis url", zap.Error(err))

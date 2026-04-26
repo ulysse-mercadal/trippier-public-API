@@ -108,13 +108,13 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 
 	now := time.Now().UTC()
 	params := url.Values{
-		"apikey":         {p.apiKey},
-		"latlong":        {fmt.Sprintf("%.6f,%.6f", q.Lat, q.Lng)},
-		"radius":         {strconv.Itoa(radiusKm)},
-		"unit":           {"km"},
-		"size":           {"100"},
-		"startDateTime":  {now.Format("2006-01-02T15:04:05Z")},
-		"endDateTime":    {now.AddDate(0, 6, 0).Format("2006-01-02T15:04:05Z")},
+		"apikey":        {p.apiKey},
+		"latlong":       {fmt.Sprintf("%.6f,%.6f", q.Lat, q.Lng)},
+		"radius":        {strconv.Itoa(radiusKm)},
+		"unit":          {"km"},
+		"size":          {"100"},
+		"startDateTime": {now.Format("2006-01-02T15:04:05Z")},
+		"endDateTime":   {now.AddDate(0, 6, 0).Format("2006-01-02T15:04:05Z")},
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+"?"+params.Encode(), nil)
