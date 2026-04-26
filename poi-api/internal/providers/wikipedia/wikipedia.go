@@ -30,11 +30,6 @@ const (
 	// wikidataSPARQL is the Wikidata Query Service SPARQL endpoint.
 	wikidataSPARQL = "https://query.wikidata.org/sparql"
 
-	// eventClass is the root Wikidata class for events/occurrences.
-	// Physical places that are not events are excluded from the places provider
-	// by dropping articles whose P31 chain reaches this class.
-	eventClass = "Q1190554"
-
 	// festivalClass is the root Wikidata class for festivals (music, cultural,
 	// film, food, etc.). The events provider keeps only articles whose P31 chain
 	// reaches this class.

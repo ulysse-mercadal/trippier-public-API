@@ -9,18 +9,18 @@ import (
 
 // Config holds all runtime configuration for the poi-api server.
 type Config struct {
-	Port                  string
-	RedisURL              string
-	CacheTTLSeconds       int
-	ProviderTimeout       int
-	GeoNamesUsername      string
-	Lang                  string
-	LogLevel              string
-	AuthAPIURL            string
-	InternalSecret        string
-	TicketmasterAPIKey    string
-	EventbriteToken       string
-	AuthDisabled          bool
+	Port               string
+	RedisURL           string
+	CacheTTLSeconds    int
+	ProviderTimeout    int
+	GeoNamesUsername   string
+	Lang               string
+	LogLevel           string
+	AuthAPIURL         string
+	InternalSecret     string
+	TicketmasterAPIKey string
+	EventbriteToken    string
+	AuthDisabled       bool
 }
 
 // Load reads configuration from environment variables (prefixed POI_)

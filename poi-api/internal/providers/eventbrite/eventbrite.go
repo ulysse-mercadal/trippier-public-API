@@ -27,13 +27,13 @@ type ebResponse struct {
 }
 
 type ebEvent struct {
-	ID          string  `json:"id"`
-	URL         string  `json:"url"`
-	Name        ebText  `json:"name"`
-	Description ebText  `json:"description"`
-	Start       ebTime  `json:"start"`
-	End         ebTime  `json:"end"`
-	Logo        *ebLogo `json:"logo"`
+	ID          string   `json:"id"`
+	URL         string   `json:"url"`
+	Name        ebText   `json:"name"`
+	Description ebText   `json:"description"`
+	Start       ebTime   `json:"start"`
+	End         ebTime   `json:"end"`
+	Logo        *ebLogo  `json:"logo"`
 	Venue       *ebVenue `json:"venue"`
 }
 

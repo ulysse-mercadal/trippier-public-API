@@ -28,17 +28,17 @@ type Contact struct {
 // RawPoi is the normalised output of a single provider before merging.
 // The ID field is namespaced as "{provider}:{native_id}".
 type RawPoi struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Type        PoiType           `json:"type"`
-	Coords      *Coordinates      `json:"coords,omitempty"`
-	Zone        *Zone             `json:"zone,omitempty"`
-	Description string            `json:"description,omitempty"`
-	Contact     Contact           `json:"contact,omitempty"`
-	Thumbnail   string            `json:"thumbnail,omitempty"`
-	Provider    Provider          `json:"provider"`
-	WikidataID  string            `json:"wikidata_id,omitempty"`
-	Distance    float64           `json:"distance,omitempty"`
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	Type        PoiType      `json:"type"`
+	Coords      *Coordinates `json:"coords,omitempty"`
+	Zone        *Zone        `json:"zone,omitempty"`
+	Description string       `json:"description,omitempty"`
+	Contact     Contact      `json:"contact,omitempty"`
+	Thumbnail   string       `json:"thumbnail,omitempty"`
+	Provider    Provider     `json:"provider"`
+	WikidataID  string       `json:"wikidata_id,omitempty"`
+	Distance    float64      `json:"distance,omitempty"`
 	// Event-specific fields — nil/zero for non-event POIs.
 	DateStart *time.Time `json:"date_start,omitempty"`
 	DateEnd   *time.Time `json:"date_end,omitempty"`
@@ -60,11 +60,11 @@ type SlimResult struct {
 
 // SlimEvent is the lightweight projection returned by GET /events/slim.
 type SlimEvent struct {
-	Name      string     `json:"name"`
+	Name      string       `json:"name"`
 	Coords    *Coordinates `json:"coords,omitempty"`
-	DateStart *time.Time `json:"date_start,omitempty"`
-	DateEnd   *time.Time `json:"date_end,omitempty"`
-	Recurring bool       `json:"recurring,omitempty"`
+	DateStart *time.Time   `json:"date_start,omitempty"`
+	DateEnd   *time.Time   `json:"date_end,omitempty"`
+	Recurring bool         `json:"recurring,omitempty"`
 }
 
 // SlimEventResult is the top-level response body for GET /events/slim.
