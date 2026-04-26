@@ -16,8 +16,7 @@ var defaultTypeWeights = map[types.PoiType]float64{
 	types.TypeBuy:   0.4,
 }
 
-// Score returns a relevance score in [0, 100].
-// Weights: source count 50%, type 30%, distance 10%, coord precision 10%.
+// Score returns a relevance score in [0, 100]; weights: sources 50%, type 30%, distance 10%, coords 10%.
 func Score(poi types.EnrichedPoi, q types.SearchQuery) float64 {
 	s := sourceScore(len(poi.Sources))*50 +
 		typeScore(poi.Type, q.Weights)*30 +
@@ -26,8 +25,7 @@ func Score(poi types.EnrichedPoi, q types.SearchQuery) float64 {
 	return math.Min(s, 100)
 }
 
-// sourceScore uses a stepped function so multi-provider POIs always outrank
-// single-provider ones regardless of distance or type bonuses.
+// sourceScore uses a stepped function: multi-provider POIs always outrank single-provider ones regardless of other bonuses.
 func sourceScore(count int) float64 {
 	switch {
 	case count >= 3:

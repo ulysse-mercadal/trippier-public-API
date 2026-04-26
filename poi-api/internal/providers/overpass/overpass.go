@@ -135,37 +135,30 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 	return p.toRawPois(result.Elements), nil
 }
 
+// escapeOQLString escapes a string for safe embedding in an Overpass QL double-quoted context.
+func escapeOQLString(s string) string {
+	return strings.ReplaceAll(s, `"`, `\"`)
+}
+
+// buildQuery assembles the full Overpass QL query string for the given search mode.
+// For district mode it constrains the area lookup using geocoded coordinates when available.
 func (p *Provider) buildQuery(q types.SearchQuery) string {
 	filters := p.buildFilters(q.Types)
 	nodeStmts, wayStmts := p.buildStatements(q, filters)
 
-	// Overpass outputs all nodes before all ways. If we use a single union with
-	// a shared limit ("out center 500"), large ways (e.g. Cathédrale Notre-Dame
-	// de Paris) get cut off behind hundreds of restaurant and bar nodes.
-	// Splitting nodes and ways into separate named sets with independent caps
-	// guarantees that important way POIs are always included.
-	//
-	// Nodes and ways are capped independently so that large ways (cathedrals,
-	// museums) with high OSM IDs are not squeezed out by hundreds of restaurant
-	// and bar nodes. 400 nodes covers dense city centres; 400 ways covers all
-	// enclosed areas (Overpass returns ways in ascending ID order, and historic
-	// buildings such as Notre-Dame have IDs > 200 M).
 	if q.Mode == types.ModeDistrict {
-		// District mode defines the area once to avoid redundant lookups.
-		// When geocoded coordinates are available, constrain the area lookup
-		// geographically to avoid matching same-named areas in other countries
-		// (e.g. "Louvre" matching Louvre Abu Dhabi instead of Paris).
+		district := escapeOQLString(q.District)
 		if q.Lat != 0 || q.Lng != 0 {
 			return fmt.Sprintf(
 				`[out:json][timeout:7];area["name"="%s"](around:100000,%.6f,%.6f)->.a;(%s) -> .n;(%s) -> .w;.n out 400;.w out center 400;`,
-				q.District, q.Lat, q.Lng,
+				district, q.Lat, q.Lng,
 				strings.Join(nodeStmts, ""),
 				strings.Join(wayStmts, ""),
 			)
 		}
 		return fmt.Sprintf(
 			`[out:json][timeout:7];area["name"="%s"]->.a;(%s) -> .n;(%s) -> .w;.n out 400;.w out center 400;`,
-			q.District,
+			district,
 			strings.Join(nodeStmts, ""),
 			strings.Join(wayStmts, ""),
 		)
@@ -177,11 +170,10 @@ func (p *Provider) buildQuery(q types.SearchQuery) string {
 	)
 }
 
+// buildFilters returns the Overpass tag filters for the requested POI types.
+// When no types are requested it returns a broad default covering the most relevant categories.
 func (p *Provider) buildFilters(poiTypes []types.PoiType) []string {
 	if len(poiTypes) == 0 {
-		// Default: explicit tourism values only — avoids artwork, information
-		// panels, picnic sites, and other low-signal OSM tourism tags that
-		// would return thousands of minor features in dense cities.
 		return []string{
 			`["tourism"~"museum|gallery|attraction|viewpoint|castle|ruins|theme_park|zoo|aquarium|hotel|hostel|guest_house|motel|camp_site"]`,
 			`["amenity"~"restaurant|cafe|fast_food|bar|pub|nightclub"]`,
@@ -212,7 +204,6 @@ func (p *Provider) buildStatements(q types.SearchQuery, filters []string) (nodeS
 			nodeStmts = append(nodeStmts, fmt.Sprintf(`node(poly:"%s")%s["name"];`, q.Polygon, f))
 			wayStmts = append(wayStmts, fmt.Sprintf(`way(poly:"%s")%s["name"];`, q.Polygon, f))
 		case types.ModeDistrict:
-			// The area variable .a is defined once in buildQuery for district mode.
 			nodeStmts = append(nodeStmts, fmt.Sprintf(`node(area.a)%s["name"];`, f))
 			wayStmts = append(wayStmts, fmt.Sprintf(`way(area.a)%s["name"];`, f))
 		}
@@ -220,6 +211,7 @@ func (p *Provider) buildStatements(q types.SearchQuery, filters []string) (nodeS
 	return
 }
 
+// toRawPois converts Overpass elements to RawPoi records, deduplicating by element type+ID.
 func (p *Provider) toRawPois(elements []overpassElement) []types.RawPoi {
 	seen := make(map[string]bool, len(elements))
 	pois := make([]types.RawPoi, 0, len(elements))
@@ -257,6 +249,7 @@ func (p *Provider) toRawPois(elements []overpassElement) []types.RawPoi {
 	return pois
 }
 
+// resolveType maps OSM tags to a PoiType by checking tourism, amenity, leisure, and shop keys in order.
 func (p *Provider) resolveType(tags map[string]string) types.PoiType {
 	for _, key := range []string{"tourism", "amenity", "leisure", "shop"} {
 		if v, ok := tags[key]; ok {

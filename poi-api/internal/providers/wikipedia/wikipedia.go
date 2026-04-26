@@ -58,6 +58,7 @@ type geosearchPage struct {
 	Type   string  `json:"type"`
 }
 
+// geosearch calls the Wikipedia Geosearch API and returns pages near the query coordinates.
 func (b *base) geosearch(ctx context.Context, q types.SearchQuery) ([]geosearchPage, error) {
 	params := url.Values{
 		"action":      {"query"},
@@ -102,6 +103,8 @@ type enrichedPage struct {
 	Geo       geosearchPage
 }
 
+// enrich fetches extracts, thumbnails, and Wikidata IDs for a batch of geosearch pages.
+// Falls back to enrichWithoutAPI if the batch request fails.
 func (b *base) enrich(ctx context.Context, pages []geosearchPage) []enrichedPage {
 	if len(pages) == 0 {
 		return nil
@@ -175,6 +178,7 @@ func (b *base) enrich(ctx context.Context, pages []geosearchPage) []enrichedPage
 	return out
 }
 
+// enrichWithoutAPI builds minimal enrichedPage records (title + geo only) when the batch API call is unavailable.
 func (b *base) enrichWithoutAPI(pages []geosearchPage) []enrichedPage {
 	out := make([]enrichedPage, len(pages))
 	for i, pg := range pages {
@@ -246,6 +250,7 @@ func (b *base) wikidataClassMembers(ctx context.Context, ids []string, wikidataC
 	return members
 }
 
+// toRawPoi converts an enriched Wikipedia page to a RawPoi of the given type.
 func toRawPoi(ep enrichedPage, poiType types.PoiType) types.RawPoi {
 	return types.RawPoi{
 		ID:          fmt.Sprintf("wikipedia:%d", ep.PageID),
@@ -363,8 +368,6 @@ func (p *EventProvider) Search(ctx context.Context, q types.SearchQuery) ([]type
 
 	enriched := p.base.enrich(ctx, pages)
 
-	// Collect Wikidata IDs — articles without one are dropped: we cannot verify
-	// they are festivals, so we exclude them to keep the events list clean.
 	wikidataIDs := make([]string, 0, len(enriched))
 	for _, ep := range enriched {
 		if ep.WikidataID != "" {
@@ -372,8 +375,6 @@ func (p *EventProvider) Search(ctx context.Context, q types.SearchQuery) ([]type
 		}
 	}
 
-	// Festivals to keep — fail open: if SPARQL fails (nil result), we return
-	// nothing rather than flooding the events list with non-festival articles.
 	festivalIDs := p.base.wikidataClassMembers(ctx, wikidataIDs, festivalClass)
 	if festivalIDs == nil {
 		return nil, nil
@@ -382,11 +383,11 @@ func (p *EventProvider) Search(ctx context.Context, q types.SearchQuery) ([]type
 	pois := make([]types.RawPoi, 0)
 	for _, ep := range enriched {
 		if ep.WikidataID == "" || !festivalIDs[ep.WikidataID] {
-			continue // keep only confirmed festivals
+			continue
 		}
 		poi := toRawPoi(ep, types.TypeEvent)
 		poi.Provider = types.ProviderWikipediaEvents
-		poi.Recurring = true // festivals in Wikidata are typically recurring
+		poi.Recurring = true
 		pois = append(pois, poi)
 	}
 	return pois, nil

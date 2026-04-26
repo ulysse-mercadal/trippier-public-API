@@ -29,3 +29,10 @@ type Provider interface {
 	// Providers must respect context cancellation and deadline.
 	Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error)
 }
+
+// Pingable is an optional interface for providers that offer a lightweight
+// health-check endpoint. ProvidersStatus uses Ping instead of Search when available,
+// avoiding quota consumption on quota-constrained APIs (Ticketmaster, Eventbrite).
+type Pingable interface {
+	Ping(ctx context.Context) error
+}

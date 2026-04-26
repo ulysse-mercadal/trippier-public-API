@@ -58,6 +58,21 @@ type SlimResult struct {
 	Results []SlimPoi `json:"results"`
 }
 
+// SlimEvent is the lightweight projection returned by GET /events/slim.
+type SlimEvent struct {
+	Name      string     `json:"name"`
+	Coords    *Coordinates `json:"coords,omitempty"`
+	DateStart *time.Time `json:"date_start,omitempty"`
+	DateEnd   *time.Time `json:"date_end,omitempty"`
+	Recurring bool       `json:"recurring,omitempty"`
+}
+
+// SlimEventResult is the top-level response body for GET /events/slim.
+type SlimEventResult struct {
+	Total   int         `json:"total"`
+	Results []SlimEvent `json:"results"`
+}
+
 // EnrichedPoi is the final merged and scored result returned to the caller.
 type EnrichedPoi struct {
 	ID            string              `json:"id"`

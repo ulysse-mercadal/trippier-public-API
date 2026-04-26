@@ -55,7 +55,6 @@ func NewWithURL(baseURL string) *Provider {
 func (p *Provider) Name() types.Provider { return types.ProviderWikivoyage }
 
 // SupportsMode implements providers.Provider.
-// Wikivoyage works best with district and radius (zone resolution); polygon is approximate.
 func (p *Provider) SupportsMode(mode types.SearchMode) bool {
 	return mode == types.ModeDistrict || mode == types.ModeRadius
 }
@@ -85,13 +84,10 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 	return p.parseListings(wikitext, pageTitle), nil
 }
 
-// zoneSearchRadius is the fixed radius used to find the nearest Wikivoyage article.
-// It is deliberately larger than the POI search radius so that neighbourhood
-// articles (e.g. "Paris/7th arrondissement") are always found even when the
-// user requests a small search radius.
-// Capped at 10 000 m — the maximum accepted by the MediaWiki geosearch API.
+// zoneSearchRadius is fixed at the MediaWiki geosearch maximum (10 000 m) to always find nearby articles.
 const zoneSearchRadius = 10_000
 
+// resolveZone finds the nearest Wikivoyage article title for the given coordinates via MediaWiki geosearch.
 func (p *Provider) resolveZone(ctx context.Context, lat, lng float64, _ int) (string, error) {
 	params := url.Values{
 		"action":      {"query"},
@@ -131,6 +127,7 @@ func (p *Provider) resolveZone(ctx context.Context, lat, lng float64, _ int) (st
 	return result.Query.Geosearch[0].Title, nil
 }
 
+// fetchWikitext retrieves the raw wikitext of a Wikivoyage page by title.
 func (p *Provider) fetchWikitext(ctx context.Context, title string) (string, error) {
 	params := url.Values{
 		"action": {"parse"},
@@ -173,10 +170,7 @@ var wikiLinkRe = regexp.MustCompile(`\[\[[^\]]*\]\]`)
 // wikiFragmentRe matches broken [[ fragments (truncated by the | field delimiter).
 var wikiFragmentRe = regexp.MustCompile(`\[\[.*`)
 
-// stripWikiMarkup removes wiki link syntax from a field value.
-// [[Target|Display]] → Display; [[Target#Anchor]] → Target; [[Ns/Sub]] → Sub.
-// Broken fragments truncated by the pipe field delimiter are stripped entirely,
-// causing the name to become empty and the listing to be dropped.
+// stripWikiMarkup resolves [[Target|Display]] → Display, drops broken [[ fragments.
 func stripWikiMarkup(s string) string {
 	s = wikiLinkRe.ReplaceAllStringFunc(s, func(m string) string {
 		inner := m[2 : len(m)-2]
@@ -195,6 +189,7 @@ func stripWikiMarkup(s string) string {
 	return strings.TrimSpace(s)
 }
 
+// parseListings extracts listing templates from wikitext and converts them to RawPoi records.
 func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 	matches := listingRe.FindAllStringSubmatch(wikitext, -1)
 	pois := make([]types.RawPoi, 0, len(matches))
@@ -235,6 +230,7 @@ func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 	return pois
 }
 
+// parseFields extracts key=value pairs from a listing template's parameter string.
 func (p *Provider) parseFields(raw string) map[string]string {
 	fields := map[string]string{}
 	for _, m := range fieldRe.FindAllStringSubmatch(raw, -1) {
@@ -243,6 +239,7 @@ func (p *Provider) parseFields(raw string) map[string]string {
 	return fields
 }
 
+// parseCoords extracts lat/long from a listing's field map and returns ok=false if either is missing or invalid.
 func (p *Provider) parseCoords(fields map[string]string) (lat, lng float64, ok bool) {
 	latStr, lngStr := fields["lat"], fields["long"]
 	if latStr == "" || lngStr == "" {

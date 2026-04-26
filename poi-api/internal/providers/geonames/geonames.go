@@ -101,9 +101,6 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 			"username": {p.username},
 		}
 	case types.ModeDistrict:
-		// Prefer a coordinate-based nearby search when geocoded lat/lng are
-		// available (set by the service after resolving the district name via
-		// Nominatim). Fall back to a text search otherwise.
 		if q.Lat != 0 || q.Lng != 0 {
 			endpoint = "/findNearbyJSON"
 			radius := q.Radius / 1000
@@ -152,11 +149,10 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 	return p.toRawPois(result.Geonames), nil
 }
 
+// toRawPois converts GeoNames items to RawPoi records, skipping entries with unknown feature codes or invalid coordinates.
 func (p *Provider) toRawPois(items []geonameItem) []types.RawPoi {
 	pois := make([]types.RawPoi, 0, len(items))
 	for _, item := range items {
-		// Skip feature codes not explicitly mapped — they are geographic
-		// entities (rivers, roads, historical areas…) not tourist POIs.
 		poiType, known := fcodeTypeMap[item.Fcode]
 		if !known {
 			continue

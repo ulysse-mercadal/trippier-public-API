@@ -20,8 +20,7 @@ type GeoPlace struct {
 	Lng float64
 }
 
-// GeocodeDistrict resolves a place name to coordinates via the Nominatim API.
-// Returns an error if the name cannot be resolved or the service is unavailable.
+// GeocodeDistrict resolves a place name to coordinates via the Nominatim OSM API.
 func GeocodeDistrict(ctx context.Context, name string) (GeoPlace, error) {
 	params := url.Values{
 		"q":      {name},

@@ -34,6 +34,7 @@ func RequestIDFromCtx(c *gin.Context) string {
 	return ""
 }
 
+// newRequestID generates a random 8-byte hex string for use as a request identifier.
 func newRequestID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)

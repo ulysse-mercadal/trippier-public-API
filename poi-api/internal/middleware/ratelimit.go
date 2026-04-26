@@ -25,18 +25,18 @@ type rateLimitResponse struct {
 	Error        string `json:"error"`
 }
 
-// RateLimit validates the caller's X-API-Key against the auth-api token bucket.
-// Each request costs `cost` tokens. Routes in exempt are passed through without
-// a key (e.g. "/health", "/pois/providers").
-//
-// On auth-api unavailability the request is rejected with 503 to prevent
-// unlimited access during outages.
+// rateLimitClient is shared across all RateLimit middleware instances to reuse TCP connections.
+var rateLimitClient = &http.Client{Timeout: 5 * time.Second}
+
+// RateLimit validates X-API-Key against the auth-api token bucket.
+// Paths listed in exempt and requests with a valid X-Internal-Auth header bypass the check entirely.
+// On auth-api unavailability the request is rejected with 503 to prevent unlimited access.
 func RateLimit(authAPIURL, internalSecret string, cost int, exempt ...string) gin.HandlerFunc {
 	exemptSet := make(map[string]struct{}, len(exempt))
 	for _, p := range exempt {
 		exemptSet[p] = struct{}{}
 	}
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := rateLimitClient
 
 	return func(c *gin.Context) {
 		if _, ok := exemptSet[c.FullPath()]; ok {
@@ -44,8 +44,6 @@ func RateLimit(authAPIURL, internalSecret string, cost int, exempt ...string) gi
 			return
 		}
 
-		// Requests signed with the shared internal secret (e.g. the official
-		// site's server-side proxy) bypass rate limiting entirely.
 		if h := c.GetHeader("X-Internal-Auth"); h != "" && validInternalAuth(h, internalSecret) {
 			c.Next()
 			return
@@ -89,8 +87,7 @@ func RateLimit(authAPIURL, internalSecret string, cost int, exempt ...string) gi
 	}
 }
 
-// validInternalAuth checks an X-Internal-Auth header value produced by buildInternalAuth.
-// Returns true only if the signature is correct and the timestamp is within ±30 s.
+// validInternalAuth returns true if the HMAC signature matches and the timestamp is within ±30 s.
 func validInternalAuth(header, secret string) bool {
 	parts := strings.SplitN(header, ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
@@ -110,8 +107,7 @@ func validInternalAuth(header, secret string) bool {
 	return hmac.Equal([]byte(expected), []byte(parts[1]))
 }
 
-// buildInternalAuth returns an X-Internal-Auth header value: "<ts>.<hmac-sha256(secret, ts)>".
-// Using a timestamp-bound HMAC prevents replaying a captured header.
+// buildInternalAuth returns "<unix-ts>.<hmac-sha256(secret, ts)>" for service-to-service auth.
 func buildInternalAuth(secret string) string {
 	ts := strconv.FormatInt(time.Now().Unix(), 10)
 	mac := hmac.New(sha256.New, []byte(secret))

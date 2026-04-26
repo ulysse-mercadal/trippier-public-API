@@ -16,6 +16,7 @@ func JaroWinkler(s1, s2 string) float64 {
 	return jaro + float64(prefixLen)*0.1*(1-jaro)
 }
 
+// jaroSimilarity computes the base Jaro similarity score in [0, 1] before the Winkler prefix bonus is applied.
 func jaroSimilarity(s1, s2 string) float64 {
 	if len(s1) == 0 && len(s2) == 0 {
 		return 1.0
@@ -65,6 +66,7 @@ func jaroSimilarity(s1, s2 string) float64 {
 	return (m/float64(len(s1)) + m/float64(len(s2)) + (m-float64(transpositions)/2)/m) / 3
 }
 
+// minInt returns the smaller of a and b.
 func minInt(a, b int) int {
 	if a < b {
 		return a
@@ -72,6 +74,7 @@ func minInt(a, b int) int {
 	return b
 }
 
+// maxInt returns the larger of a and b.
 func maxInt(a, b int) int {
 	if a > b {
 		return a
