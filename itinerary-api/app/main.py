@@ -13,12 +13,13 @@ app = FastAPI(
 )
 
 _s = get_settings()
-app.add_middleware(
-    RateLimitMiddleware,
-    auth_api_url=_s.auth_api_url,
-    internal_secret=_s.internal_secret,
-    cost=50,
-)
+if not _s.auth_disabled:
+    app.add_middleware(
+        RateLimitMiddleware,
+        auth_api_url=_s.auth_api_url,
+        internal_secret=_s.internal_secret,
+        cost=50,
+    )
 
 app.include_router(itinerary_router)
 

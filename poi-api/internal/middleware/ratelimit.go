@@ -28,6 +28,12 @@ type rateLimitResponse struct {
 // rateLimitClient is shared across all RateLimit middleware instances to reuse TCP connections.
 var rateLimitClient = &http.Client{Timeout: 5 * time.Second}
 
+// Passthrough returns a no-op middleware that forwards every request unconditionally.
+// Used when AUTH_DISABLED=true to run the API without an auth-api dependency.
+func Passthrough() gin.HandlerFunc {
+	return func(c *gin.Context) { c.Next() }
+}
+
 // RateLimit validates X-API-Key against the auth-api token bucket.
 // Paths listed in exempt and requests with a valid X-Internal-Auth header bypass the check entirely.
 // On auth-api unavailability the request is rejected with 503 to prevent unlimited access.

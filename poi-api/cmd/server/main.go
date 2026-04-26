@@ -52,6 +52,8 @@ func main() {
 	svc := search.NewService(pp, time.Duration(cfg.ProviderTimeout)*time.Second, log)
 	handler := search.NewHandler(svc)
 
+	globalAuth, eventsAuth := buildAuthMiddlewares(cfg)
+
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.SetTrustedProxies(nil) //nolint:errcheck
@@ -60,7 +62,7 @@ func main() {
 		middleware.SecureHeaders(),
 		middleware.RequestID(),
 		middleware.Logger(log),
-		middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 1, "/health", "/pois/events", "/pois/events/slim"),
+		globalAuth,
 	)
 
 	r.GET("/health", func(c *gin.Context) {
@@ -73,7 +75,7 @@ func main() {
 	handler.RegisterRoutes(pois)
 
 	events := pois.Group("/events")
-	events.Use(middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 10))
+	events.Use(eventsAuth)
 	handler.RegisterEventRoutes(events)
 
 	srv := &http.Server{
@@ -102,6 +104,17 @@ func main() {
 		log.Error("shutdown error", zap.Error(err))
 	}
 	log.Info("server stopped")
+}
+
+// buildAuthMiddlewares returns the global and events-specific rate-limit middlewares.
+// When AUTH_DISABLED=true both are no-ops so the API runs without an auth-api dependency.
+func buildAuthMiddlewares(cfg *config.Config) (global, events gin.HandlerFunc) {
+	if cfg.AuthDisabled {
+		return middleware.Passthrough(), middleware.Passthrough()
+	}
+	global = middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 1, "/health", "/pois/events", "/pois/events/slim")
+	events = middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 10)
+	return global, events
 }
 
 // buildProviders constructs the list of active POI and event providers based on config.

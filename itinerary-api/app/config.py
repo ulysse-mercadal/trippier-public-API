@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     log_level: str = "info"
     auth_api_url: str = "http://auth-api:8081"
     internal_secret: str = "change-me-internal-secret"
+    auth_disabled: bool = False
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

@@ -20,6 +20,7 @@ type Config struct {
 	InternalSecret        string
 	TicketmasterAPIKey    string
 	EventbriteToken       string
+	AuthDisabled          bool
 }
 
 // Load reads configuration from environment variables (prefixed POI_)
@@ -51,6 +52,7 @@ func Load() (*Config, error) {
 		InternalSecret:     v.GetString("internal_secret"),
 		TicketmasterAPIKey: v.GetString("ticketmaster_api_key"),
 		EventbriteToken:    v.GetString("eventbrite_token"),
+		AuthDisabled:       v.GetBool("auth_disabled"),
 	}
 
 	return cfg, nil

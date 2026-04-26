@@ -1,0 +1,45 @@
+# Standalone Compose — runs poi-api + itinerary-api without auth-api or rate limiting.
+#
+# Usage:
+#   cp .env.standalone .env.standalone.local   # fill in your API keys
+#   docker compose -f docker-compose.standalone.yml up
+#
+# poi-api  → http://localhost:8080
+# itinerary-api → http://localhost:8000
+
+services:
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  poi-api:
+    image: ghcr.io/ulysse-mercadal/poi-api:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env.standalone.local
+    environment:
+      POI_AUTH_DISABLED: "true"
+      POI_REDIS_URL: redis://redis:6379
+      POI_LOG_LEVEL: info
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  itinerary-api:
+    image: ghcr.io/ulysse-mercadal/itinerary-api:latest
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      AUTH_DISABLED: "true"
+      POI_API_URL: http://poi-api:8080
+    depends_on:
+      - poi-api
