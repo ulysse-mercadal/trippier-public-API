@@ -3,7 +3,7 @@
 // Region: Mont Blanc massif 45.5–46.18°N, 6.42–7.32°E
 // Grid: 40×40 | Thresholds: 600, 900, 1200, 1500, 1800, 2100, 2400, 2700, 3000, 3300, 3600, 3900, 4200, 4500, 4800 m
 // Run `bun run scripts/gen-topo.ts` to refresh.
-// Generated: 2026-04-24T16:07:42.429Z
+// Generated: 2026-04-25T15:48:40.757Z
 
 export interface ContourLevel {
   elevation: number;

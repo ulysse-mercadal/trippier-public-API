@@ -34,6 +34,15 @@ export async function register(email: string, password: string): Promise<void> {
 	});
 }
 
+/** Verify the 6-digit OTP sent by email. Returns a JWT on success (auto-login). */
+export async function verifyCode(email: string, code: string): Promise<string> {
+	const { token } = await request<{ token: string }>('/verify-code', undefined, {
+		method: 'POST',
+		body: JSON.stringify({ email, code }),
+	});
+	return token;
+}
+
 export async function login(email: string, password: string): Promise<string> {
 	const { token } = await request<{ token: string }>('/login', undefined, {
 		method: 'POST',

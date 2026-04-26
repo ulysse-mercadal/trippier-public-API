@@ -15,14 +15,14 @@
 
 	onMount(async () => {
 		const stored = auth.getStoredToken();
-		if (!stored) { goto('/'); return; }
+		if (!stored) { goto('/login'); return; }
 
 		if (!$auth.user) {
 			try {
 				const user = await getMe(stored);
 				auth.init(stored, user);
 			} catch {
-				goto('/');
+				goto('/login');
 				return;
 			}
 		}

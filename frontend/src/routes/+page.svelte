@@ -1,51 +1,6 @@
-<script lang="ts">
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { auth } from '$lib/stores/auth';
-	import { register, login, getMe, ApiError } from '$lib/api';
-
-	let mode: 'login' | 'register' = 'register';
-	let email    = '';
-	let password = '';
-	let error    = '';
-	let success  = '';
-	let loading  = false;
-
-	onMount(async () => {
-		const stored = auth.getStoredToken();
-		if (!stored) return;
-		try {
-			const user = await getMe(stored);
-			auth.init(stored, user);
-		} catch {
-			// token expired — stay on landing
-		}
-	});
-
-	async function submit() {
-		error   = '';
-		success = '';
-		loading = true;
-		try {
-			if (mode === 'register') {
-				await register(email, password);
-				success = 'Account created! Check your inbox to verify, then sign in.';
-				mode    = 'login';
-				password = '';
-			} else {
-				const token = await login(email, password);
-				const user  = await getMe(token);
-				auth.init(token, user);
-				auth.storeToken(token);
-				goto('/dashboard');
-			}
-		} catch (e) {
-			error = e instanceof ApiError ? e.message : 'Something went wrong';
-		} finally {
-			loading = false;
-		}
-	}
-</script>
+<svelte:head>
+	<title>Trippier API — Travel data for builders</title>
+</svelte:head>
 
 <!-- ── Hero ─────────────────────────────────────────────────────────────────── -->
 <section class="hero">
@@ -61,175 +16,242 @@
 			<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
 				<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
 			</svg>
-			Open source
+			Open source · MIT
 		</a>
 	</div>
 
 	<h1>Travel data,<br />for builders.</h1>
 
 	<p class="tagline">
-		Search millions of points of interest worldwide and generate intelligent
-		itineraries — with a single API key.
+		Search millions of points of interest and generate itineraries with a single API call.
+		Try it free, then plug it straight into your stack.
 	</p>
 
 	<div class="cta-row">
-		<a href="#auth" class="btn btn-primary">Get your free key</a>
-		<a href="#apis" class="btn btn-ghost">Explore the APIs</a>
-	</div>
-
-	<div class="token-pill">
-		<span class="dot"></span>
-		1 000 free trial tokens on signup
+		<a href="/login" class="btn btn-primary">Get 1 000 free tokens</a>
+		<a href="https://github.com/ulysse-mercadal/trippier-public-API" class="btn btn-ghost" target="_blank" rel="noopener noreferrer">View on GitHub →</a>
 	</div>
 </section>
 
-<!-- ── APIs ─────────────────────────────────────────────────────────────────── -->
-<section class="apis" id="apis">
-	<div class="api-card glass-card">
-		<div class="api-header">
-			<div class="api-icon">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-					<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
-					<circle cx="12" cy="10" r="3"/>
-				</svg>
-			</div>
-			<div class="api-title">
-				<h3>POI Search API</h3>
-				<p class="api-sub">Points of interest, anywhere on Earth</p>
-			</div>
-			<span class="badge">1 token / req</span>
-		</div>
-		<p class="api-desc">
-			Aggregate geo-enriched POIs from OpenStreetMap, Wikipedia, Wikivoyage
-			and GeoNames in a single call. Filter by type, search by radius,
-			polygon or district name.
-		</p>
-		<div class="endpoint-row">
-			<code>GET /pois/search?lat=48.85&amp;lng=2.35&amp;radius=2000</code>
-		</div>
-		<ul class="features">
-			<li>Multi-source aggregation with deduplication</li>
-			<li>Type weights &amp; relevance scoring [0 – 100]</li>
-			<li>Radius · polygon · district search modes</li>
-			<li>Parallel provider fetching, Redis-cached</li>
-		</ul>
-	</div>
+<!-- ── Below fold ────────────────────────────────────────────────────────────── -->
+<div class="below-fold">
 
-	<div class="api-card glass-card">
-		<div class="api-header">
-			<div class="api-icon">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-					<circle cx="6" cy="19" r="3"/>
-					<circle cx="18" cy="5" r="3"/>
-					<path d="M12 19h4.5a3.5 3.5 0 0 0 0-7h-8a3.5 3.5 0 0 1 0-7H12"/>
-				</svg>
-			</div>
-			<div class="api-title">
-				<h3>Itinerary API</h3>
-				<p class="api-sub">Smart trip planning, zero boilerplate</p>
-			</div>
-			<span class="badge badge-amber">50 tokens / req</span>
+	<!-- ── APIs ─────────────────────────────────────────────────────────────── -->
+	<section class="apis" id="apis">
+		<div class="section-intro">
+			<h2>Two APIs. Every destination.</h2>
+			<p>One key, two endpoints. Everything you need to build travel features into your product.</p>
 		</div>
-		<p class="api-desc">
-			Turn a list of POIs and constraints (days, pace, transport) into an
-			optimised day-by-day itinerary. Built on the POI Search API — tokens
-			cover the planning computation.
-		</p>
-		<div class="endpoint-row">
-			<code>POST /itinerary/generate</code>
-		</div>
-		<ul class="features">
-			<li>Day-by-day schedule generation</li>
-			<li>Configurable pace &amp; transport mode</li>
-			<li>Opening hours &amp; proximity awareness</li>
-			<li>JSON output ready for your UI</li>
-		</ul>
-	</div>
-</section>
 
-<!-- ── Token model ───────────────────────────────────────────────────────────── -->
-<section class="token-section">
-	<div class="token-card glass-card">
-		<h2>Simple token model</h2>
-		<p class="token-sub">
-			Every account starts with <strong>1 000 tokens</strong> per month, shared across all your keys.
-		</p>
-		<div class="token-table">
-			<div class="token-row header">
-				<span>Endpoint</span><span>Cost</span><span>1 000 tokens =</span>
-			</div>
-			<div class="token-row">
-				<code>GET /pois/search</code><span>1 token</span><span>1 000 searches</span>
-			</div>
-			<div class="token-row">
-				<code>POST /itinerary/generate</code><span>50 tokens</span><span>20 itineraries</span>
-			</div>
-		</div>
-	</div>
-</section>
-
-<!-- ── Open source callout ───────────────────────────────────────────────────── -->
-<section class="oss-section">
-	<div class="oss-card glass-card">
-		<div class="oss-body">
-			<div>
-				<p class="oss-title">Fully open source</p>
-				<p class="oss-desc">
-					MIT licensed. Deploy the entire stack yourself with Docker Compose,
-					or use the hosted API with free trial tokens.
+		<div class="api-grid">
+			<div class="api-card">
+				<div class="api-header">
+					<div class="api-icon">
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+							<circle cx="12" cy="10" r="3"/>
+						</svg>
+					</div>
+					<div class="api-title">
+						<h3>POI Search</h3>
+						<p class="api-sub">Find anything, anywhere on Earth</p>
+					</div>
+				</div>
+				<p class="api-desc">
+					Hotels, restaurants, museums, parks — aggregated, deduplicated and scored
+					from multiple open data sources. One call, clean results.
 				</p>
+				<div class="endpoint-row">
+					<code>GET /pois/search?lat=48.85&amp;lng=2.35&amp;radius=2000</code>
+				</div>
+				<ul class="features">
+					<li>Radius, polygon or district search modes</li>
+					<li>Relevance scores from 0 to 100</li>
+					<li>Parallel fetch + Redis cache</li>
+					<li>Full JSON, ready to display</li>
+				</ul>
 			</div>
-			<a
-				href="https://github.com/ulysse-mercadal/trippier-public-API"
-				class="btn btn-ghost"
-				target="_blank"
-				rel="noopener noreferrer"
-			>
-				View on GitHub
+
+			<div class="api-card">
+				<div class="api-header">
+					<div class="api-icon">
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<circle cx="6" cy="19" r="3"/>
+							<circle cx="18" cy="5" r="3"/>
+							<path d="M12 19h4.5a3.5 3.5 0 0 0 0-7h-8a3.5 3.5 0 0 1 0-7H12"/>
+						</svg>
+					</div>
+					<div class="api-title">
+						<h3>Itinerary</h3>
+						<p class="api-sub">Day-by-day trips, zero boilerplate</p>
+					</div>
+				</div>
+				<p class="api-desc">
+					Send a destination and constraints — days, pace, transport. Get back
+					a structured day-by-day schedule ready to render.
+				</p>
+				<div class="endpoint-row">
+					<code>POST /itinerary/generate</code>
+				</div>
+				<ul class="features">
+					<li>Configurable pace & transport mode</li>
+					<li>Opening hours & proximity aware</li>
+					<li>Powered by the POI Search API</li>
+					<li>JSON output ready for your UI</li>
+				</ul>
+			</div>
+		</div>
+	</section>
+
+	<!-- ── Try it ────────────────────────────────────────────────────────────── -->
+	<section class="try-section">
+		<div class="try-inner">
+			<div class="try-text">
+				<h2>1 000 tokens to try it.</h2>
+				<p>
+					Create a free account, get your API key in 30 seconds, and start making
+					calls right away. No credit card, no setup — just add the key to your
+					existing code.
+				</p>
+				<div class="try-snippet">
+					<span class="snippet-label">Drop it in your existing code</span>
+					<pre><code>curl "https://api.trippier.dev/pois/search?lat=48.85&lng=2.35&radius=1000" \
+  -H "X-API-Key: YOUR_KEY"</code></pre>
+				</div>
+			</div>
+			<a href="/login" class="btn btn-primary try-cta">Get your free key</a>
+		</div>
+	</section>
+
+	<!-- ── Self-host ─────────────────────────────────────────────────────────── -->
+	<section class="selfhost-section">
+		<div class="section-intro">
+			<h2>Or run it yourself.</h2>
+			<p>The full stack is open source and ships as Docker images. One command and it's running on your infra.</p>
+		</div>
+
+		<div class="selfhost-steps">
+			<div class="step">
+				<div class="step-num">01</div>
+				<h3>Clone the repo</h3>
+				<div class="step-code">
+					<code>git clone https://github.com/ulysse-mercadal/trippier-public-API</code>
+				</div>
+			</div>
+			<div class="step-arrow">→</div>
+			<div class="step">
+				<div class="step-num">02</div>
+				<h3>Pull the images</h3>
+				<div class="step-code">
+					<code>ghcr.io/ulysse-mercadal/trippier-auth-api</code>
+					<code>ghcr.io/ulysse-mercadal/trippier-poi-api</code>
+				</div>
+			</div>
+			<div class="step-arrow">→</div>
+			<div class="step">
+				<div class="step-num">03</div>
+				<h3>Start the stack</h3>
+				<div class="step-code">
+					<code>docker compose up</code>
+				</div>
+			</div>
+		</div>
+
+		<div class="selfhost-links">
+			<a href="https://github.com/ulysse-mercadal/trippier-public-API" class="btn btn-ghost" target="_blank" rel="noopener noreferrer">
+				<svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+				GitHub repo
+			</a>
+			<a href="https://github.com/ulysse-mercadal/trippier-public-API/pkgs/container/trippier-poi-api" class="btn btn-ghost" target="_blank" rel="noopener noreferrer">
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+				Docker images
 			</a>
 		</div>
-	</div>
-</section>
+	</section>
 
-<!-- ── Auth ──────────────────────────────────────────────────────────────────── -->
-<section class="auth-section" id="auth">
-	<div class="auth-card glass-card">
-		<h2>{mode === 'register' ? 'Start for free' : 'Welcome back'}</h2>
-		<p class="auth-sub">
-			{mode === 'register'
-				? '1 000 trial tokens. Create your key in 30 seconds.'
-				: 'Sign in to manage your API keys.'}
-		</p>
-
-		<div class="tabs">
-			<button class="tab" class:active={mode === 'register'} on:click={() => { mode = 'register'; error = ''; }}>Create account</button>
-			<button class="tab" class:active={mode === 'login'}    on:click={() => { mode = 'login';    error = ''; }}>Sign in</button>
+	<!-- ── Providers ─────────────────────────────────────────────────────────── -->
+	<section class="providers-section">
+		<div class="section-intro">
+			<h2>Powered by the best open data</h2>
+			<p>
+				We aggregate across multiple authoritative sources, merge duplicates, and score results —
+				always in full compliance with each provider's Terms of Service.
+			</p>
 		</div>
 
-		{#if error}  <p class="alert alert-error">{error}</p>   {/if}
-		{#if success}<p class="alert alert-success">{success}</p>{/if}
+		<div class="providers-grid">
+			<div class="provider-item">
+				<span class="provider-dot active"></span>
+				<div class="provider-text">
+					<strong>OpenStreetMap</strong>
+					<span>ODbL — open, community-maintained</span>
+				</div>
+			</div>
+			<div class="provider-item">
+				<span class="provider-dot active"></span>
+				<div class="provider-text">
+					<strong>Wikipedia</strong>
+					<span>CC BY-SA — rich landmark descriptions</span>
+				</div>
+			</div>
+			<div class="provider-item">
+				<span class="provider-dot active"></span>
+				<div class="provider-text">
+					<strong>Wikivoyage</strong>
+					<span>CC BY-SA — curated travel guides</span>
+				</div>
+			</div>
+			<div class="provider-item">
+				<span class="provider-dot active"></span>
+				<div class="provider-text">
+					<strong>GeoNames</strong>
+					<span>CC BY — geographic name database</span>
+				</div>
+			</div>
+			<div class="provider-item provider-future">
+				<span class="provider-dot"></span>
+				<div class="provider-text">
+					<strong>Google Places</strong>
+					<span>Planned — ToS integration in progress</span>
+				</div>
+			</div>
+			<div class="provider-item provider-future">
+				<span class="provider-dot"></span>
+				<div class="provider-text">
+					<strong>Foursquare</strong>
+					<span>Planned — ToS integration in progress</span>
+				</div>
+			</div>
+		</div>
 
-		<form on:submit|preventDefault={submit}>
-			<div class="field">
-				<label for="email">Email</label>
-				<input id="email" type="email" bind:value={email} placeholder="you@example.com" required autocomplete="email" />
-			</div>
-			<div class="field">
-				<label for="password">Password</label>
-				<input id="password" type="password" bind:value={password} placeholder="••••••••" required autocomplete={mode === 'login' ? 'current-password' : 'new-password'} />
-			</div>
-			<button class="btn btn-primary submit-btn" type="submit" disabled={loading}>
-				{loading ? '…' : mode === 'register' ? 'Create account & get key' : 'Sign in'}
-			</button>
-		</form>
-	</div>
-</section>
+		<p class="tos-note">
+			<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="flex-shrink:0;margin-top:1px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+			Each data source is integrated in strict compliance with its Terms of Service. Attributions are preserved and propagated in every API response.
+		</p>
+	</section>
+
+	<!-- ── Bottom CTA ────────────────────────────────────────────────────────── -->
+	<section class="bottom-cta">
+		<h2>Ready to build?</h2>
+		<p>Get 1 000 tokens to explore the API, then self-host for free with your own stack.</p>
+		<div class="cta-row">
+			<a href="/login" class="btn btn-primary">Get started — it's free</a>
+			<a href="https://github.com/ulysse-mercadal/trippier-public-API" class="btn btn-ghost" target="_blank" rel="noopener noreferrer">View on GitHub</a>
+		</div>
+	</section>
+
+</div>
 
 <style>
 	/* ── Hero ── */
 	.hero {
 		text-align: center;
-		padding: 9rem 2rem 6rem;
+		min-height: 100vh;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 6rem 2rem 5rem;
 		max-width: 760px;
 		margin: 0 auto;
 	}
@@ -250,16 +272,17 @@
 		font-weight: 600;
 		letter-spacing: 0.07em;
 		text-transform: uppercase;
-		color: var(--muted);
-		border: 1px solid var(--border);
+		color: #4b5563;
+		border: 1px solid #d1d5db;
+		background: rgba(0, 0, 0, 0.04);
 		border-radius: 999px;
 		padding: 0.3rem 0.8rem;
 	}
 
 	.pill-oss {
 		color: var(--accent);
-		border-color: rgba(16, 185, 129, 0.3);
-		background: var(--accent-glow);
+		border-color: rgba(16, 185, 129, 0.4);
+		background: rgba(16, 185, 129, 0.08);
 		transition: opacity 0.15s;
 	}
 	.pill-oss:hover { opacity: 0.8; }
@@ -269,15 +292,15 @@
 		font-weight: 800;
 		letter-spacing: -0.04em;
 		line-height: 1.05;
-		color: var(--text);
+		color: #0a0a0a;
 		margin-bottom: 1.5rem;
 	}
 
 	.tagline {
-		color: var(--muted);
+		color: #4b5563;
 		font-size: 1.1rem;
 		line-height: 1.8;
-		max-width: 480px;
+		max-width: 520px;
 		margin: 0 auto 2.75rem;
 	}
 
@@ -286,38 +309,51 @@
 		gap: 0.75rem;
 		justify-content: center;
 		flex-wrap: wrap;
-		margin-bottom: 2rem;
 	}
 
-	.token-pill {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.8rem;
+	/* ── Below fold ── */
+	.below-fold {
+		background: #0a0a0a;
+		border-top: 1px solid rgba(0,0,0,0.12);
+		position: relative;
+		z-index: 1;
+	}
+
+	.section-intro {
+		text-align: center;
+		margin-bottom: 3rem;
+	}
+	.section-intro h2 {
+		font-size: clamp(1.5rem, 3vw, 2rem);
+		font-weight: 800;
+		letter-spacing: -0.03em;
+		margin-bottom: 0.6rem;
+	}
+	.section-intro p {
+		font-size: 0.95rem;
 		color: var(--muted);
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		padding: 0.35rem 1rem;
-	}
-
-	.dot {
-		width: 7px; height: 7px;
-		border-radius: 50%;
-		background: var(--accent);
-		flex-shrink: 0;
+		max-width: 520px;
+		margin: 0 auto;
+		line-height: 1.7;
 	}
 
 	/* ── APIs ── */
 	.apis {
+		max-width: 1000px;
+		margin: 0 auto;
+		padding: 5rem 2rem 3rem;
+	}
+
+	.api-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 		gap: 1rem;
-		max-width: 960px;
-		margin: 0 auto;
-		padding: 0 2rem 2rem;
 	}
 
 	.api-card {
+		background: #111;
+		border: 1px solid #1e1e1e;
+		border-radius: 16px;
 		padding: 2rem 2.25rem;
 		display: flex;
 		flex-direction: column;
@@ -327,7 +363,6 @@
 	.api-header {
 		display: flex;
 		align-items: flex-start;
-		justify-content: space-between;
 		gap: 1rem;
 	}
 
@@ -338,42 +373,19 @@
 		width: 34px;
 		height: 34px;
 		border-radius: 8px;
-		background: var(--accent-glow);
+		background: rgba(16, 185, 129, 0.12);
 		border: 1px solid rgba(16, 185, 129, 0.2);
 		color: var(--accent);
 		flex-shrink: 0;
-		margin-top: 1px;
 	}
 
-	.api-title h3    { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.2rem; }
-	.api-sub         { font-size: 0.8rem; color: var(--muted); }
-
-	.badge {
-		background: var(--accent-glow);
-		color: var(--accent);
-		border: 1px solid rgba(16, 185, 129, 0.3);
-		border-radius: 999px;
-		padding: 0.2rem 0.7rem;
-		font-size: 0.72rem;
-		font-weight: 600;
-		white-space: nowrap;
-		flex-shrink: 0;
-	}
-	.badge-amber {
-		background: rgba(245, 158, 11, 0.1);
-		color: #f59e0b;
-		border-color: rgba(245, 158, 11, 0.3);
-	}
-
-	.api-desc {
-		font-size: 0.875rem;
-		color: var(--muted);
-		line-height: 1.7;
-	}
+	.api-title h3  { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.2rem; }
+	.api-sub       { font-size: 0.8rem; color: var(--muted); }
+	.api-desc      { font-size: 0.875rem; color: var(--muted); line-height: 1.7; }
 
 	.endpoint-row {
-		background: rgba(0, 0, 0, 0.35);
-		border: 1px solid var(--border);
+		background: rgba(0,0,0,0.4);
+		border: 1px solid #1a1a1a;
 		border-radius: var(--radius);
 		padding: 0.65rem 1rem;
 		overflow-x: auto;
@@ -397,126 +409,232 @@
 		content: '—';
 		position: absolute;
 		left: 0;
-		color: rgba(255, 255, 255, 0.15);
+		color: rgba(255,255,255,0.12);
 	}
 
-	/* ── Token model ── */
-	.token-section {
-		max-width: 700px;
-		margin: 2rem auto 0;
-		padding: 0 2rem 2rem;
+	/* ── Try it ── */
+	.try-section {
+		border-top: 1px solid #141414;
+		border-bottom: 1px solid #141414;
+		background: rgba(16, 185, 129, 0.03);
+		padding: 4rem 2rem;
 	}
 
-	.token-card {
-		padding: 2rem 2.25rem;
-		display: flex;
-		flex-direction: column;
-		gap: 1.5rem;
-	}
-
-	.token-card h2   { font-size: 1.2rem; font-weight: 700; }
-	.token-sub       { font-size: 0.875rem; color: var(--muted); line-height: 1.6; margin-top: -0.5rem; }
-
-	.token-table {
-		border: 1px solid rgba(255, 255, 255, 0.06);
-		border-radius: var(--radius);
-		overflow: hidden;
-	}
-
-	.token-row {
-		display: grid;
-		grid-template-columns: 1fr auto auto;
-		gap: 1.5rem;
-		padding: 0.8rem 1.25rem;
-		font-size: 0.85rem;
-		border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-		align-items: center;
-	}
-	.token-row:last-child { border-bottom: none; }
-	.token-row.header {
-		font-size: 0.7rem;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--muted);
-		background: rgba(0, 0, 0, 0.2);
-	}
-	.token-row code                  { color: var(--accent); }
-	.token-row span:nth-child(2)     { color: var(--text); font-weight: 600; text-align: right; }
-	.token-row span:nth-child(3)     { color: var(--muted); white-space: nowrap; text-align: right; }
-
-	/* ── OSS callout ── */
-	.oss-section {
-		max-width: 700px;
-		margin: 2rem auto 0;
-		padding: 0 2rem 2rem;
-	}
-
-	.oss-card {
-		padding: 1.75rem 2.25rem;
-	}
-
-	.oss-body {
+	.try-inner {
+		max-width: 1000px;
+		margin: 0 auto;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 2rem;
+		gap: 3rem;
 		flex-wrap: wrap;
 	}
 
-	.oss-title {
-		font-size: 0.95rem;
-		font-weight: 700;
-		color: var(--text);
-		margin-bottom: 0.35rem;
-	}
-
-	.oss-desc {
-		font-size: 0.83rem;
-		color: var(--muted);
-		line-height: 1.6;
-		max-width: 380px;
-	}
-
-	/* ── Auth ── */
-	.auth-section {
-		display: flex;
-		justify-content: center;
-		padding: 2rem 2rem 10rem;
-	}
-
-	.auth-card {
-		padding: 2.5rem;
-		width: 100%;
-		max-width: 420px;
+	.try-text {
+		flex: 1;
+		min-width: 260px;
 		display: flex;
 		flex-direction: column;
-		gap: 1.25rem;
+		gap: 1rem;
 	}
 
-	.auth-card h2 { font-size: 1.35rem; font-weight: 700; }
-	.auth-sub     { font-size: 0.85rem; color: var(--muted); line-height: 1.5; margin-top: -0.5rem; }
-
-	.tabs {
-		display: flex;
-		background: rgba(0, 0, 0, 0.3);
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		padding: 3px;
+	.try-text h2 {
+		font-size: clamp(1.4rem, 2.5vw, 1.9rem);
+		font-weight: 800;
+		letter-spacing: -0.03em;
 	}
 
-	.tab {
-		flex: 1;
-		background: none;
-		border: none;
-		border-radius: calc(var(--radius) - 2px);
+	.try-text > p {
+		font-size: 0.9rem;
 		color: var(--muted);
-		font-size: 0.85rem;
-		font-weight: 500;
-		padding: 0.4rem 0;
-		cursor: pointer;
-		transition: background 0.15s, color 0.15s;
+		line-height: 1.7;
+		max-width: 480px;
 	}
-	.tab.active { background: rgba(255, 255, 255, 0.06); color: var(--text); }
 
-	.submit-btn { width: 100%; justify-content: center; padding: 0.7rem; }
+	.try-snippet {
+		background: #0d0d0d;
+		border: 1px solid #1e1e1e;
+		border-radius: 10px;
+		overflow: hidden;
+	}
+
+	.snippet-label {
+		display: block;
+		font-size: 0.72rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--muted);
+		padding: 0.5rem 1rem;
+		border-bottom: 1px solid #1a1a1a;
+	}
+
+	.try-snippet pre {
+		padding: 0.875rem 1rem;
+		overflow-x: auto;
+	}
+
+	.try-snippet code {
+		font-size: 0.78rem;
+		color: #e5e5e5;
+		line-height: 1.7;
+	}
+
+	.try-cta { white-space: nowrap; flex-shrink: 0; }
+
+	/* ── Self-host ── */
+	.selfhost-section {
+		max-width: 1000px;
+		margin: 0 auto;
+		padding: 4rem 2rem;
+	}
+
+	.selfhost-steps {
+		display: flex;
+		align-items: flex-start;
+		gap: 0;
+		flex-wrap: wrap;
+		margin-bottom: 2rem;
+	}
+
+	.step {
+		flex: 1;
+		min-width: 180px;
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+
+	.step-num {
+		font-size: 0.65rem;
+		font-weight: 800;
+		letter-spacing: 0.12em;
+		color: var(--accent);
+		text-transform: uppercase;
+	}
+
+	.step h3 {
+		font-size: 0.95rem;
+		font-weight: 700;
+	}
+
+	.step-code {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+
+	.step-code code {
+		font-size: 0.75rem;
+		color: var(--muted);
+		background: #111;
+		border: 1px solid #1e1e1e;
+		border-radius: 6px;
+		padding: 0.4rem 0.7rem;
+		display: block;
+		overflow-x: auto;
+	}
+
+	.step-arrow {
+		color: #333;
+		font-size: 1.4rem;
+		padding: 1.8rem 1.5rem 0;
+		flex-shrink: 0;
+	}
+
+	.selfhost-links {
+		display: flex;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	/* ── Providers ── */
+	.providers-section {
+		max-width: 1000px;
+		margin: 0 auto;
+		padding: 1rem 2rem 4rem;
+		border-top: 1px solid #141414;
+	}
+
+	.providers-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+		gap: 1px;
+		background: #161616;
+		border: 1px solid #161616;
+		border-radius: 12px;
+		overflow: hidden;
+		margin-bottom: 1.25rem;
+	}
+
+	.provider-item {
+		display: flex;
+		align-items: center;
+		gap: 0.875rem;
+		background: #0a0a0a;
+		padding: 1.1rem 1.25rem;
+	}
+
+	.provider-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: #2a2a2a;
+		border: 1px solid #333;
+		flex-shrink: 0;
+	}
+
+	.provider-dot.active {
+		background: var(--accent);
+		border-color: var(--accent);
+		box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
+	}
+
+	.provider-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+
+	.provider-text strong { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+	.provider-text span   { font-size: 0.73rem; color: var(--muted); }
+	.provider-future      { opacity: 0.45; }
+
+	.tos-note {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
+		font-size: 0.75rem;
+		color: var(--muted);
+		line-height: 1.5;
+	}
+
+	/* ── Bottom CTA ── */
+	.bottom-cta {
+		text-align: center;
+		padding: 5rem 2rem 8rem;
+		max-width: 600px;
+		margin: 0 auto;
+	}
+
+	.bottom-cta h2 {
+		font-size: clamp(1.6rem, 3vw, 2.2rem);
+		font-weight: 800;
+		letter-spacing: -0.03em;
+		margin-bottom: 0.75rem;
+	}
+
+	.bottom-cta p {
+		font-size: 1rem;
+		color: var(--muted);
+		margin-bottom: 2rem;
+		line-height: 1.6;
+	}
+
+	@media (max-width: 640px) {
+		.try-inner  { flex-direction: column; }
+		.try-cta    { width: 100%; justify-content: center; }
+		.selfhost-steps { flex-direction: column; gap: 2rem; }
+		.step-arrow { display: none; }
+	}
 </style>
