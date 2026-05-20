@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -49,13 +48,29 @@ class Preferences(BaseModel):
     end_time: str = Field(default="21:00", pattern=r"^\d{2}:\d{2}$")
 
 
+class PoiQuery(BaseModel):
+    """Validated query forwarded to poi-api /pois/search — mirrors poi-api SearchQuery."""
+
+    mode: str = Field(default="radius", pattern="^(radius|polygon|district)$")
+    lat: float | None = None
+    lng: float | None = None
+    radius: int | None = Field(default=None, ge=0, le=50_000)
+    polygon: str | None = None
+    district: str | None = None
+    types: list[PoiType] | None = None
+    lang: str | None = None
+    limit: int | None = Field(default=None, ge=1, le=400)
+    offset: int | None = Field(default=None, ge=0)
+    min_score: float | None = None
+
+
 class ItineraryRequest(BaseModel):
     """Request body for POST /itinerary/generate."""
 
     pois: list[Poi] | None = None
-    poi_query: dict[str, Any] | None = Field(
+    poi_query: PoiQuery | None = Field(
         default=None,
-        description="Pass-through query forwarded to poi-api if pois is not provided.",
+        description="Typed query forwarded to poi-api if pois is not provided.",
     )
     days: int = Field(default=1, ge=1, le=30)
     start_location: Coordinates | None = None
