@@ -2,7 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { t } from '$lib/i18n';
 
-	const CURL_CMD = `curl https://api.trippier.dev/itinerary/generate \\
+	const CURL_CMD = `curl https://api.poi.trippier.dev/itinerary/generate \\
   -H "X-API-Key: tk_demo_a3f9…" \\
   -d '{"days":1,"poi_query":{"lat":40.7549,"lng":-73.9840,"radius":5000},"preferences":{"pace":"moderate","start_time":"09:00"}}'`;
 

@@ -18,7 +18,7 @@ export function sampleValue(p: Param): string {
 }
 
 // Builds a curl snippet for a route
-export function buildCurl(route: DocPage, baseURL = 'https://api.trippier.dev'): string {
+export function buildCurl(route: DocPage, baseURL = 'https://api.poi.trippier.dev'): string {
 	const query = (route.params ?? [])
 		.filter(p => p.in !== 'path' && ['lat','lng','radius'].includes(p.name))
 		.map(p => `${p.name}=${sampleValue(p)}`)
@@ -35,16 +35,16 @@ export function buildCurl(route: DocPage, baseURL = 'https://api.trippier.dev'):
 export function buildJs(route: DocPage): string {
 	const path = route.path ?? '';
 	if (route.method === 'GET') {
-		return `const res = await fetch(\n  'https://api.trippier.dev${path}?lat=45.76&lng=4.83&radius=1500',\n  { headers: { 'X-API-Key': process.env.TRIPPIER_API_KEY } }\n);\nconst data = await res.json();`;
+		return `const res = await fetch(\n  'https://api.poi.trippier.dev${path}?lat=45.76&lng=4.83&radius=1500',\n  { headers: { 'X-API-Key': process.env.TRIPPIER_API_KEY } }\n);\nconst data = await res.json();`;
 	}
-	return `const res = await fetch('https://api.trippier.dev${path}', {\n  method: 'POST',\n  headers: {\n    'X-API-Key': process.env.TRIPPIER_API_KEY,\n    'Content-Type': 'application/json',\n  },\n  body: JSON.stringify(${route.body ?? '{}'}),\n});\nconst data = await res.json();`;
+	return `const res = await fetch('https://api.poi.trippier.dev${path}', {\n  method: 'POST',\n  headers: {\n    'X-API-Key': process.env.TRIPPIER_API_KEY,\n    'Content-Type': 'application/json',\n  },\n  body: JSON.stringify(${route.body ?? '{}'}),\n});\nconst data = await res.json();`;
 }
 
 // Builds a Python requests snippet for a route
 export function buildPy(route: DocPage): string {
 	const path = route.path ?? '';
 	if (route.method === 'GET') {
-		return `import requests, os\n\nres = requests.get(\n    "https://api.trippier.dev${path}",\n    params={"lat": 45.76, "lng": 4.83, "radius": 1500},\n    headers={"X-API-Key": os.environ["TRIPPIER_API_KEY"]},\n)\ndata = res.json()`;
+		return `import requests, os\n\nres = requests.get(\n    "https://api.poi.trippier.dev${path}",\n    params={"lat": 45.76, "lng": 4.83, "radius": 1500},\n    headers={"X-API-Key": os.environ["TRIPPIER_API_KEY"]},\n)\ndata = res.json()`;
 	}
-	return `import requests, os\n\nres = requests.post(\n    "https://api.trippier.dev${path}",\n    json=${route.body ?? '{}'},\n    headers={\n        "X-API-Key": os.environ["TRIPPIER_API_KEY"],\n        "Content-Type": "application/json",\n    },\n)\ndata = res.json()`;
+	return `import requests, os\n\nres = requests.post(\n    "https://api.poi.trippier.dev${path}",\n    json=${route.body ?? '{}'},\n    headers={\n        "X-API-Key": os.environ["TRIPPIER_API_KEY"],\n        "Content-Type": "application/json",\n    },\n)\ndata = res.json()`;
 }

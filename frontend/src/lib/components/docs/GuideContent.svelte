@@ -3,12 +3,12 @@
 
 	export let pageId: string;
 
-	const CURL_HEALTH    = `curl https://api.trippier.dev/health`;
-	const CURL_AUTH      = `curl "https://api.trippier.dev/pois/search?lat=45.76&lng=4.83&radius=1500" \\\n  -H "X-API-Key: YOUR_API_KEY"`;
+	const CURL_HEALTH    = `curl https://api.poi.trippier.dev/health`;
+	const CURL_AUTH      = `curl "https://api.poi.trippier.dev/pois/search?lat=45.76&lng=4.83&radius=1500" \\\n  -H "X-API-Key: YOUR_API_KEY"`;
 	const HTTP_AUTH      = `X-API-Key: YOUR_API_KEY`;
 	const JSON_ERROR     = `{\n  "error": "invalid query: lat and lng are required for mode=radius"\n}`;
 	const HTTP_RATELIMIT = `X-RateLimit-Limit:     60\nX-RateLimit-Remaining: 47\nX-RateLimit-Reset:     1716381234\nRetry-After:           12`;
-	const CURL_BYOK      = `curl "https://api.trippier.dev/pois/events?lat=45.76&lng=4.83" \\\n  -H "X-API-Key: YOUR_API_KEY" \\\n  -H "X-Ticketmaster-Key: YOUR_TM_KEY" \\\n  -H "X-Eventbrite-Token: YOUR_EB_TOKEN"`;
+	const CURL_BYOK      = `curl "https://api.poi.trippier.dev/pois/events?lat=45.76&lng=4.83" \\\n  -H "X-API-Key: YOUR_API_KEY" \\\n  -H "X-Ticketmaster-Key: YOUR_TM_KEY" \\\n  -H "X-Eventbrite-Token: YOUR_EB_TOKEN"`;
 </script>
 
 {#if pageId === 'quickstart'}

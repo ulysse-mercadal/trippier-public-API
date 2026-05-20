@@ -12,7 +12,7 @@
 	let copied     = false;
 
 	let apiKey  = browser ? (localStorage.getItem('docs_api_key')  ?? '') : '';
-	let baseUrl = browser ? (localStorage.getItem('docs_base_url') ?? 'https://api.trippier.dev') : 'https://api.trippier.dev';
+	let baseUrl = browser ? (localStorage.getItem('docs_base_url') ?? 'https://api.poi.trippier.dev') : 'https://api.poi.trippier.dev';
 
 	let responseBody: string | null = null;
 	let responseStatus: number | null = null;
@@ -93,7 +93,7 @@
 					type="text"
 					bind:value={baseUrl}
 					on:blur={saveSettings}
-					placeholder="https://api.trippier.dev"
+					placeholder="https://api.poi.trippier.dev"
 					spellcheck="false"
 				/>
 			</label>
