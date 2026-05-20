@@ -136,8 +136,8 @@ func TestSendOTPCode_BodyContainsSubject(t *testing.T) {
 	}
 
 	body := srv.captured()
-	if !strings.Contains(body, "verification code") {
-		t.Errorf("email body should contain 'verification code'\nbody:\n%s", body)
+	if !strings.Contains(body, "usage unique") {
+		t.Errorf("email body should contain OTP section marker\nbody:\n%s", body)
 	}
 }
 

@@ -86,7 +86,7 @@ func NewWithURL(baseURL string) *Provider {
 
 // Name implements providers.Provider.
 func (p *Provider) Name() types.Provider { return types.ProviderEventbrite }
-func (p *Provider) IsByok() bool          { return true }
+func (p *Provider) IsByok() bool         { return true }
 
 // SupportsMode implements providers.Provider.
 func (p *Provider) SupportsMode(mode types.SearchMode) bool {
