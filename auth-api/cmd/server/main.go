@@ -48,7 +48,7 @@ func main() {
 	rdb := redis.NewClient(opt)
 	defer rdb.Close() //nolint:errcheck
 
-	emailer := email.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom)
+	emailer := email.New(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPFrom, cfg.SMTPUser, cfg.SMTPPass)
 
 	authSvc := auth.New(pool, emailer, cfg.JWTSecret, cfg.AppURL)
 	authHandler := auth.NewHandler(authSvc, cfg.AppURL)

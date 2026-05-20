@@ -18,6 +18,8 @@ type Config struct {
 	SMTPHost              string
 	SMTPPort              int
 	SMTPFrom              string
+	SMTPUser              string
+	SMTPPass              string
 	AppURL                string
 	DefaultTokensLimit    int
 	DefaultResetIntervalS int
@@ -54,6 +56,8 @@ func Load() (*Config, error) {
 		SMTPHost:              v.GetString("SMTP_HOST"),
 		SMTPPort:              v.GetInt("SMTP_PORT"),
 		SMTPFrom:              v.GetString("SMTP_FROM"),
+		SMTPUser:              v.GetString("SMTP_USER"),
+		SMTPPass:              v.GetString("SMTP_PASS"),
 		AppURL:                v.GetString("APP_URL"),
 		DefaultTokensLimit:    v.GetInt("DEFAULT_TOKENS_LIMIT"),
 		DefaultResetIntervalS: v.GetInt("DEFAULT_RESET_INTERVAL_S"),

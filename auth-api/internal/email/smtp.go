@@ -14,11 +14,13 @@ type Sender struct {
 	host string
 	port int
 	from string
+	user string
+	pass string
 }
 
-// New creates a Sender.
-func New(host string, port int, from string) *Sender {
-	return &Sender{host: host, port: port, from: from}
+// New creates a Sender. When user and pass are non-empty, SMTP PlainAuth is used (e.g. Resend on port 587).
+func New(host string, port int, from, user, pass string) *Sender {
+	return &Sender{host: host, port: port, from: from, user: user, pass: pass}
 }
 
 var otpTmpl = template.Must(template.New("otp").Parse(`<!DOCTYPE html>
@@ -354,9 +356,14 @@ func (s *Sender) sendHTML(to, subject, html string) error {
 		s.from, to, subject, html,
 	)
 
+	var auth smtp.Auth
+	if s.user != "" && s.pass != "" {
+		auth = smtp.PlainAuth("", s.user, s.pass, s.host)
+	}
+
 	done := make(chan error, 1)
 	go func() {
-		done <- smtp.SendMail(addr, nil, s.from, []string{to}, []byte(msg))
+		done <- smtp.SendMail(addr, auth, s.from, []string{to}, []byte(msg))
 	}()
 
 	select {

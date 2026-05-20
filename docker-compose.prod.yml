@@ -66,6 +66,8 @@ services:
       AUTH_INTERNAL_SECRET: ${INTERNAL_SECRET}
       AUTH_SMTP_HOST: ${SMTP_HOST:-mailhog}
       AUTH_SMTP_PORT: ${SMTP_PORT:-1025}
+      AUTH_SMTP_USER: ${SMTP_USER:-}
+      AUTH_SMTP_PASS: ${SMTP_PASS:-}
       AUTH_APP_URL: https://${DOMAIN}
     depends_on:
       postgres:
