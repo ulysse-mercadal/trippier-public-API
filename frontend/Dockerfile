@@ -8,6 +8,7 @@ RUN bunx svelte-kit sync && bun run build
 FROM oven/bun:1-alpine
 WORKDIR /app
 COPY --from=builder /app/build ./build
+COPY --from=builder /app/data ./data
 COPY --from=builder /app/package.json ./
 RUN bun install --production --frozen-lockfile
 ENV NODE_ENV=production
