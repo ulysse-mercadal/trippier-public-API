@@ -9,25 +9,35 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// IPRateLimit limits requests per remote IP using a sliding window counter in Redis.
-// limit: max requests allowed in the window.
-// window: duration of the window.
+// incrScript atomically increments a counter and sets its TTL on first creation.
+// Using a Lua script ensures INCR + EXPIRE are executed as a single atomic operation,
+// preventing a race where the key expires before EXPIRE is called.
+var incrScript = redis.NewScript(`
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return count
+`)
+
+// IPRateLimit limits requests per remote IP using an atomic sliding window counter in Redis.
+// On Redis failure the request is rejected with 503 to prevent unlimited access.
 func IPRateLimit(rdb *redis.Client, limit int, window time.Duration) gin.HandlerFunc {
+	windowSecs := int(window.Seconds())
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 		key := fmt.Sprintf("rl:ip:%s:%s", c.FullPath(), ip)
 		ctx := c.Request.Context()
 
-		count, err := rdb.Incr(ctx, key).Result()
+		res, err := incrScript.Run(ctx, rdb, []string{key}, windowSecs).Int64()
 		if err != nil {
-			c.Next()
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{
+				"error": "rate-limit service unavailable",
+			})
 			return
 		}
-		if count == 1 {
-			rdb.Expire(ctx, key, window) //nolint:errcheck
-		}
 
-		if count > int64(limit) {
+		if res > int64(limit) {
 			ttl, _ := rdb.TTL(ctx, key).Result()
 			c.Header("Retry-After", fmt.Sprintf("%d", int(ttl.Seconds())))
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{

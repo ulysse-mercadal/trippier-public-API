@@ -70,7 +70,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 headers={"X-Internal-Auth": _build_internal_auth(self._internal_secret)},
             )
             data = resp.json()
-        except Exception:
+        except (httpx.RequestError, httpx.HTTPStatusError, ValueError):
             return JSONResponse({"error": "rate-limit check failed"}, status_code=503)
 
         if not data.get("allowed"):
