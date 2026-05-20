@@ -1,25 +1,18 @@
 import { env } from '$env/dynamic/private';
-import { buildInternalAuth } from '$lib/server/internal-auth';
 import { json } from '@sveltejs/kit';
+import { proxyToService } from '$lib/server/proxy';
 import type { RequestHandler } from './$types';
 
+const ALLOWED_SUBPATHS = new Set(['search', 'search/slim', 'events', 'events/slim', 'providers']);
+
 export const GET: RequestHandler = async ({ url }) => {
-	const base = env.FRONTEND_POI_API_URL;
-	if (!base) return json({ error: 'FRONTEND_POI_API_URL not configured' }, { status: 503 });
-
-	const upstream = new URL(`${base}/pois/search`);
-	upstream.search = url.search;
-
-	try {
-		const res = await fetch(upstream.toString(), {
-			headers: { 'X-Internal-Auth': buildInternalAuth(env.INTERNAL_SECRET ?? '') },
-		});
-		const body = await res.text();
-		return new Response(body, {
-			status: res.status,
-			headers: { 'content-type': res.headers.get('content-type') ?? 'application/json' },
-		});
-	} catch {
-		return json({ error: 'poi-api unreachable' }, { status: 503 });
+	const subpath = url.searchParams.get('subpath') ?? 'search';
+	if (!ALLOWED_SUBPATHS.has(subpath)) {
+		return json({ error: 'invalid subpath' }, { status: 400 });
 	}
+
+	const qs = new URLSearchParams(url.searchParams);
+	qs.delete('subpath');
+
+	return proxyToService(env.FRONTEND_POI_API_URL, `/pois/${subpath}?${qs}`);
 };
