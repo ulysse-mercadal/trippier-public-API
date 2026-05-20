@@ -35,6 +35,7 @@ var AllEventProviders = []Provider{
 type ProviderStatus struct {
 	Name      Provider `json:"name"`
 	Available bool     `json:"available"`
-	LatencyMs int64    `json:"latency_ms,omitempty"`
+	LatencyMs int64    `json:"latency_ms"`
+	Byok      bool     `json:"byok,omitempty"`
 	Error     string   `json:"error,omitempty"`
 }

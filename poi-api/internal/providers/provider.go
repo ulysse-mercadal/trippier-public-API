@@ -36,3 +36,8 @@ type Provider interface {
 type Pingable interface {
 	Ping(ctx context.Context) error
 }
+
+// ByokProvider is an optional interface for providers that require a user-supplied key.
+type ByokProvider interface {
+	IsByok() bool
+}

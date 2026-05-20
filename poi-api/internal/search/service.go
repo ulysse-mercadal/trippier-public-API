@@ -73,7 +73,8 @@ func (s *Service) ProvidersStatus(ctx context.Context) []types.ProviderStatus {
 			} else {
 				_, err = p.Search(tctx, probe)
 			}
-			st := types.ProviderStatus{Name: name, Available: err == nil, LatencyMs: time.Since(start).Milliseconds()}
+			_, isByok := p.(providers.ByokProvider)
+			st := types.ProviderStatus{Name: name, Available: err == nil, LatencyMs: time.Since(start).Milliseconds(), Byok: isByok}
 			if err != nil {
 				st.Error = err.Error()
 			}

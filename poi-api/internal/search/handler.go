@@ -34,24 +34,23 @@ func (h *Handler) RegisterEventRoutes(rg *gin.RouterGroup) {
 	rg.GET("/slim", h.eventsSlim)
 }
 
-// search returns merged, scored, paginated POIs for a given location or district.
-// Supports mode=radius (lat/lng/radius), mode=polygon, mode=district (name geocoded via Nominatim).
-// Optional types filter and weights map control what categories are returned and how they rank.
-func (h *Handler) search(c *gin.Context) {
+// parseQuery binds query params, parses weights, applies defaults, and validates.
+// Returns false and writes the error response if validation fails.
+func parseQuery(c *gin.Context) (types.SearchQuery, bool) {
 	var q types.SearchQuery
 	if err := c.ShouldBindQuery(&q); err != nil {
 		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
-		return
+		return q, false
 	}
 
 	weights, err := ParseWeights(c.Query("weights"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
-		return
+		return q, false
 	}
 	if len(weights) > 0 && len(q.Types) > 0 {
 		c.JSON(http.StatusBadRequest, errorResponse{Error: "types and weights are mutually exclusive: use types to filter, or weights to reorder"})
-		return
+		return q, false
 	}
 	q.Weights = weights
 
@@ -59,39 +58,38 @@ func (h *Handler) search(c *gin.Context) {
 
 	if err := Validate(q); err != nil {
 		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
+		return q, false
+	}
+	return q, true
+}
+
+// search returns merged, scored, paginated POIs for a given location or district.
+// Supports mode=radius (lat/lng/radius), mode=polygon, mode=district (name geocoded via Nominatim).
+// Optional types filter and weights map control what categories are returned and how they rank.
+func (h *Handler) search(c *gin.Context) {
+	q, ok := parseQuery(c)
+	if !ok {
 		return
 	}
-
 	result, err := h.service.Search(c.Request.Context(), q)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorResponse{Error: "internal server error"})
 		return
 	}
-
 	c.JSON(http.StatusOK, result)
 }
 
 // searchSlim returns a lightweight projection (name, type, coords) suitable for map rendering.
 func (h *Handler) searchSlim(c *gin.Context) {
-	var q types.SearchQuery
-	if err := c.ShouldBindQuery(&q); err != nil {
-		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
+	q, ok := parseQuery(c)
+	if !ok {
 		return
 	}
-
-	applyQueryDefaults(&q)
-
-	if err := Validate(q); err != nil {
-		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
-		return
-	}
-
 	result, err := h.service.Search(c.Request.Context(), q)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorResponse{Error: "internal server error"})
 		return
 	}
-
 	slim := make([]types.SlimPoi, len(result.Results))
 	for i, p := range result.Results {
 		slim[i] = types.SlimPoi{Name: p.Name, Type: p.Type, Coords: p.Coords}
@@ -103,50 +101,30 @@ func (h *Handler) searchSlim(c *gin.Context) {
 // Supports mode=radius and mode=district; filters to Wikidata class Q132241 (festival).
 // Optional BYOK headers X-Ticketmaster-Key and X-Eventbrite-Token activate those providers.
 func (h *Handler) events(c *gin.Context) {
-	var q types.SearchQuery
-	if err := c.ShouldBindQuery(&q); err != nil {
-		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
+	q, ok := parseQuery(c)
+	if !ok {
 		return
 	}
-
-	applyQueryDefaults(&q)
-
-	if err := Validate(q); err != nil {
-		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
-		return
-	}
-
 	result, err := h.service.SearchEvents(byokContext(c), q)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorResponse{Error: "internal server error"})
 		return
 	}
-
 	c.JSON(http.StatusOK, result)
 }
 
 // eventsSlim returns a lightweight projection (name, coords, dates, recurring) of events.
 // Optional BYOK headers X-Ticketmaster-Key and X-Eventbrite-Token activate those providers.
 func (h *Handler) eventsSlim(c *gin.Context) {
-	var q types.SearchQuery
-	if err := c.ShouldBindQuery(&q); err != nil {
-		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
+	q, ok := parseQuery(c)
+	if !ok {
 		return
 	}
-
-	applyQueryDefaults(&q)
-
-	if err := Validate(q); err != nil {
-		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
-		return
-	}
-
 	result, err := h.service.SearchEvents(byokContext(c), q)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorResponse{Error: "internal server error"})
 		return
 	}
-
 	slim := make([]types.SlimEvent, len(result.Results))
 	for i, e := range result.Results {
 		slim[i] = types.SlimEvent{
