@@ -6,7 +6,7 @@ const proxy: RequestHandler = async ({ request, params }) => {
 	upstream.search = new URL(request.url).search; // forward query string (?token=… etc.)
 
 	const headers = new Headers();
-	for (const name of ['content-type', 'authorization', 'cookie', 'accept', 'accept-language']) {
+	for (const name of ['content-type', 'authorization', 'accept', 'accept-language']) {
 		const value = request.headers.get(name);
 		if (value) headers.set(name, value);
 	}
