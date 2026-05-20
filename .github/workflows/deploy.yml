@@ -22,7 +22,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: docker-compose.prod.yml
-          target: /opt/trippier
+          target: ~/trippier
 
       - name: Bootstrap and deploy
         uses: appleboy/ssh-action@v1.2.0
@@ -42,7 +42,7 @@ jobs:
               systemctl enable --now docker
             fi
 
-            cd /opt/trippier
+            cd ~/trippier
 
             # Write .env from secret (idempotent)
             echo "$DEPLOY_ENV" > .env
