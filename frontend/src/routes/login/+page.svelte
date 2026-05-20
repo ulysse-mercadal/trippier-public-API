@@ -1,44 +1,52 @@
+<svelte:head>
+	<title>trippier/api — Connexion</title>
+</svelte:head>
+
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { auth } from '$lib/stores/auth';
 	import { register, login, verifyCode, getMe, ApiError } from '$lib/api';
-	import TopoCanvas from '$lib/components/TopoCanvas.svelte';
+	import { t, initLocale } from '$lib/i18n';
+	import TopoBackground from '$lib/components/TopoBackground.svelte';
 
 	type Stage = 'form' | 'otp';
 	type Mode  = 'login' | 'register';
 
-	let mode: Mode   = 'register';
+	let mode: Mode   = 'login';
 	let stage: Stage = 'form';
 	let email        = '';
 	let password     = '';
+	let confirm      = '';
 	let error        = '';
 	let loading      = false;
 
-	// OTP — 6 individual digit boxes
-	let digits: string[] = Array(6).fill('');
+	let digits: string[]          = Array(6).fill('');
 	let digitEls: HTMLInputElement[] = [];
 
 	onMount(async () => {
+		initLocale();
 		const stored = auth.getStoredToken();
 		if (!stored) return;
 		try {
 			const user = await getMe(stored);
 			auth.init(stored, user);
 			goto('/dashboard');
-		} catch {
-			// token expired — stay on login
-		}
+		} catch {}
 	});
 
 	async function submitForm() {
-		error   = '';
+		error = '';
+		if (mode === 'register' && password !== confirm) {
+			error = $t('login_no_match');
+			return;
+		}
 		loading = true;
 		try {
 			if (mode === 'register') {
 				await register(email, password);
-				stage = 'otp';
+				stage  = 'otp';
 				digits = Array(6).fill('');
 				setTimeout(() => digitEls[0]?.focus(), 50);
 			} else {
@@ -49,16 +57,16 @@
 				goto('/dashboard');
 			}
 		} catch (e) {
-			error = e instanceof ApiError ? e.message : 'Something went wrong';
+			error = e instanceof ApiError ? e.message : $t('login_error_generic');
 		} finally {
 			loading = false;
 		}
 	}
 
 	async function submitOTP() {
-		error   = '';
+		error = '';
 		const code = digits.join('');
-		if (code.length !== 6) { error = 'Enter all 6 digits'; return; }
+		if (code.length !== 6) { error = 'Entrez les 6 chiffres'; return; }
 		loading = true;
 		try {
 			const token = await verifyCode(email, code);
@@ -67,7 +75,7 @@
 			auth.storeToken(token);
 			goto('/dashboard');
 		} catch (e) {
-			error = e instanceof ApiError ? e.message : 'Something went wrong';
+			error  = e instanceof ApiError ? e.message : $t('login_invalid_code');
 			digits = Array(6).fill('');
 			setTimeout(() => digitEls[0]?.focus(), 50);
 		} finally {
@@ -75,17 +83,16 @@
 		}
 	}
 
-	function handleDigitInput(e: Event, i: number) {
-		const input = e.target as HTMLInputElement;
-		const val   = input.value.replace(/\D/g, '').slice(-1);
-		digits[i]   = val;
-		if (val && i < 5) digitEls[i + 1]?.focus();
+	function handleDigitInput(i: number) {
+		digits[i] = digits[i].replace(/\D/g, '').slice(-1);
+		if (digits[i] && i < 5) digitEls[i + 1]?.focus();
 	}
 
 	function handleDigitKeydown(e: KeyboardEvent, i: number) {
-		if (e.key === 'Backspace' && !digits[i] && i > 0) {
-			digits[i - 1] = '';
-			digitEls[i - 1]?.focus();
+		if (e.key === 'Backspace') {
+			if (digits[i]) { digits[i] = ''; }
+			else if (i > 0) { digits[i - 1] = ''; digitEls[i - 1]?.focus(); }
+			e.preventDefault();
 		}
 		if (e.key === 'ArrowLeft'  && i > 0) digitEls[i - 1]?.focus();
 		if (e.key === 'ArrowRight' && i < 5) digitEls[i + 1]?.focus();
@@ -95,260 +102,319 @@
 		e.preventDefault();
 		const pasted = (e.clipboardData?.getData('text') ?? '').replace(/\D/g, '').slice(0, 6);
 		digits = [...pasted.split(''), ...Array(6).fill('')].slice(0, 6);
-		const next = Math.min(pasted.length, 5);
-		digitEls[next]?.focus();
+		digitEls[Math.min(pasted.length, 5)]?.focus();
 	}
 
 	function switchMode(m: Mode) {
-		mode  = m;
-		error = '';
+		mode    = m;
+		error   = '';
+		confirm = '';
 		if (stage === 'otp') stage = 'form';
 	}
 </script>
 
-<svelte:head>
-	<title>Sign in · Trippier API</title>
-</svelte:head>
+<div class="lp">
+	{#if browser}<TopoBackground density={28} opacity={0.24} color="#34d39c" />{/if}
 
-<div class="split">
-	<!-- ── Left panel: form ── -->
-	<div class="left">
-		<a href="/" class="logo">tripp<em>ier</em></a>
+	<div class="lp-top">
+		<a href="/" class="lp-logo">
+			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+				<path d="M4 18c4-8 12-8 16 0"/>
+				<path d="M6 14c3-5 9-5 12 0" opacity="0.6"/>
+				<circle cx="12" cy="20" r="1.2" fill="currentColor"/>
+			</svg>
+			trippier<span class="lp-sep">/</span>api
+		</a>
+	</div>
 
-		<div class="form-wrap">
+	<div class="lp-center">
+		<div class="lp-card">
 			{#if stage === 'form'}
-				<div class="tabs">
-					<button class="tab" class:active={mode === 'register'} on:click={() => switchMode('register')}>Create account</button>
-					<button class="tab" class:active={mode === 'login'}    on:click={() => switchMode('login')}>Sign in</button>
+				<div class="lp-tabs">
+					<button class="lp-tab" class:active={mode === 'login'}    on:click={() => switchMode('login')}>{$t('login_tab_login')}</button>
+					<button class="lp-tab" class:active={mode === 'register'} on:click={() => switchMode('register')}>{$t('login_tab_register')}</button>
 				</div>
 
-				<div class="form-head">
-					<h1>{mode === 'register' ? 'Start for free' : 'Welcome back'}</h1>
-					<p class="form-sub">
-						{mode === 'register'
-							? '1 000 free tokens. Your API key in 30 seconds.'
-							: 'Sign in to manage your API keys.'}
+				<div class="lp-head">
+					<h1>{mode === 'login' ? $t('login_title_login') : $t('login_title_register')}</h1>
+					<p class="lp-sub">
+						{mode === 'login' ? $t('login_sub_login') : $t('login_sub_register')}
 					</p>
 				</div>
 
-				{#if error}<p class="alert alert-error">{error}</p>{/if}
+				{#if error}<p class="lp-error">{error}</p>{/if}
 
-				<form on:submit|preventDefault={submitForm}>
-					<div class="field">
-						<label for="email">Email</label>
-						<input id="email" type="email" bind:value={email} placeholder="you@example.com" required autocomplete="email" />
-					</div>
-					<div class="field">
-						<label for="password">Password</label>
-						<input id="password" type="password" bind:value={password} placeholder="••••••••" required autocomplete={mode === 'login' ? 'current-password' : 'new-password'} />
-					</div>
-					<button class="btn btn-primary submit-btn" type="submit" disabled={loading}>
-						{#if loading}…{:else if mode === 'register'}Create account & get key{:else}Sign in{/if}
+				<form on:submit|preventDefault={submitForm} class="lp-form">
+					<label class="lp-field">
+						<span>{$t('login_email')}</span>
+						<input type="email" bind:value={email} placeholder="you@example.com" required autocomplete="email" />
+					</label>
+					<label class="lp-field">
+						<span>{$t('login_password')}</span>
+						<input type="password" bind:value={password} placeholder="••••••••" required autocomplete={mode === 'login' ? 'current-password' : 'new-password'} />
+					</label>
+					{#if mode === 'register'}
+						<label class="lp-field">
+							<span>{$t('login_confirm')}</span>
+							<input type="password" bind:value={confirm} placeholder="••••••••" required autocomplete="new-password" />
+						</label>
+					{/if}
+					<button class="lp-submit" type="submit" disabled={loading}>
+						{#if loading}…{:else if mode === 'register'}{$t('login_submit_register')}{:else}{$t('login_submit_login')}{/if}
 					</button>
 				</form>
 
 			{:else}
-				<!-- OTP stage -->
-				<button class="btn-link" on:click={() => { stage = 'form'; error = ''; }}>← Back</button>
+				<button class="lp-back" on:click={() => { stage = 'form'; error = ''; }}>
+					<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+					{$t('login_otp_back')}
+				</button>
 
-				<div class="form-head">
-					<h1>Check your inbox</h1>
-					<p class="form-sub">
-						We sent a 6-digit code to <strong>{email}</strong>. Enter it below — the code expires in 15 minutes.
-					</p>
+				<div class="lp-head">
+					<h1>{$t('login_otp_title')}</h1>
+					<p class="lp-sub">{$t('login_otp_sub')} <strong>{email}</strong>. {$t('login_otp_expires')}</p>
 				</div>
 
-				{#if error}<p class="alert alert-error">{error}</p>{/if}
+				{#if error}<p class="lp-error">{error}</p>{/if}
 
-				<form on:submit|preventDefault={submitOTP}>
-					<div class="otp-row">
-						{#each digits as _, i}
-							<input
-								type="text"
-								inputmode="numeric"
-								maxlength="1"
-								class="otp-digit"
-								value={digits[i]}
-								bind:this={digitEls[i]}
-								on:input={(e) => handleDigitInput(e, i)}
-								on:keydown={(e) => handleDigitKeydown(e, i)}
-								on:paste={handleDigitPaste}
-								autocomplete="one-time-code"
-							/>
-						{/each}
+				<form on:submit|preventDefault={submitOTP} class="lp-form">
+					<div class="lp-otp-wrap">
+						<p class="lp-otp-label">{$t('login_otp_label')}</p>
+						<div class="lp-otp">
+							{#each digits as _, i}
+								{#if i === 3}
+									<span class="lp-otp-sep">·</span>
+								{/if}
+								<input
+									type="text"
+									inputmode="numeric"
+									maxlength="2"
+									class="lp-digit"
+									bind:value={digits[i]}
+									bind:this={digitEls[i]}
+									on:input={() => handleDigitInput(i)}
+									on:keydown={(e) => handleDigitKeydown(e, i)}
+									on:paste={handleDigitPaste}
+									autocomplete="one-time-code"
+								/>
+							{/each}
+						</div>
 					</div>
-					<button class="btn btn-primary submit-btn" type="submit" disabled={loading || digits.join('').length < 6}>
-						{loading ? '…' : 'Verify & get API key'}
+					<button class="lp-submit" type="submit" disabled={loading || digits.join('').length < 6}>
+						{loading ? '…' : $t('login_otp_verify')}
 					</button>
 				</form>
 
-				<p class="resend-hint">Didn't receive it? Check your spam folder.</p>
+				<p class="lp-hint">{$t('login_otp_hint')}</p>
 			{/if}
-		</div>
-	</div>
-
-	<!-- ── Right panel: white + gray topo ── -->
-	<div class="right">
-		{#if browser}<TopoCanvas fixed={false} />{/if}
-		<div class="right-overlay">
-			<blockquote class="right-quote">
-				<p>"Went from idea to working POI search in an afternoon."</p>
-				<cite>— a happy builder</cite>
-			</blockquote>
 		</div>
 	</div>
 </div>
 
 <style>
-	.split {
-		display: flex;
+	.lp {
 		min-height: 100vh;
-	}
-
-	/* ── Left ── */
-	.left {
-		width: 45%;
-		min-width: 340px;
-		background: #0d0d0d;
 		display: flex;
 		flex-direction: column;
-		padding: 2.5rem 3rem;
+		position: relative;
+	}
+	.lp-top {
+		position: relative;
+		z-index: 1;
+		padding: 22px 32px;
+	}
+	.lp-logo {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		font-weight: 600;
+		font-size: 15px;
+		color: var(--text);
+		letter-spacing: -0.01em;
+		text-decoration: none;
+	}
+	.lp-logo svg { color: var(--accent); }
+	.lp-sep { color: var(--text-3); margin: 0 1px; }
+
+	.lp-center {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 40px 16px 80px;
 		position: relative;
 		z-index: 1;
 	}
 
-	.logo {
-		font-size: 1.15rem;
-		font-weight: 700;
-		letter-spacing: -0.02em;
-		color: var(--text);
-		display: block;
-		margin-bottom: auto;
-	}
-	.logo em { font-style: normal; color: var(--accent); }
-
-	.form-wrap {
+	.lp-card {
 		width: 100%;
-		max-width: 360px;
-		margin: auto;
-		padding: 2rem 0;
+		max-width: 400px;
+		background: var(--bg-2);
+		border: 1px solid var(--border);
+		border-radius: var(--r-lg);
+		padding: 32px;
 		display: flex;
 		flex-direction: column;
-		gap: 1.25rem;
+		gap: 20px;
 	}
 
-	.tabs {
+	.lp-tabs {
 		display: flex;
-		background: rgba(0, 0, 0, 0.4);
+		background: var(--surface);
 		border: 1px solid var(--border);
-		border-radius: var(--radius);
+		border-radius: var(--r-md);
 		padding: 3px;
+		gap: 2px;
 	}
-
-	.tab {
+	.lp-tab {
 		flex: 1;
 		background: none;
 		border: none;
-		border-radius: calc(var(--radius) - 2px);
-		color: var(--muted);
-		font-size: 0.85rem;
+		border-radius: calc(var(--r-md) - 2px);
+		color: var(--text-3);
+		font-family: var(--font-sans);
+		font-size: 13px;
 		font-weight: 500;
-		padding: 0.4rem 0;
+		padding: 7px;
 		cursor: pointer;
-		transition: background 0.15s, color 0.15s;
+		transition: background .12s ease, color .12s ease;
 	}
-	.tab.active { background: rgba(255, 255, 255, 0.07); color: var(--text); }
+	.lp-tab.active { background: var(--bg-2); color: var(--text); }
 
-	.form-head { display: flex; flex-direction: column; gap: 0.4rem; }
-	.form-head h1 { font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; }
-	.form-sub { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
-
-	.submit-btn { width: 100%; justify-content: center; padding: 0.7rem; font-size: 0.9rem; }
-
-	.btn-link {
-		background: none;
-		border: none;
-		color: var(--muted);
-		font-size: 0.82rem;
-		cursor: pointer;
-		padding: 0;
-		transition: color 0.15s;
-		text-align: left;
+	.lp-head { display: flex; flex-direction: column; gap: 6px; }
+	.lp-head h1 {
+		font-size: 22px;
+		font-weight: 600;
+		letter-spacing: -0.02em;
+		line-height: 1.15;
 	}
-	.btn-link:hover { color: var(--text); }
+	.lp-sub { font-size: 13.5px; color: var(--text-2); line-height: 1.55; }
+	.lp-sub strong { color: var(--text); font-weight: 500; }
 
-	/* ── OTP ── */
-	.otp-row {
+	.lp-error {
+		font-size: 13px;
+		color: oklch(72% 0.16 25);
+		background: oklch(72% 0.16 25 / 0.08);
+		border: 1px solid oklch(72% 0.16 25 / 0.25);
+		border-radius: var(--r-md);
+		padding: 10px 14px;
+		margin: 0;
+	}
+
+	.lp-form { display: flex; flex-direction: column; gap: 12px; }
+
+	.lp-field {
 		display: flex;
-		gap: 0.5rem;
-		margin-bottom: 0.5rem;
+		flex-direction: column;
+		gap: 5px;
 	}
-
-	.otp-digit {
-		flex: 1;
-		aspect-ratio: 1;
-		text-align: center;
-		font-size: 1.4rem;
-		font-weight: 700;
-		font-family: var(--mono);
-		background: var(--bg);
+	.lp-field span {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		color: var(--text-3);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+	.lp-field input {
+		background: var(--surface);
 		border: 1px solid var(--border);
-		border-radius: var(--radius);
+		border-radius: var(--r-md);
+		padding: 10px 12px;
+		font-family: var(--font-sans);
+		font-size: 14px;
 		color: var(--text);
 		outline: none;
-		transition: border-color 0.15s;
-		caret-color: transparent;
+		transition: border-color .12s ease;
 	}
-	.otp-digit:focus { border-color: var(--accent); }
+	.lp-field input:focus { border-color: var(--accent); }
+	.lp-field input::placeholder { color: var(--text-3); }
 
-	.resend-hint {
-		font-size: 0.78rem;
-		color: var(--muted);
+	.lp-submit {
+		width: 100%;
+		padding: 11px;
+		background: var(--accent);
+		color: #08120e;
+		border: none;
+		border-radius: var(--r-md);
+		font-family: var(--font-sans);
+		font-size: 14px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: filter .15s ease;
+		margin-top: 4px;
+	}
+	.lp-submit:hover:not(:disabled) { filter: brightness(1.08); }
+	.lp-submit:disabled { opacity: 0.45; cursor: not-allowed; }
+
+	.lp-back {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-family: var(--font-mono);
+		font-size: 11.5px;
+		color: var(--text-3);
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0;
+		transition: color .12s ease;
+	}
+	.lp-back:hover { color: var(--text); }
+
+	.lp-otp-wrap {
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-left: 3px solid var(--accent);
+		border-radius: var(--r-md);
+		padding: 20px 16px 20px 14px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 14px;
+	}
+	.lp-otp-label {
+		font-family: var(--font-mono);
+		font-size: 10.5px;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--text-3);
+		align-self: flex-start;
+	}
+	.lp-otp {
+		display: flex;
+		gap: 6px;
+		align-items: center;
+	}
+	.lp-otp-sep {
+		font-family: var(--font-mono);
+		font-size: 20px;
+		color: var(--text-3);
+		width: 10px;
+		text-align: center;
+	}
+	.lp-digit {
+		width: 44px;
+		height: 56px;
+		flex-shrink: 0;
+		text-align: center;
+		font-size: 26px;
+		font-weight: 600;
+		font-family: var(--font-mono);
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		color: var(--text);
+		outline: none;
+		caret-color: transparent;
+		transition: border-color .12s ease;
+		padding: 0;
+	}
+	.lp-digit:focus { border-color: var(--accent); }
+
+	.lp-hint {
+		font-size: 12px;
+		color: var(--text-3);
 		text-align: center;
 		line-height: 1.5;
-	}
-
-	/* ── Right panel: light ── */
-	.right {
-		flex: 1;
-		position: relative;
-		overflow: hidden;
-		background: #f4f4f2;
-		display: flex;
-		align-items: flex-end;
-	}
-
-	.right-overlay {
-		position: relative;
-		z-index: 2;
-		padding: 3rem;
-		width: 100%;
-	}
-
-	.right-quote {
-		max-width: 340px;
-		border-left: 2px solid #10b981;
-		padding-left: 1.25rem;
-	}
-
-	.right-quote p {
-		font-size: 1rem;
-		color: rgba(30, 30, 30, 0.65);
-		line-height: 1.6;
-		font-style: italic;
-		margin-bottom: 0.5rem;
-	}
-
-	.right-quote cite {
-		font-size: 0.78rem;
-		color: rgba(30, 30, 30, 0.4);
-		font-style: normal;
-	}
-
-	/* ── Responsive ── */
-	@media (max-width: 700px) {
-		.split { flex-direction: column; }
-		.left  { width: 100%; min-width: 0; padding: 2rem 1.5rem; }
-		.right { display: none; }
 	}
 </style>
