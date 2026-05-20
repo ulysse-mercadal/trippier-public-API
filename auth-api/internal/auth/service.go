@@ -27,6 +27,10 @@ var (
 	ErrBadToken       = errors.New("invalid or expired verification code")
 )
 
+// dummyHash is used in Login to run a constant-time bcrypt comparison when the
+// queried email does not exist, preventing email enumeration via response timing.
+var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy-sentinel-value"), bcrypt.DefaultCost)
+
 // Service handles user auth operations.
 type Service struct {
 	db        *pgxpool.Pool
@@ -110,6 +114,8 @@ func (s *Service) Login(ctx context.Context, emailAddr, password string) (string
 		strings.ToLower(emailAddr),
 	).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.Verified)
 	if errors.Is(err, pgx.ErrNoRows) {
+		// Always run bcrypt to normalise response time and prevent email enumeration.
+		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 		return "", ErrBadCredentials
 	}
 	if err != nil {

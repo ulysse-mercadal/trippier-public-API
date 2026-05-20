@@ -80,7 +80,7 @@ func (h *Handler) verifyCode(c *gin.Context) {
 // login handles POST /auth/login: verifies credentials and returns a signed JWT on success.
 func (h *Handler) login(c *gin.Context) {
 	var body struct {
-		Email    string `json:"email"    binding:"required"`
+		Email    string `json:"email"    binding:"required,email"`
 		Password string `json:"password" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
