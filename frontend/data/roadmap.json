@@ -1,0 +1,116 @@
+{
+  "columns": [
+    {
+      "id": "shipped",
+      "label": "Shipped",
+      "sub": "Disponible maintenant",
+      "items": [
+        {
+          "id": "s1",
+          "title": "POI search — near + bbox",
+          "tag": "routes",
+          "meta": "v0.1",
+          "issue": 1
+        },
+        {
+          "id": "s2",
+          "title": "Events search (Ticketmaster + Eventbrite)",
+          "tag": "routes",
+          "meta": "v0.2",
+          "issue": 2
+        },
+        {
+          "id": "s3",
+          "title": "Itinerary generation (LLM)",
+          "tag": "routes",
+          "meta": "v0.3",
+          "issue": 3
+        },
+        {
+          "id": "s4",
+          "title": "Docker self-hosted image",
+          "tag": "self",
+          "meta": "v0.3",
+          "issue": 4
+        },
+        {
+          "id": "s5",
+          "title": "BYOK — bring your own LLM key",
+          "tag": "self",
+          "meta": "v0.4",
+          "issue": 5
+        },
+        {
+          "id": "s6",
+          "title": "AUTH_DISABLED mode",
+          "tag": "self",
+          "meta": "v0.4",
+          "issue": 6
+        },
+        {
+          "id": "s7",
+          "title": "Polygon-based search area",
+          "tag": "routes",
+          "meta": "v0.4",
+          "issue": 16
+        },
+        {
+          "id": "s8",
+          "title": "Response caching layer (Redis)",
+          "tag": "perf",
+          "meta": "v0.4",
+          "issue": 10
+        },
+        {
+          "id": "s9",
+          "title": "Interactive API playground (landing page)",
+          "tag": "dx",
+          "meta": "v0.4"
+        },
+        {
+          "id": "s10",
+          "title": "Providers status endpoint with BYOK detection",
+          "tag": "routes",
+          "meta": "v0.4"
+        }
+      ]
+    },
+    {
+      "id": "progress",
+      "label": "In progress",
+      "sub": "En cours de développement",
+      "items": [
+        {
+          "id": "p1",
+          "title": "JavaScript / TypeScript SDK",
+          "tag": "sdk",
+          "issue": 7
+        },
+        {
+          "id": "p2",
+          "title": "Python SDK",
+          "tag": "sdk",
+          "issue": 8
+        },
+        {
+          "id": "p3",
+          "title": "Cloud token dashboard",
+          "tag": "cloud",
+          "issue": 9
+        }
+      ]
+    },
+    {
+      "id": "next",
+      "label": "Next up",
+      "sub": "Prévu pour les prochaines versions",
+      "items": []
+    },
+    {
+      "id": "later",
+      "label": "Later / Ideas",
+      "sub": "En exploration",
+      "items": []
+    }
+  ]
+}
