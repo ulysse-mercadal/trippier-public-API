@@ -58,6 +58,7 @@ func main() {
 	r.SetTrustedProxies(nil) //nolint:errcheck
 	r.Use(
 		gin.Recovery(),
+		middleware.CORS(),
 		middleware.SecureHeaders(),
 		middleware.RequestID(),
 		middleware.Logger(log),
