@@ -10,7 +10,7 @@ services:
   #   http://traefik.trippier.localhost   → Traefik dashboard
 
   traefik:
-    image: traefik:v3.2
+    image: traefik:v3.7
     environment:
       DOCKER_API_VERSION: "1.54"
     ports:
