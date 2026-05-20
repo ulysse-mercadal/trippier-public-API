@@ -1,5 +1,33 @@
 services:
 
+  # ── Reverse proxy (Traefik) ──────────────────────────────────────────────────
+  # Domaines accessibles sans /etc/hosts (*.localhost résolu nativement) :
+  #   http://trippier.localhost           → frontend
+  #   http://api.trippier.localhost       → poi-api
+  #   http://itinerary.trippier.localhost → itinerary-api
+  #   http://auth.trippier.localhost      → auth-api
+  #   http://mailhog.trippier.localhost   → mailhog UI
+  #   http://traefik.trippier.localhost   → Traefik dashboard
+
+  traefik:
+    image: traefik:v3.2
+    ports:
+      - "80:80"
+      - "8090:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+      - "--log.level=INFO"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.trippier.localhost`)"
+      - "traefik.http.routers.traefik.service=api@internal"
+
   # ── Infrastructure ──────────────────────────────────────────────────────────
 
   postgres:
@@ -26,7 +54,10 @@ services:
     image: mailhog/mailhog:latest
     ports:
       - "1025:1025"
-      - "8025:8025"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mailhog.rule=Host(`mailhog.trippier.localhost`)"
+      - "traefik.http.services.mailhog.loadbalancer.server.port=8025"
 
   # ── auth-api — Go hot reload via air ────────────────────────────────────────
 
@@ -46,12 +77,16 @@ services:
       AUTH_REDIS_URL: redis://redis:6379
       AUTH_INTERNAL_SECRET: ${INTERNAL_SECRET}
       AUTH_SMTP_HOST: mailhog
-      AUTH_APP_URL: ${APP_URL:-http://localhost:3000}
+      AUTH_APP_URL: ${APP_URL:-http://trippier.localhost}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth-api.rule=Host(`auth.trippier.localhost`)"
+      - "traefik.http.services.auth-api.loadbalancer.server.port=8081"
 
   # ── poi-api — Go hot reload via air ─────────────────────────────────────────
 
@@ -76,8 +111,12 @@ services:
         condition: service_healthy
       auth-api:
         condition: service_started
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.poi-api.rule=Host(`api.trippier.localhost`)"
+      - "traefik.http.services.poi-api.loadbalancer.server.port=8080"
 
-  # ── itinerary-api — Python hot reload via uvicorn --reload ───────────────────
+  # ── itinerary-api — Python hot reload via uvicorn --reload ──────────────────
 
   itinerary-api:
     build:
@@ -96,25 +135,10 @@ services:
     depends_on:
       - poi-api
       - auth-api
-
-  # ── docs — Fumadocs / Next.js dev server ────────────────────────────────────
-
-  docs:
-    image: oven/bun:1-alpine
-    working_dir: /app
-    ports:
-      - "5173:5173"
-    volumes:
-      - ./docs:/app
-      - docs-modules:/app/node_modules
-    environment:
-      INTERNAL_SECRET: ${INTERNAL_SECRET}
-      FRONTEND_POI_API_URL: http://poi-api:8080
-      FRONTEND_ITINERARY_API_URL: http://itinerary-api:8000
-    command: sh -c "bun install && bun run dev"
-    depends_on:
-      - poi-api
-      - itinerary-api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.itinerary-api.rule=Host(`itinerary.trippier.localhost`)"
+      - "traefik.http.services.itinerary-api.loadbalancer.server.port=8000"
 
   # ── frontend — bun dev with Vite HMR ────────────────────────────────────────
 
@@ -138,9 +162,12 @@ services:
     depends_on:
       - auth-api
       - poi-api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`trippier.localhost`)"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 
 volumes:
   auth-api-tmp:
   poi-api-tmp:
   frontend-modules:
-  docs-modules:
