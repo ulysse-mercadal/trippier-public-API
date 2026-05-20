@@ -132,6 +132,8 @@ services:
       INTERNAL_SECRET: ${INTERNAL_SECRET}
       FRONTEND_POI_API_URL: http://poi-api:8080
       FRONTEND_ITINERARY_API_URL: http://itinerary-api:8000
+      PUBLIC_ADMIN_EMAILS: ${PUBLIC_ADMIN_EMAILS}
+      ADMIN_EMAILS: ${ADMIN_EMAILS}
     command: sh -c "bun install --frozen-lockfile && bunx svelte-kit sync && bun run dev --host"
     depends_on:
       - auth-api
