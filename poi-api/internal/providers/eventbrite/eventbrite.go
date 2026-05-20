@@ -1,5 +1,10 @@
 // Package eventbrite implements the Provider interface for the Eventbrite API v3.
 // Documentation: https://www.eventbrite.com/platform/api
+//
+// This provider uses a BYOK (Bring Your Own Key) pattern: no private token is
+// stored server-side. Callers must inject their Eventbrite private token into the
+// request context via byok.EventbriteKey before invoking Search. If the token is
+// absent, Search returns nil, nil (the provider is silently skipped).
 package eventbrite
 
 import (
@@ -12,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trippier/poi-api/internal/byok"
 	"github.com/trippier/poi-api/pkg/types"
 )
 
@@ -55,26 +61,25 @@ type ebVenue struct {
 }
 
 // Provider fetches events from the Eventbrite API.
+// The private token is read per-request from the context (BYOK pattern).
 type Provider struct {
 	client  *http.Client
-	token   string
 	baseURL string
 }
 
-// New returns a Provider authenticated with the given Eventbrite private token.
-func New(privateToken string) *Provider {
+// New returns a Provider. No private token is stored — callers supply their own
+// token per request via the X-Eventbrite-Token header (injected into context by the handler).
+func New() *Provider {
 	return &Provider{
 		client:  &http.Client{Timeout: defaultTimeout},
-		token:   privateToken,
 		baseURL: defaultAPIURL,
 	}
 }
 
 // NewWithURL returns a Provider targeting a custom endpoint. Intended for tests.
-func NewWithURL(baseURL, privateToken string) *Provider {
+func NewWithURL(baseURL string) *Provider {
 	return &Provider{
 		client:  &http.Client{Timeout: defaultTimeout},
-		token:   privateToken,
 		baseURL: baseURL,
 	}
 }
@@ -88,8 +93,14 @@ func (p *Provider) SupportsMode(mode types.SearchMode) bool {
 }
 
 // Search implements providers.Provider.
+// Returns nil, nil when no Eventbrite private token is present in ctx (BYOK absent).
 // Radius is clamped to [minRadiusKm, maxRadiusKm] km to protect the daily API quota.
 func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {
+	token := byok.EventbriteToken(ctx)
+	if token == "" {
+		return nil, nil
+	}
+
 	radiusKm := q.Radius / 1000
 	if radiusKm < minRadiusKm {
 		radiusKm = minRadiusKm
@@ -110,7 +121,7 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 	if err != nil {
 		return nil, fmt.Errorf("eventbrite: build request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+p.token)
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -128,26 +139,6 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 	}
 
 	return p.toRawPois(result.Events), nil
-}
-
-// Ping implements providers.Pingable by calling the lightweight /v3/users/me/ endpoint.
-// This verifies the token is valid without consuming search quota.
-func (p *Provider) Ping(ctx context.Context) error {
-	pingURL := strings.Replace(p.baseURL, "events/search/", "users/me/", 1)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pingURL, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+p.token)
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("eventbrite ping: status %d", resp.StatusCode)
-	}
-	return nil
 }
 
 // toRawPois converts Eventbrite events to RawPoi records, skipping entries without a venue location.

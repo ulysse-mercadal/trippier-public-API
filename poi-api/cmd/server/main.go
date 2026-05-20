@@ -117,22 +117,20 @@ func buildAuthMiddlewares(cfg *config.Config) (global, events gin.HandlerFunc) {
 }
 
 // buildProviders constructs the list of active POI and event providers based on config.
-// GeoNames, Ticketmaster, and Eventbrite are only added when their credentials are configured.
+// Ticketmaster and Eventbrite use BYOK (Bring Your Own Key): they are always registered
+// but only activate when the caller supplies X-Ticketmaster-Key / X-Eventbrite-Token headers.
+// GeoNames is only added when POI_GEONAMES_USERNAME is set.
 func buildProviders(cfg *config.Config) []providers.Provider {
 	pp := []providers.Provider{
 		overpass.New(),
 		wikivoyage.New(cfg.Lang),
 		wikipedia.New(cfg.Lang),
 		wikipedia.NewEventProvider(cfg.Lang),
+		ticketmaster.New(),
+		eventbrite.New(),
 	}
 	if cfg.GeoNamesUsername != "" {
 		pp = append(pp, geonames.New(cfg.GeoNamesUsername))
-	}
-	if cfg.TicketmasterAPIKey != "" {
-		pp = append(pp, ticketmaster.New(cfg.TicketmasterAPIKey))
-	}
-	if cfg.EventbriteToken != "" {
-		pp = append(pp, eventbrite.New(cfg.EventbriteToken))
 	}
 	return pp
 }

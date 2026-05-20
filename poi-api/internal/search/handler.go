@@ -1,9 +1,11 @@
 package search
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/trippier/poi-api/internal/byok"
 	"github.com/trippier/poi-api/pkg/types"
 )
 
@@ -99,6 +101,7 @@ func (h *Handler) searchSlim(c *gin.Context) {
 
 // events returns cultural festivals and recurring events powered by Wikipedia/Wikidata SPARQL.
 // Supports mode=radius and mode=district; filters to Wikidata class Q132241 (festival).
+// Optional BYOK headers X-Ticketmaster-Key and X-Eventbrite-Token activate those providers.
 func (h *Handler) events(c *gin.Context) {
 	var q types.SearchQuery
 	if err := c.ShouldBindQuery(&q); err != nil {
@@ -113,7 +116,7 @@ func (h *Handler) events(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.SearchEvents(c.Request.Context(), q)
+	result, err := h.service.SearchEvents(byokContext(c), q)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorResponse{Error: "internal server error"})
 		return
@@ -123,6 +126,7 @@ func (h *Handler) events(c *gin.Context) {
 }
 
 // eventsSlim returns a lightweight projection (name, coords, dates, recurring) of events.
+// Optional BYOK headers X-Ticketmaster-Key and X-Eventbrite-Token activate those providers.
 func (h *Handler) eventsSlim(c *gin.Context) {
 	var q types.SearchQuery
 	if err := c.ShouldBindQuery(&q); err != nil {
@@ -137,7 +141,7 @@ func (h *Handler) eventsSlim(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.SearchEvents(c.Request.Context(), q)
+	result, err := h.service.SearchEvents(byokContext(c), q)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorResponse{Error: "internal server error"})
 		return
@@ -167,6 +171,19 @@ func applyQueryDefaults(q *types.SearchQuery) {
 	if q.Mode == "" {
 		q.Mode = types.ModeRadius
 	}
+}
+
+// byokContext injects X-Ticketmaster-Key and X-Eventbrite-Token request headers
+// into the context so BYOK-aware providers can retrieve them without touching SearchQuery.
+func byokContext(c *gin.Context) context.Context {
+	ctx := c.Request.Context()
+	if k := c.GetHeader("X-Ticketmaster-Key"); k != "" {
+		ctx = context.WithValue(ctx, byok.TicketmasterKey, k)
+	}
+	if t := c.GetHeader("X-Eventbrite-Token"); t != "" {
+		ctx = context.WithValue(ctx, byok.EventbriteKey, t)
+	}
+	return ctx
 }
 
 type errorResponse struct {

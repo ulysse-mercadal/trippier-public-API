@@ -1,5 +1,10 @@
 // Package ticketmaster implements the Provider interface for the Ticketmaster Discovery API v2.
 // Documentation: https://developer.ticketmaster.com/products-and-docs/apis/discovery-api/v2/
+//
+// This provider uses a BYOK (Bring Your Own Key) pattern: no API key is stored
+// server-side. Callers must inject their Ticketmaster API key into the request
+// context via byok.TicketmasterKey before invoking Search. If the key is absent,
+// Search returns nil, nil (the provider is silently skipped).
 package ticketmaster
 
 import (
@@ -12,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trippier/poi-api/internal/byok"
 	"github.com/trippier/poi-api/pkg/types"
 )
 
@@ -63,26 +69,25 @@ type tmVenue struct {
 }
 
 // Provider fetches events from the Ticketmaster Discovery API.
+// The API key is read per-request from the context (BYOK pattern).
 type Provider struct {
 	client  *http.Client
-	apiKey  string
 	baseURL string
 }
 
-// New returns a Provider authenticated with the given Ticketmaster consumer key.
-func New(apiKey string) *Provider {
+// New returns a Provider. No API key is stored — callers supply their own key
+// per request via the X-Ticketmaster-Key header (injected into context by the handler).
+func New() *Provider {
 	return &Provider{
 		client:  &http.Client{Timeout: defaultTimeout},
-		apiKey:  apiKey,
 		baseURL: defaultAPIURL,
 	}
 }
 
 // NewWithURL returns a Provider targeting a custom endpoint. Intended for tests.
-func NewWithURL(baseURL, apiKey string) *Provider {
+func NewWithURL(baseURL string) *Provider {
 	return &Provider{
 		client:  &http.Client{Timeout: defaultTimeout},
-		apiKey:  apiKey,
 		baseURL: baseURL,
 	}
 }
@@ -96,8 +101,14 @@ func (p *Provider) SupportsMode(mode types.SearchMode) bool {
 }
 
 // Search implements providers.Provider.
+// Returns nil, nil when no Ticketmaster API key is present in ctx (BYOK absent).
 // Radius is clamped to [minRadiusKm, maxRadiusKm] km to protect the daily API quota.
 func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {
+	apiKey := byok.TicketmasterAPIKey(ctx)
+	if apiKey == "" {
+		return nil, nil
+	}
+
 	radiusKm := q.Radius / 1000
 	if radiusKm < minRadiusKm {
 		radiusKm = minRadiusKm
@@ -108,7 +119,7 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 
 	now := time.Now().UTC()
 	params := url.Values{
-		"apikey":        {p.apiKey},
+		"apikey":        {apiKey},
 		"latlong":       {fmt.Sprintf("%.6f,%.6f", q.Lat, q.Lng)},
 		"radius":        {strconv.Itoa(radiusKm)},
 		"unit":          {"km"},
@@ -141,26 +152,6 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 		return nil, nil
 	}
 	return p.toRawPois(result.Embedded.Events), nil
-}
-
-// Ping implements providers.Pingable by calling the lightweight classifications endpoint.
-// This does not consume search quota and verifies the API key is valid.
-func (p *Provider) Ping(ctx context.Context) error {
-	params := url.Values{"apikey": {p.apiKey}, "size": {"1"}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		strings.Replace(p.baseURL, "events.json", "classifications.json", 1)+"?"+params.Encode(), nil)
-	if err != nil {
-		return err
-	}
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("ticketmaster ping: status %d", resp.StatusCode)
-	}
-	return nil
 }
 
 // toRawPois converts Ticketmaster events to RawPoi records, skipping entries without a venue location.

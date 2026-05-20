@@ -69,11 +69,22 @@ func Cache(rdb *redis.Client, ttl time.Duration) gin.HandlerFunc {
 	}
 }
 
-// cacheKey returns a deterministic SHA-256 key for a request based on its path and
-// sorted query parameters. url.Values.Encode() sorts by key and percent-encodes both
-// keys and values, preventing collisions between parameter names that contain "=" or "&".
+// cacheKey returns a deterministic SHA-256 key for a request based on its path,
+// sorted query parameters, and which BYOK provider keys are present (not their values).
+// Two requests for the same location with different active providers get different keys.
 func cacheKey(c *gin.Context) string {
 	encoded := c.Request.URL.Query().Encode()
-	h := sha256.Sum256([]byte(c.Request.URL.Path + "?" + encoded))
+
+	// Append a provider-presence suffix so that BYOK combinations get distinct slots
+	// without ever including actual key material in the cache key.
+	suffix := ""
+	if c.GetHeader("X-Ticketmaster-Key") != "" {
+		suffix += ":tm"
+	}
+	if c.GetHeader("X-Eventbrite-Token") != "" {
+		suffix += ":eb"
+	}
+
+	h := sha256.Sum256([]byte(c.Request.URL.Path + "?" + encoded + suffix))
 	return "poi:cache:" + hex.EncodeToString(h[:])
 }
