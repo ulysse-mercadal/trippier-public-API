@@ -7,6 +7,8 @@
 	export let fixed = true;
 	/** true = white lines (dark bg), false = gray lines (light bg) */
 	export let dark  = true;
+	/** Optional RGB triple to override line color, e.g. [78, 227, 154] for accent green */
+	export let colorRgb: [number, number, number] | null = null;
 
 	let canvas: HTMLCanvasElement;
 	let contours: ContourLevel[] = [];
@@ -38,7 +40,12 @@
 		ctx.clearRect(0, 0, W, H);
 		for (const level of contours) {
 			const t = (level.elevation - minElev) / (maxElev - minElev);
-			if (dark) {
+			if (colorRgb) {
+				const [r, g, b] = colorRgb;
+				const opacity = (0.08 + t * 0.22).toFixed(3);
+				ctx.strokeStyle = `rgba(${r},${g},${b},${opacity})`;
+				ctx.lineWidth   = 0.6 + t * 0.8;
+			} else if (dark) {
 				ctx.strokeStyle = `rgba(255,255,255,${(0.10 + t * 0.28).toFixed(3)})`;
 				ctx.lineWidth   = 0.8 + t * 0.9;
 			} else {
