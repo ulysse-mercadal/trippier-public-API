@@ -11,6 +11,8 @@ services:
 
   traefik:
     image: traefik:v3.2
+    environment:
+      DOCKER_API_VERSION: "1.54"
     ports:
       - "80:80"
       - "8090:8080"
