@@ -88,7 +88,7 @@ services:
         condition: service_started
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.poi-api.rule=Host(`api.${DOMAIN}`)"
+      - "traefik.http.routers.poi-api.rule=Host(`api.poi.${DOMAIN}`)"
       - "traefik.http.routers.poi-api.entrypoints=websecure"
       - "traefik.http.routers.poi-api.tls.certresolver=le"
       - "traefik.http.services.poi-api.loadbalancer.server.port=8080"
@@ -108,7 +108,7 @@ services:
       - auth-api
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.itinerary-api.rule=Host(`itinerary.${DOMAIN}`)"
+      - "traefik.http.routers.itinerary-api.rule=Host(`api.ai.${DOMAIN}`)"
       - "traefik.http.routers.itinerary-api.entrypoints=websecure"
       - "traefik.http.routers.itinerary-api.tls.certresolver=le"
       - "traefik.http.services.itinerary-api.loadbalancer.server.port=8000"

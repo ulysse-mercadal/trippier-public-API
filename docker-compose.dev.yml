@@ -3,8 +3,8 @@ services:
   # ── Reverse proxy (Traefik) ──────────────────────────────────────────────────
   # Domaines accessibles sans /etc/hosts (*.localhost résolu nativement) :
   #   http://trippier.localhost           → frontend
-  #   http://api.trippier.localhost       → poi-api
-  #   http://itinerary.trippier.localhost → itinerary-api
+  #   http://api.poi.trippier.localhost   → poi-api
+  #   http://api.ai.trippier.localhost    → itinerary-api
   #   http://auth.trippier.localhost      → auth-api
   #   http://mailhog.trippier.localhost   → mailhog UI
   #   http://traefik.trippier.localhost   → Traefik dashboard
@@ -113,7 +113,7 @@ services:
         condition: service_started
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.poi-api.rule=Host(`api.trippier.localhost`)"
+      - "traefik.http.routers.poi-api.rule=Host(`api.poi.trippier.localhost`)"
       - "traefik.http.services.poi-api.loadbalancer.server.port=8080"
 
   # ── itinerary-api — Python hot reload via uvicorn --reload ──────────────────
@@ -137,7 +137,7 @@ services:
       - auth-api
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.itinerary-api.rule=Host(`itinerary.trippier.localhost`)"
+      - "traefik.http.routers.itinerary-api.rule=Host(`api.ai.trippier.localhost`)"
       - "traefik.http.services.itinerary-api.loadbalancer.server.port=8000"
 
   # ── frontend — bun dev with Vite HMR ────────────────────────────────────────
