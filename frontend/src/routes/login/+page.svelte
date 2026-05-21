@@ -1,5 +1,5 @@
 <svelte:head>
-	<title>trippier/api — Connexion</title>
+	<title>trippier/api · Connexion</title>
 </svelte:head>
 
 <script lang="ts">
@@ -7,9 +7,10 @@
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { auth } from '$lib/stores/auth';
-	import { register, login, verifyCode, getMe, ApiError } from '$lib/api';
+	import { register, login, verifyCode, resendCode, getMe, ApiError } from '$lib/api';
 	import { t, initLocale } from '$lib/i18n';
 	import TopoBackground from '$lib/components/TopoBackground.svelte';
+	import DocsNav from '$lib/components/docs/DocsNav.svelte';
 
 	type Stage = 'form' | 'otp';
 	type Mode  = 'login' | 'register';
@@ -24,6 +25,36 @@
 
 	let digits: string[]          = Array(6).fill('');
 	let digitEls: HTMLInputElement[] = [];
+
+	let resendCooldown = 0;
+	let resendOk = false;
+	let resendTimer: ReturnType<typeof setInterval> | null = null;
+
+	function startCooldown() {
+		resendCooldown = 30;
+		resendTimer = setInterval(() => {
+			resendCooldown--;
+			if (resendCooldown <= 0) {
+				clearInterval(resendTimer!);
+				resendTimer = null;
+			}
+		}, 1000);
+	}
+
+	async function handleResend() {
+		if (resendCooldown > 0 || loading) return;
+		resendOk = false;
+		loading = true;
+		try {
+			await resendCode(email);
+			resendOk = true;
+			startCooldown();
+		} catch (e) {
+			error = e instanceof ApiError ? e.message : $t('login_error_generic');
+		} finally {
+			loading = false;
+		}
+	}
 
 	onMount(async () => {
 		initLocale();
@@ -116,16 +147,7 @@
 <div class="lp">
 	{#if browser}<TopoBackground density={28} opacity={0.24} color="#34d39c" />{/if}
 
-	<div class="lp-top">
-		<a href="/" class="lp-logo">
-			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-				<path d="M4 18c4-8 12-8 16 0"/>
-				<path d="M6 14c3-5 9-5 12 0" opacity="0.6"/>
-				<circle cx="12" cy="20" r="1.2" fill="currentColor"/>
-			</svg>
-			trippier<span class="lp-sep">/</span>api
-		</a>
-	</div>
+	<DocsNav />
 
 	<div class="lp-center">
 		<div class="lp-card">
@@ -205,7 +227,16 @@
 					</button>
 				</form>
 
-				<p class="lp-hint">{$t('login_otp_hint')}</p>
+				<p class="lp-hint">
+					{#if resendOk}
+						{$t('login_otp_resend_ok')}
+					{:else}
+						{$t('login_otp_hint')}
+						<button class="lp-resend" on:click={handleResend} disabled={resendCooldown > 0 || loading}>
+							{resendCooldown > 0 ? $t('login_otp_resend_wait').replace('{s}', String(resendCooldown)) : $t('login_otp_resend')}
+						</button>
+					{/if}
+				</p>
 			{/if}
 		</div>
 	</div>
@@ -218,23 +249,6 @@
 		flex-direction: column;
 		position: relative;
 	}
-	.lp-top {
-		position: relative;
-		z-index: 1;
-		padding: 22px 32px;
-	}
-	.lp-logo {
-		display: inline-flex;
-		align-items: center;
-		gap: 10px;
-		font-weight: 600;
-		font-size: 15px;
-		color: var(--text);
-		letter-spacing: -0.01em;
-		text-decoration: none;
-	}
-	.lp-logo svg { color: var(--accent); }
-	.lp-sep { color: var(--text-3); margin: 0 1px; }
 
 	.lp-center {
 		flex: 1;
@@ -416,5 +430,23 @@
 		color: var(--text-3);
 		text-align: center;
 		line-height: 1.5;
+	}
+
+	.lp-resend {
+		background: none;
+		border: none;
+		padding: 0;
+		font-size: 12px;
+		font-family: var(--font-sans);
+		color: var(--accent);
+		cursor: pointer;
+		text-decoration: underline;
+		text-underline-offset: 2px;
+		transition: opacity .12s ease;
+	}
+	.lp-resend:disabled {
+		color: var(--text-3);
+		text-decoration: none;
+		cursor: default;
 	}
 </style>

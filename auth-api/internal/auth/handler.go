@@ -23,6 +23,7 @@ func NewHandler(svc *Service, appURL string) *Handler {
 func (h *Handler) RegisterRoutes(r gin.IRouter, jwtAuth gin.HandlerFunc, loginLimiter gin.HandlerFunc, registerLimiter gin.HandlerFunc) {
 	r.POST("/register", registerLimiter, h.register)
 	r.POST("/verify-code", registerLimiter, h.verifyCode)
+	r.POST("/resend-code", registerLimiter, h.resendCode)
 	r.POST("/login", loginLimiter, h.login)
 	r.GET("/me", jwtAuth, h.me)
 }
@@ -38,7 +39,7 @@ func (h *Handler) register(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.Register(c.Request.Context(), body.Email, body.Password); err != nil {
+	if err := h.svc.Register(c.Request.Context(), body.Email, body.Password, c.ClientIP(), c.GetHeader("User-Agent")); err != nil {
 		switch {
 		case errors.Is(err, ErrEmailTaken):
 			c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
@@ -75,6 +76,28 @@ func (h *Handler) verifyCode(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"token": token})
+}
+
+// resendCode handles POST /auth/resend-code: generates a new OTP for an unverified account.
+func (h *Handler) resendCode(c *gin.Context) {
+	var body struct {
+		Email string `json:"email" binding:"required,email"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := h.svc.ResendCode(c.Request.Context(), body.Email, c.ClientIP(), c.GetHeader("User-Agent")); err != nil {
+		if errors.Is(err, ErrAlreadyVerified) {
+			c.JSON(http.StatusConflict, gin.H{"error": "email already verified or not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "verification code resent"})
 }
 
 // login handles POST /auth/login: verifies credentials and returns a signed JWT on success.

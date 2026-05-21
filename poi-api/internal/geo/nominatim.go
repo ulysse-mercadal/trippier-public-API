@@ -10,7 +10,10 @@ import (
 	"time"
 )
 
-const nominatimURL = "https://nominatim.openstreetmap.org/search"
+const (
+	nominatimURL        = "https://nominatim.openstreetmap.org/search"
+	nominatimReverseURL = "https://nominatim.openstreetmap.org/reverse"
+)
 
 var nominatimClient = &http.Client{Timeout: 5 * time.Second}
 
@@ -57,4 +60,45 @@ func GeocodeDistrict(ctx context.Context, name string) (Place, error) {
 		return Place{}, fmt.Errorf("nominatim: invalid coordinates in response")
 	}
 	return Place{Lat: lat, Lng: lng}, nil
+}
+
+// ReverseGeocode resolves coordinates to a city name via the Nominatim OSM API.
+// Returns the most specific populated place name available (city > town > village > county).
+func ReverseGeocode(ctx context.Context, lat, lng float64) (string, error) {
+	params := url.Values{
+		"lat":    {strconv.FormatFloat(lat, 'f', 6, 64)},
+		"lon":    {strconv.FormatFloat(lng, 'f', 6, 64)},
+		"format": {"json"},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		nominatimReverseURL+"?"+params.Encode(), nil)
+	if err != nil {
+		return "", fmt.Errorf("nominatim reverse: build request: %w", err)
+	}
+	req.Header.Set("User-Agent", "trippier-poi-api/1.0 (github.com/trippier/poi-api)")
+
+	resp, err := nominatimClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("nominatim reverse: request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Address struct {
+			City    string `json:"city"`
+			Town    string `json:"town"`
+			Village string `json:"village"`
+			County  string `json:"county"`
+		} `json:"address"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("nominatim reverse: decode: %w", err)
+	}
+
+	for _, name := range []string{result.Address.City, result.Address.Town, result.Address.Village, result.Address.County} {
+		if name != "" {
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("nominatim reverse: no city found for %.4f,%.4f", lat, lng)
 }

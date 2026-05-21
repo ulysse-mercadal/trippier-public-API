@@ -104,6 +104,7 @@ export const PAGES: DocPage[] = [
 			{ name: 'radius',   type: 'integer', required: false, desc: 'Rayon en mètres. Défaut : 1000.' },
 			{ name: 'polygon',  type: 'string',  required: false, desc: 'Polygone encodé.' },
 			{ name: 'district', type: 'string',  required: false, desc: 'Nom du quartier/ville.' },
+			{ name: 'date',     type: 'string',  required: false, desc: 'Date de début au format YYYY-MM-DD. Retourne les events commençant après 00h00 ce jour-là. Défaut : aujourd\'hui.' },
 			{ name: 'limit',    type: 'integer', required: false, desc: 'Nombre de résultats. Défaut : 20.' },
 			{ name: 'offset',   type: 'integer', required: false, desc: 'Décalage pour la pagination.' },
 		],
@@ -135,6 +136,7 @@ export const PAGES: DocPage[] = [
 			{ name: 'lat',      type: 'number',  required: false, desc: 'Latitude du centre.' },
 			{ name: 'lng',      type: 'number',  required: false, desc: 'Longitude du centre.' },
 			{ name: 'radius',   type: 'integer', required: false, desc: 'Rayon en mètres. Défaut : 1000.' },
+			{ name: 'date',     type: 'string',  required: false, desc: 'Date de début au format YYYY-MM-DD. Défaut : aujourd\'hui.' },
 			{ name: 'limit',    type: 'integer', required: false, desc: 'Nombre de résultats. Défaut : 20.' },
 		],
 		response: `{
@@ -145,6 +147,38 @@ export const PAGES: DocPage[] = [
       "coords": { "lat": 45.7602, "lng": 4.8222, "approximate": false },
       "date_start": "2026-06-18T21:00:00Z",
       "date_end": "2026-06-18T23:00:00Z"
+    }
+  ]
+}`,
+	},
+	{
+		id: 'itinerary', group: 'Itinéraire', title: 'Générer un itinéraire',
+		kind: 'route', method: 'POST', path: '/itinerary/generate', cost: 50,
+		summary: "Génère un itinéraire optimisé sur N jours à partir d'une zone géographique et de préférences. L'IA sélectionne les POIs, ordonne les étapes selon les horaires d'ouverture, le transport et le rythme souhaité.",
+		params: [
+			{ name: 'days',         type: 'integer', required: true,  desc: 'Nombre de jours (1–7).' },
+			{ name: 'poi_query',    type: 'object',  required: true,  desc: 'Zone de recherche : { lat, lng, radius }.' },
+			{ name: 'preferences',  type: 'object',  required: false, desc: 'Préférences : { pace: slow|moderate|fast, start_time: "HH:MM" }.' },
+		],
+		body: `{
+  "days": 1,
+  "poi_query": { "lat": 45.76, "lng": 4.83, "radius": 5000 },
+  "preferences": { "pace": "moderate", "start_time": "09:00" }
+}`,
+		response: `{
+  "days": [
+    {
+      "day": 1,
+      "steps": [
+        {
+          "poi": { "id": "osm:309832711", "name": "Cathédrale Saint-Jean-Baptiste", "type": "see" },
+          "arrival": "09:15", "duration_min": 60
+        },
+        {
+          "poi": { "id": "osm:118820560", "name": "Brasserie Georges", "type": "eat" },
+          "arrival": "12:30", "duration_min": 75
+        }
+      ]
     }
   ]
 }`,

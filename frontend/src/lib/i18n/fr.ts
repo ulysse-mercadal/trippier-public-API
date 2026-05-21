@@ -22,25 +22,25 @@ export const fr = {
 	hero_stat_selfhosted: 'self-hosted',
 
 	// Features
-	feat_eyebrow: "— ce que l'API fait",
+	feat_eyebrow: "ce que l'API fait",
 	feat_title: 'Trois primitives. Une infinité de voyages.',
 	feat_poi_title: 'Agrégation de POI multi-sources',
 	feat_poi_desc:
-		"Lieux, restaurants, monuments, points de vue — dédoublonnés et enrichis (catégories, horaires, photos, accessibilité) à partir de 7 sources publiques et partenaires (OSM, Wikivoyage, Wikipedia, GeoNames, Ticketmaster, Eventbrite).",
+		"Lieux, restaurants, monuments, points de vue, dédoublonnés et enrichis (catégories, horaires, photos, accessibilité) à partir de 7 sources publiques et partenaires (OSM, Wikivoyage, Wikipedia, GeoNames, Ticketmaster, Eventbrite).",
 	feat_events_title: 'Évènements en temps réel',
 	feat_events_desc:
 		'Concerts, marchés, expos, festivals. Mis à jour toutes les heures, avec géoposition, durée, prix et tags. Filtres par catégorie, distance et créneau horaire.',
 	feat_itin_title: 'Itinéraires intelligents',
 	feat_itin_desc:
-		"L'utilisateur sélectionne ses points — l'API calcule un parcours optimisé tenant compte du temps de visite, des horaires d'ouverture, du transport, et de la météo.",
+		"L'utilisateur sélectionne ses points. L'API calcule un parcours optimisé tenant compte du temps de visite, des horaires d'ouverture, du transport, et de la météo.",
 
 	// Console
-	console_eyebrow: '— en pratique',
+	console_eyebrow: 'en pratique',
 	console_title: 'Un appel. Un itinéraire optimisé.',
 	console_replay: '↻ rejouer',
 
 	// Routes
-	routes_eyebrow: '— doc interactive',
+	routes_eyebrow: 'doc interactive',
 	routes_title: 'Toutes les routes. Testables en un clic.',
 	routes_sub: "Sélectionnez une route, lancez-la, lisez la réponse réelle. Aucune clé requise pour les routes à 0 token.",
 	routes_running: '… exécution',
@@ -56,7 +56,7 @@ export const fr = {
 	routes_ratelimit: '60 req / min',
 	routes_doc_cta: 'Documentation complète',
 	routes_doc_desc: 'Sidebar, schémas, codes d\'erreur, snippets cURL/JS/Python et un "Try it" sur chaque route.',
-	routes_error: '// Erreur de connexion — API inaccessible',
+	routes_error: '// Erreur de connexion. API inaccessible',
 	routes_desc_search: 'Recherche de POIs par coordonnées, rayon, type, mode polygon/district',
 	routes_desc_search_slim: 'Idem, réponse allégée (id, name, type, score, coords)',
 	routes_desc_events: "Évènements géolocalisés (concerts, marchés, festivals…)",
@@ -66,9 +66,9 @@ export const fr = {
 	routes_desc_health: "Statut de santé de l'API",
 
 	// Deploy
-	deploy_eyebrow: '— deux façons de tourner',
+	deploy_eyebrow: 'deux façons de tourner',
 	deploy_title: "On vous recommande de l'héberger vous-même.",
-	deploy_sub: "C'est open source pour une raison. Une image Docker, vos serveurs, zéro limite. La version cloud existe pour ceux qui veulent juste essayer ou ne pas gérer d'infra — et dans ce cas, ce que vous payez couvre strictement le coût d'exécution sur nos machines.",
+	deploy_sub: "C'est open source pour une raison. Une image Docker, vos serveurs, zéro limite. La version cloud existe pour ceux qui veulent juste essayer ou ne pas gérer d'infra. Dans ce cas, ce que vous payez couvre strictement le coût d'exécution sur nos machines.",
 	deploy_recommended: 'Recommandé',
 	deploy_self_kind: 'Self-hosted · gratuit à vie',
 	deploy_self_title: 'Une image Docker.',
@@ -88,11 +88,11 @@ export const fr = {
 	deploy_cloud_cta: 'Voir les packs',
 
 	// Pricing
-	pricing_eyebrow: '— tokens cloud',
+	pricing_eyebrow: 'tokens cloud',
 	pricing_title: 'Au prix coûtant. À l\'unité. Sans tranches, sans abonnement.',
-	pricing_sub: "Un tarif unique, peu importe le volume. Aucune marge sur l'API — les tokens financent uniquement le compute, la bande passante et le cache de nos serveurs. La version self-hosted reste, elle, gratuite et illimitée.",
+	pricing_sub: "Un tarif unique, peu importe le volume. Aucune marge sur l'API, les tokens financent uniquement le compute, la bande passante et le cache de nos serveurs. La version self-hosted reste, elle, gratuite et illimitée.",
 	pricing_banner_title: 'Pricing transparent.',
-	pricing_banner_body: " 1 token = 1 appel facturé. Tarif uniforme à 0,30 ct / token, peu importe le volume. Achetez exactement ce dont vous avez besoin — pas de pack figé.",
+	pricing_banner_body: " 1 token = 1 appel facturé. Tarif uniforme à 0,30 ct / token, peu importe le volume. Achetez exactement ce dont vous avez besoin. Pas de pack figé.",
 	pricing_how_many: 'Combien de tokens ?',
 	pricing_meta_calls: '≈ appels API',
 	pricing_meta_itin: '≈ itinéraires (3 tk)',
@@ -114,11 +114,11 @@ export const fr = {
 	pricing_enterprise_link: 'on en parle',
 
 	// BYOK
-	byok_eyebrow: '— bring your own key',
+	byok_eyebrow: 'bring your own key',
 	byok_title: 'Branchez les providers que',
 	byok_accent: 'vous',
 	byok_title_end: 'voulez.',
-	byok_sub: "L'API est un agrégateur — pas un silo. Les sources gratuites (OSM, Wikivoyage, Wikipedia) sont actives par défaut. Ajoutez vos clés Eventbrite ou Ticketmaster via variable d'env ou header par requête pour enrichir les évènements.",
+	byok_sub: "L'API est un agrégateur, pas un silo. Les sources gratuites (OSM, Wikivoyage, Wikipedia) sont actives par défaut. Ajoutez vos clés Eventbrite ou Ticketmaster via variable d'env ou header par requête pour enrichir les évènements.",
 	byok_li1: "Une variable d'env par provider. C'est tout.",
 	byok_li2: 'Vos clés ne quittent jamais votre instance.',
 	byok_li3: 'Activez seulement ce dont vous avez besoin.',
@@ -160,7 +160,10 @@ export const fr = {
 	login_otp_expires: 'Il expire dans 15 minutes.',
 	login_otp_label: 'Code à usage unique',
 	login_otp_verify: 'Vérifier le code',
-	login_otp_hint: 'Pas reçu ? Vérifiez vos spams.',
+	login_otp_hint: 'Pas reçu ? Vérifiez vos spams ou',
+	login_otp_resend: 'renvoyer le code',
+	login_otp_resend_ok: 'Code renvoyé !',
+	login_otp_resend_wait: 'Patienter {s}s',
 	login_otp_back: 'Retour',
 	login_no_match: 'Les mots de passe ne correspondent pas',
 	login_error_generic: 'Une erreur est survenue',
@@ -182,7 +185,7 @@ export const fr = {
 	db_tokens_used: 'tokens utilisés',
 	db_remaining: 'restants',
 	db_revoked_badge: 'révoquée',
-	db_copy_warning: 'Copiez votre clé maintenant — elle ne sera plus affichée.',
+	db_copy_warning: 'Copiez votre clé maintenant, elle ne sera plus affichée.',
 	db_copy_btn: 'copier',
 	db_modal_title: 'Révoquer cette clé ?',
 	db_modal_body_pre: 'La clé',

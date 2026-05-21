@@ -56,6 +56,7 @@ services:
     image: mailhog/mailhog:latest
     ports:
       - "1025:1025"
+      - "8025:8025"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.mailhog.rule=Host(`mailhog.trippier.localhost`)"
@@ -160,6 +161,8 @@ services:
       FRONTEND_ITINERARY_API_URL: http://itinerary-api:8000
       PUBLIC_ADMIN_EMAILS: ${PUBLIC_ADMIN_EMAILS}
       ADMIN_EMAILS: ${ADMIN_EMAILS}
+      PUBLIC_POI_API_URL: http://localhost:8080
+      PUBLIC_ITINERARY_API_URL: http://localhost:8000
     command: sh -c "bun install --frozen-lockfile && bunx svelte-kit sync && bun run dev --host"
     depends_on:
       - auth-api

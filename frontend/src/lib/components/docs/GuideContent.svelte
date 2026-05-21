@@ -17,8 +17,8 @@
 	<h2>1. Récupérez l'API</h2>
 	<p>Deux options, même schéma de routes :</p>
 	<ul class="d-checklist">
-		<li><strong>Cloud — </strong>créez un compte, récupérez votre clé API depuis le dashboard, 1 000 tokens offerts.</li>
-		<li><strong>Self-hosted — </strong>une image Docker, vos serveurs, démarrez avec <code>POI_AUTH_DISABLED=true</code> pour désactiver l'auth.</li>
+		<li><strong>Cloud :</strong> créez un compte, récupérez votre clé API depuis le dashboard, 1 000 tokens offerts.</li>
+		<li><strong>Self-hosted :</strong> une image Docker, vos serveurs, démarrez avec <code>POI_AUTH_DISABLED=true</code> pour désactiver l'auth.</li>
 	</ul>
 	<h2>2. Premier appel (sans auth)</h2>
 	<p><code>/health</code> et <code>/pois/providers</code> ne nécessitent aucun token ni authentification :</p>
@@ -57,7 +57,7 @@
 			<tr><td>400</td><td>Paramètre absent, invalide ou combinaison incohérente (ex : <code>types</code> et <code>weights</code> simultanés).</td></tr>
 			<tr><td>401</td><td>En-tête <code>X-API-Key</code> absent ou clé inconnue / révoquée.</td></tr>
 			<tr><td>402</td><td>Solde de tokens insuffisant pour exécuter la requête.</td></tr>
-			<tr><td>429</td><td>Rate-limit dépassé — attendez la fenêtre suivante.</td></tr>
+			<tr><td>429</td><td>Rate-limit dépassé, attendez la fenêtre suivante.</td></tr>
 			<tr><td>500</td><td>Erreur interne. Réessayez ; si persistant, ouvrez une issue.</td></tr>
 		</tbody>
 	</table>

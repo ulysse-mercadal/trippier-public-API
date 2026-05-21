@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/trippier/poi-api/internal/byok"
+	"github.com/trippier/poi-api/internal/geo"
 	"github.com/trippier/poi-api/pkg/types"
 )
 
@@ -119,14 +120,28 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 	}
 
 	now := time.Now().UTC()
+	startDate := now
+	if q.Date != "" {
+		if parsed, err := time.Parse("2006-01-02", q.Date); err == nil {
+			startDate = parsed.UTC()
+		}
+	}
+	startOfDay := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.UTC)
 	params := url.Values{
 		"apikey":        {apiKey},
-		"latlong":       {fmt.Sprintf("%.6f,%.6f", q.Lat, q.Lng)},
 		"radius":        {strconv.Itoa(radiusKm)},
 		"unit":          {"km"},
 		"size":          {"100"},
-		"startDateTime": {now.Format("2006-01-02T15:04:05Z")},
-		"endDateTime":   {now.AddDate(0, 6, 0).Format("2006-01-02T15:04:05Z")},
+		"startDateTime": {startOfDay.Format("2006-01-02T15:04:05Z")},
+		"endDateTime":   {startOfDay.AddDate(1, 0, 0).Format("2006-01-02T15:04:05Z")},
+	}
+
+	// Ticketmaster latlong geo-search covers only the US market.
+	// Reverse-geocode to a city name so European results are found too.
+	if city, err := geo.ReverseGeocode(ctx, q.Lat, q.Lng); err == nil {
+		params.Set("city", city)
+	} else {
+		params.Set("latlong", fmt.Sprintf("%.6f,%.6f", q.Lat, q.Lng))
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+"?"+params.Encode(), nil)
@@ -152,11 +167,13 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 	if result.Embedded == nil {
 		return nil, nil
 	}
-	return p.toRawPois(result.Embedded.Events), nil
+	return p.toRawPois(result.Embedded.Events, q.Lat, q.Lng), nil
 }
 
-// toRawPois converts Ticketmaster events to RawPoi records, skipping entries without a venue location.
-func (p *Provider) toRawPois(events []tmEvent) []types.RawPoi {
+// toRawPois converts Ticketmaster events to RawPoi records.
+// centerLat/centerLng are used as approximate coordinates for events whose venue
+// has no location data (common for European Ticketmaster listings).
+func (p *Provider) toRawPois(events []tmEvent, centerLat, centerLng float64) []types.RawPoi {
 	pois := make([]types.RawPoi, 0, len(events))
 	for _, ev := range events {
 		if ev.Name == "" {
@@ -164,8 +181,9 @@ func (p *Provider) toRawPois(events []tmEvent) []types.RawPoi {
 		}
 
 		lat, lng, ok := p.venueCoords(ev)
+		approximate := false
 		if !ok {
-			continue
+			lat, lng, approximate = centerLat, centerLng, true
 		}
 
 		poi := types.RawPoi{
@@ -175,7 +193,7 @@ func (p *Provider) toRawPois(events []tmEvent) []types.RawPoi {
 			Provider:    types.ProviderTicketmaster,
 			Description: ev.Info,
 			Thumbnail:   p.pickThumbnail(ev.Images),
-			Coords:      &types.Coordinates{Lat: lat, Lng: lng},
+			Coords:      &types.Coordinates{Lat: lat, Lng: lng, Approximate: approximate},
 			Contact:     types.Contact{Website: ev.URL},
 		}
 
@@ -199,7 +217,13 @@ func (p *Provider) venueCoords(ev tmEvent) (lat, lng float64, ok bool) {
 	v := ev.Embedded.Venues[0]
 	lat, err1 := strconv.ParseFloat(strings.TrimSpace(v.Location.Latitude), 64)
 	lng, err2 := strconv.ParseFloat(strings.TrimSpace(v.Location.Longitude), 64)
-	return lat, lng, err1 == nil && err2 == nil
+	if err1 != nil || err2 != nil {
+		return 0, 0, false
+	}
+	if lat == 0 && lng == 0 {
+		return 0, 0, false
+	}
+	return lat, lng, true
 }
 
 // pickThumbnail selects the best image: prefers 16:9 ratio at width ≥ 640, else first available.

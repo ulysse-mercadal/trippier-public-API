@@ -24,25 +24,25 @@ export const en: Dict = {
 	hero_stat_selfhosted: 'self-hosted',
 
 	// Features
-	feat_eyebrow: '— what the API does',
+	feat_eyebrow: 'what the API does',
 	feat_title: 'Three primitives. Infinite journeys.',
 	feat_poi_title: 'Multi-source POI aggregation',
 	feat_poi_desc:
-		'Places, restaurants, monuments, viewpoints — deduplicated and enriched (categories, hours, photos, accessibility) from 7 public and partner sources (OSM, Wikivoyage, Wikipedia, GeoNames, Ticketmaster, Eventbrite).',
+		'Places, restaurants, monuments, viewpoints, deduplicated and enriched (categories, hours, photos, accessibility) from 7 public and partner sources (OSM, Wikivoyage, Wikipedia, GeoNames, Ticketmaster, Eventbrite).',
 	feat_events_title: 'Real-time events',
 	feat_events_desc:
 		'Concerts, markets, exhibitions, festivals. Updated every hour, with geolocation, duration, price and tags. Filters by category, distance and time slot.',
 	feat_itin_title: 'Smart itineraries',
 	feat_itin_desc:
-		'The user selects their points — the API calculates an optimized route taking into account visit time, opening hours, transport, and weather.',
+		'The user selects their points. The API calculates an optimized route taking into account visit time, opening hours, transport, and weather.',
 
 	// Console
-	console_eyebrow: '— in practice',
+	console_eyebrow: 'in practice',
 	console_title: 'One call. One optimized itinerary.',
 	console_replay: '↻ replay',
 
 	// Routes
-	routes_eyebrow: '— interactive docs',
+	routes_eyebrow: 'interactive docs',
 	routes_title: 'All routes. Try them in one click.',
 	routes_sub: 'Select a route, run it, read the real response. No key required for free routes.',
 	routes_running: '… running',
@@ -58,7 +58,7 @@ export const en: Dict = {
 	routes_ratelimit: '60 req / min',
 	routes_doc_cta: 'Full documentation',
 	routes_doc_desc: 'Sidebar, schemas, error codes, cURL/JS/Python snippets and a "Try it" on every route.',
-	routes_error: '// Connection error — API unreachable',
+	routes_error: '// Connection error. API unreachable',
 	routes_desc_search: 'Search POIs by coordinates, radius, type, polygon/district mode',
 	routes_desc_search_slim: 'Same, lightweight response (id, name, type, score, coords)',
 	routes_desc_events: 'Geolocated events (concerts, markets, festivals…)',
@@ -68,9 +68,9 @@ export const en: Dict = {
 	routes_desc_health: 'API health status',
 
 	// Deploy
-	deploy_eyebrow: '— two ways to run',
+	deploy_eyebrow: 'two ways to run',
 	deploy_title: 'We recommend self-hosting.',
-	deploy_sub: "It's open source for a reason. One Docker image, your servers, zero limits. The cloud version exists for those who just want to try it or don't want to manage infrastructure — and in that case, what you pay covers strictly the execution cost on our machines.",
+	deploy_sub: "It's open source for a reason. One Docker image, your servers, zero limits. The cloud version exists for those who just want to try it or don't want to manage infrastructure. In that case, what you pay covers strictly the execution cost on our machines.",
 	deploy_recommended: 'Recommended',
 	deploy_self_kind: 'Self-hosted · free forever',
 	deploy_self_title: 'One Docker image.',
@@ -90,11 +90,11 @@ export const en: Dict = {
 	deploy_cloud_cta: 'See packs',
 
 	// Pricing
-	pricing_eyebrow: '— cloud tokens',
+	pricing_eyebrow: 'cloud tokens',
 	pricing_title: 'At cost. Per unit. No tiers, no subscription.',
-	pricing_sub: 'A single rate, regardless of volume. No margin on the API — tokens only fund the compute, bandwidth and cache of our servers. The self-hosted version remains free and unlimited.',
+	pricing_sub: 'A single rate, regardless of volume. No margin on the API, tokens only fund the compute, bandwidth and cache of our servers. The self-hosted version remains free and unlimited.',
 	pricing_banner_title: 'Transparent pricing.',
-	pricing_banner_body: ' 1 token = 1 billed call. Flat rate at 0.30 ct / token, regardless of volume. Buy exactly what you need — no fixed pack.',
+	pricing_banner_body: ' 1 token = 1 billed call. Flat rate at 0.30 ct / token, regardless of volume. Buy exactly what you need. No fixed pack.',
 	pricing_how_many: 'How many tokens?',
 	pricing_meta_calls: '≈ API calls',
 	pricing_meta_itin: '≈ itineraries (3 tk)',
@@ -116,11 +116,11 @@ export const en: Dict = {
 	pricing_enterprise_link: "let's talk",
 
 	// BYOK
-	byok_eyebrow: '— bring your own key',
+	byok_eyebrow: 'bring your own key',
 	byok_title: 'Plug in the providers',
 	byok_accent: 'you',
 	byok_title_end: 'want.',
-	byok_sub: "The API is an aggregator — not a silo. Free sources (OSM, Wikivoyage, Wikipedia) are active by default. Add your Eventbrite or Ticketmaster keys via env variable or per-request header to enrich events.",
+	byok_sub: "The API is an aggregator, not a silo. Free sources (OSM, Wikivoyage, Wikipedia) are active by default. Add your Eventbrite or Ticketmaster keys via env variable or per-request header to enrich events.",
 	byok_li1: "One env variable per provider. That's it.",
 	byok_li2: 'Your keys never leave your instance.',
 	byok_li3: 'Activate only what you need.',
@@ -162,7 +162,10 @@ export const en: Dict = {
 	login_otp_expires: 'It expires in 15 minutes.',
 	login_otp_label: 'One-time code',
 	login_otp_verify: 'Verify code',
-	login_otp_hint: "Didn't receive it? Check your spam.",
+	login_otp_hint: "Didn't receive it? Check your spam or",
+	login_otp_resend: 'resend the code',
+	login_otp_resend_ok: 'Code resent!',
+	login_otp_resend_wait: 'Wait {s}s',
 	login_otp_back: 'Back',
 	login_no_match: "Passwords don't match",
 	login_error_generic: 'Something went wrong',
@@ -184,7 +187,7 @@ export const en: Dict = {
 	db_tokens_used: 'tokens used',
 	db_remaining: 'remaining',
 	db_revoked_badge: 'revoked',
-	db_copy_warning: "Copy your key now — it won't be shown again.",
+	db_copy_warning: "Copy your key now, it won't be shown again.",
 	db_copy_btn: 'copy',
 	db_modal_title: 'Revoke this key?',
 	db_modal_body_pre: 'The key',

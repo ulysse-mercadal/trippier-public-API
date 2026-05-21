@@ -25,6 +25,7 @@ type SearchQuery struct {
 	Limit     int                 `form:"limit"     json:"limit"`
 	Offset    int                 `form:"offset"    json:"offset"`
 	MinScore  float64             `form:"min_score" json:"min_score,omitempty"`
+	Date      string              `form:"date"      json:"date,omitempty"`
 }
 
 // SearchResult is the top-level API response body for GET /pois/search.

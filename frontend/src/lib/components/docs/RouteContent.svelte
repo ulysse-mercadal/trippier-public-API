@@ -50,7 +50,7 @@
 	<thead><tr><th>HTTP</th><th>Quand</th></tr></thead>
 	<tbody>
 		<tr><td><span class="d-status ok">200</span></td><td>Requête réussie. Le corps contient la ressource.</td></tr>
-		<tr><td><span class="d-status warn">400</span></td><td>Paramètres invalides — vérifier les types.</td></tr>
+		<tr><td><span class="d-status warn">400</span></td><td>Paramètres invalides, vérifier les types.</td></tr>
 		<tr><td><span class="d-status warn">401</span></td><td>Token manquant ou invalide.</td></tr>
 		{#if (page.cost ?? 0) > 0}
 			<tr><td><span class="d-status warn">402</span></td><td>Solde de tokens insuffisant.</td></tr>

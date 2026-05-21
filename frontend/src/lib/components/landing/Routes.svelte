@@ -1,15 +1,16 @@
 <script lang="ts">
 	import { t } from '$lib/i18n';
+	import { PAGES } from '$lib/data/docs';
 
-	const ROUTES = [
-		{ m: 'GET',  path: '/pois/search',        descKey: 'routes_desc_search',        cost: 1,  subpath: 'search'      },
-		{ m: 'GET',  path: '/pois/search/slim',   descKey: 'routes_desc_search_slim',   cost: 1,  subpath: 'search/slim' },
-		{ m: 'GET',  path: '/pois/events',        descKey: 'routes_desc_events',        cost: 10, subpath: 'events'      },
-		{ m: 'GET',  path: '/pois/events/slim',   descKey: 'routes_desc_events_slim',   cost: 10, subpath: 'events/slim' },
-		{ m: 'POST', path: '/itinerary/generate', descKey: 'routes_desc_itinerary',     cost: 50, subpath: null          },
-		{ m: 'GET',  path: '/pois/providers',     descKey: 'routes_desc_providers',     cost: 0,  subpath: 'providers'   },
-		{ m: 'GET',  path: '/health',             descKey: 'routes_desc_health',        cost: 0,  subpath: null          },
-	] as const;
+	// Single source of truth — derived from docs data
+	const ROUTES = PAGES
+		.filter(p => p.kind === 'route' && p.path && p.method)
+		.map(p => {
+			const subpath = p.path!.startsWith('/pois/')
+				? p.path!.replace('/pois/', '')
+				: null;
+			return { m: p.method!, path: p.path!, cost: p.cost ?? 0, subpath };
+		});
 
 	let activeIdx = 4;
 	let running   = false;
@@ -68,9 +69,10 @@
 		running = false;
 	}
 
-	$: active = ROUTES[activeIdx];
-	$: requestBody = active.m === 'POST'
-		? '\nContent-Type: application/json\n\n{ "days": 1, "poi_query": { "lat": 40.7549, "lng": -73.9840, "radius": 5000 }, "preferences": { "pace": "moderate", "start_time": "09:00" } }'
+	$: active    = ROUTES[activeIdx];
+	$: activePage = PAGES.find(p => p.path === active?.path && p.method === active?.m);
+	$: requestBody = active?.m === 'POST'
+		? `\nContent-Type: application/json\n\n${activePage?.body ?? '{}'}`
 		: '?lat=40.7549&lng=-73.9840&radius=5000';
 </script>
 
@@ -110,7 +112,7 @@
 						{/if}
 					</button>
 				</div>
-				<p class="rd-desc">{$t(active.descKey)}</p>
+				<p class="rd-desc">{activePage?.summary ?? ''}</p>
 				<div class="rd-meta">
 					<span>{$t('routes_cost_label')} : <strong>{active.cost === 0 ? $t('routes_cost_free') : `${active.cost} ${active.cost > 1 ? $t('routes_cost_tokens') : $t('routes_cost_token')}`}</strong></span>
 					<span>{$t('routes_auth_label')} : <strong>{active.cost === 0 ? $t('routes_auth_optional') : 'X-API-Key'}</strong></span>

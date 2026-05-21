@@ -21,7 +21,7 @@ func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Authorization, X-API-Key, Content-Type")
+		c.Header("Access-Control-Allow-Headers", "Authorization, X-API-Key, Content-Type, X-Ticketmaster-Key, X-Eventbrite-Token")
 
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)

@@ -51,6 +51,13 @@ export async function login(email: string, password: string): Promise<string> {
 	return token;
 }
 
+export async function resendCode(email: string): Promise<void> {
+	await request('/resend-code', undefined, {
+		method: 'POST',
+		body: JSON.stringify({ email }),
+	});
+}
+
 export async function getMe(token: string): Promise<User> {
 	return request<User>('/me', token);
 }

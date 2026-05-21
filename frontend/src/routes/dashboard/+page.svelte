@@ -1,4 +1,4 @@
-<svelte:head><title>trippier/api — Dashboard</title></svelte:head>
+<svelte:head><title>trippier/api · Dashboard</title></svelte:head>
 
 <script lang="ts">
 	import { onMount } from 'svelte';

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
+	import { env } from '$env/dynamic/public';
 	import type { DocPage } from '$lib/data/docs';
 	import { buildCurl, buildJs, buildPy, sampleValue } from '$lib/utils/docs';
 
@@ -11,15 +12,24 @@
 	let running    = false;
 	let copied     = false;
 
-	let apiKey  = browser ? (localStorage.getItem('docs_api_key')  ?? '') : '';
-	let baseUrl = browser ? (localStorage.getItem('docs_base_url') ?? 'https://api.poi.trippier.dev') : 'https://api.poi.trippier.dev';
+	// If PUBLIC_POI_API_URL is set (dev), always use it — ignore localStorage to avoid stale prod URL.
+	const envBaseUrl          = env.PUBLIC_POI_API_URL ?? '';
+	const envItineraryBaseUrl = env.PUBLIC_ITINERARY_API_URL ?? '';
+	const defaultBaseUrl      = envBaseUrl || 'https://api.poi.trippier.dev';
+
+	let apiKey  = browser ? (localStorage.getItem('docs_api_key') ?? '') : '';
+	let baseUrl = envBaseUrl || (browser ? (localStorage.getItem('docs_base_url') ?? defaultBaseUrl) : defaultBaseUrl);
+	let tmKey   = browser ? (localStorage.getItem('docs_tm_key') ?? '') : '';
+	let ebToken = browser ? (localStorage.getItem('docs_eb_token') ?? '') : '';
+
+	$: isEventsRoute = page?.path?.includes('/events') ?? false;
 
 	let responseBody: string | null = null;
 	let responseStatus: number | null = null;
 	let responseMs: number | null = null;
 	let responseError: string | null = null;
 
-	$: snippets = page ? { curl: buildCurl(page, baseUrl), js: buildJs(page), py: buildPy(page) } : null;
+	$: snippets = page ? { curl: buildCurl(page, baseUrl), js: buildJs(page, baseUrl), py: buildPy(page, baseUrl) } : null;
 	$: code     = snippets?.[lang] ?? '';
 
 	$: { page; responseBody = null; responseStatus = null; responseMs = null; responseError = null; running = false; }
@@ -28,6 +38,8 @@
 		if (!browser) return;
 		localStorage.setItem('docs_api_key',  apiKey);
 		localStorage.setItem('docs_base_url', baseUrl);
+		localStorage.setItem('docs_tm_key',   tmKey);
+		localStorage.setItem('docs_eb_token', ebToken);
 	}
 
 	function copySnippet() {
@@ -38,12 +50,16 @@
 
 	function buildUrl(): string {
 		const path = page?.path ?? '';
-		if (page?.method !== 'GET') return baseUrl + path;
+		const base = (envItineraryBaseUrl && path.startsWith('/itinerary/'))
+			? envItineraryBaseUrl
+			: baseUrl;
+		if (page?.method !== 'GET') return base + path;
+		const SNIPPET_KEYS = new Set(['lat', 'lng', 'radius', 'date']);
 		const params = (page?.params ?? [])
-			.filter(p => p.in !== 'path' && ['lat','lng','radius'].includes(p.name))
+			.filter(p => p.in !== 'path' && SNIPPET_KEYS.has(p.name))
 			.map(p => `${encodeURIComponent(p.name)}=${encodeURIComponent(sampleValue(p))}`)
 			.join('&');
-		return baseUrl + path + (params ? `?${params}` : '');
+		return base + path + (params ? `?${params}` : '');
 	}
 
 	async function tryIt() {
@@ -55,6 +71,8 @@
 		const headers: Record<string, string> = {};
 		if (apiKey) headers['X-API-Key'] = apiKey;
 		if (page.method !== 'GET') headers['Content-Type'] = 'application/json';
+		if (isEventsRoute && tmKey)   headers['X-Ticketmaster-Key']   = tmKey;
+		if (isEventsRoute && ebToken) headers['X-Eventbrite-Token'] = ebToken;
 
 		const t0 = performance.now();
 		try {
@@ -107,6 +125,29 @@
 					spellcheck="false"
 				/>
 			</label>
+			{#if isEventsRoute}
+				<div class="d-byok-sep">Clés providers (BYOK)</div>
+				<label class="d-field">
+					<span>X-Ticketmaster-Key</span>
+					<input
+						type="password"
+						bind:value={tmKey}
+						on:blur={saveSettings}
+						placeholder="Votre clé Ticketmaster"
+						spellcheck="false"
+					/>
+				</label>
+				<label class="d-field">
+					<span>X-Eventbrite-Token</span>
+					<input
+						type="password"
+						bind:value={ebToken}
+						on:blur={saveSettings}
+						placeholder="Votre token Eventbrite"
+						spellcheck="false"
+					/>
+				</label>
+			{/if}
 		</div>
 	</div>
 
@@ -225,6 +266,15 @@
 	}
 	.d-field input:focus { border-color: var(--accent); }
 	.d-field input::placeholder { color: var(--text-3); }
+	.d-byok-sep {
+		font-family: var(--font-mono);
+		font-size: 10px;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: var(--text-3);
+		padding-top: 6px;
+		border-top: 1px solid var(--border);
+	}
 
 	.d-panel-block {
 		border: 1px solid var(--border);

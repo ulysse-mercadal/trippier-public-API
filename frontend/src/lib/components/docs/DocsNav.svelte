@@ -1,38 +1,31 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { auth } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
-	import { t, locale, setLocale, initLocale } from '$lib/i18n';
+	import { t, locale, setLocale } from '$lib/i18n';
+	import { page } from '$app/stores';
+	import { activeNavHash } from '$lib/stores/nav';
 
-	onMount(async () => {
-		initLocale();
-		if ($auth.user) return;
-		const token = auth.getStoredToken();
-		if (!token) return;
-		try {
-			const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } });
-			if (res.ok) auth.init(token, await res.json());
-		} catch {}
-	});
+	export let active: string = '';
 
 	function handleLogout() {
 		auth.logout();
 		goto('/');
 	}
+
+	$: currentActive = active || $activeNavHash || $page.url.pathname;
 </script>
 
 <nav class="d-nav">
 	<a class="d-brand" href="/">
 		<img src="/favicon.png" alt="trippier logo" width="28" height="28" style="border-radius:3px" />
 		<span>trippier<span class="brand-dot">/</span>api</span>
-		<span class="d-nav-section">docs</span>
 	</a>
 
 	<div class="d-nav-links">
-		<a href="/#features">{$t('nav_features')}</a>
-		<a href="/#deploy">{$t('nav_deploy')}</a>
-		<a class="d-nav-active" href="/docs">{$t('nav_docs')}</a>
-		<a href="/roadmap">{$t('nav_roadmap')}</a>
+		<a href="/#features" class:d-nav-active={currentActive === '/#features'}>{$t('nav_features')}</a>
+		<a href="/#deploy"   class:d-nav-active={currentActive === '/#deploy'}>{$t('nav_deploy')}</a>
+		<a href="/docs"      class:d-nav-active={currentActive.startsWith('/docs')}>{$t('nav_docs')}</a>
+		<a href="/roadmap"   class:d-nav-active={currentActive.startsWith('/roadmap')}>{$t('nav_roadmap')}</a>
 		<a href="https://github.com/ulysse-mercadal/trippier-public-API" target="_blank" rel="noopener" class="d-nav-gh">
 			<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.99 1.03-2.69-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.6 1.03 2.69 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2z"/></svg>
 			GitHub

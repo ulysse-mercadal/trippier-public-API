@@ -14,11 +14,7 @@
 </script>
 
 <section class="hero">
-	<div class="hero-badge">
-		<span class="dot"></span>
-		{$t('hero_badge')}
-	</div>
-	<h1 class="hero-title">
+<h1 class="hero-title">
 		{$t('hero_title')} <span class="accent-fg">{$t('hero_accent')}</span>
 	</h1>
 	<p class="hero-sub">{$t('hero_sub')}</p>
@@ -55,33 +51,7 @@
 		max-width: var(--max);
 		margin: 0 auto;
 	}
-	.hero-badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
-		padding: 6px 12px;
-		border: 1px solid var(--border);
-		background: color-mix(in oklch, var(--surface) 60%, transparent);
-		border-radius: 999px;
-		font-family: var(--font-mono);
-		font-size: 12px;
-		color: var(--text-2);
-		letter-spacing: 0.01em;
-		margin-bottom: 28px;
-		backdrop-filter: blur(8px);
-	}
-	.dot {
-		width: 7px; height: 7px;
-		background: var(--accent);
-		border-radius: 50%;
-		box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 25%, transparent);
-		animation: pulse 2s ease-in-out infinite;
-	}
-	@keyframes pulse {
-		0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 25%, transparent); }
-		50%       { box-shadow: 0 0 0 6px color-mix(in oklch, var(--accent) 0%, transparent); }
-	}
-	.hero-title {
+.hero-title {
 		font-size: clamp(40px, 5.4vw, 76px);
 		line-height: 1;
 		letter-spacing: -0.035em;

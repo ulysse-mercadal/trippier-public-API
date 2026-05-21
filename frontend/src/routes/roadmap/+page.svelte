@@ -1,5 +1,5 @@
 <svelte:head>
-	<title>trippier/api — Roadmap</title>
+	<title>trippier/api · Roadmap</title>
 </svelte:head>
 
 <script lang="ts">

@@ -25,6 +25,7 @@ var (
 	ErrBadCredentials = errors.New("invalid email or password")
 	ErrNotVerified    = errors.New("email not verified")
 	ErrBadToken       = errors.New("invalid or expired verification code")
+	ErrAlreadyVerified = errors.New("email already verified")
 )
 
 // dummyHash is used in Login to run a constant-time bcrypt comparison when the
@@ -45,7 +46,7 @@ func New(db *pgxpool.Pool, emailer *email.Sender, jwtSecret, appURL string) *Ser
 }
 
 // Register creates an unverified account and sends a 6-digit OTP code by email.
-func (s *Service) Register(ctx context.Context, emailAddr, password string) error {
+func (s *Service) Register(ctx context.Context, emailAddr, password, clientIP, userAgent string) error {
 	if len(password) < 8 {
 		return ErrWeakPassword
 	}
@@ -72,7 +73,7 @@ func (s *Service) Register(ctx context.Context, emailAddr, password string) erro
 		return fmt.Errorf("insert user: %w", err)
 	}
 
-	if err := s.emailer.SendOTPCode(emailAddr, code); err != nil {
+	if err := s.emailer.SendOTPCode(emailAddr, code, clientIP, userAgent, s.appURL); err != nil {
 		return fmt.Errorf("send otp email: %w", err)
 	}
 
@@ -130,6 +131,36 @@ func (s *Service) Login(ctx context.Context, emailAddr, password string) (string
 	}
 
 	return s.signJWT(user.ID)
+}
+
+// ResendCode generates a new OTP for an unverified account and sends it by email.
+func (s *Service) ResendCode(ctx context.Context, emailAddr, clientIP, userAgent string) error {
+	code, err := randomCode()
+	if err != nil {
+		return err
+	}
+
+	result, err := s.db.Exec(ctx,
+		`UPDATE users
+		    SET verification_token = $2,
+		        verification_token_expires_at = NOW() + INTERVAL '15 minutes',
+		        updated_at = NOW()
+		  WHERE email = $1
+		    AND verified = false`,
+		strings.ToLower(emailAddr), code,
+	)
+	if err != nil {
+		return fmt.Errorf("resend code: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrAlreadyVerified
+	}
+
+	if err := s.emailer.SendOTPCode(emailAddr, code, clientIP, userAgent, s.appURL); err != nil {
+		return fmt.Errorf("send otp email: %w", err)
+	}
+
+	return nil
 }
 
 // Me returns the user for a given ID.
