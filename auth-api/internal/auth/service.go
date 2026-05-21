@@ -19,12 +19,12 @@ import (
 )
 
 var (
-	ErrEmailTaken     = errors.New("email already registered")
-	ErrWeakPassword   = errors.New("password must be at least 8 characters")
-	ErrNotFound       = errors.New("user not found")
-	ErrBadCredentials = errors.New("invalid email or password")
-	ErrNotVerified    = errors.New("email not verified")
-	ErrBadToken       = errors.New("invalid or expired verification code")
+	ErrEmailTaken      = errors.New("email already registered")
+	ErrWeakPassword    = errors.New("password must be at least 8 characters")
+	ErrNotFound        = errors.New("user not found")
+	ErrBadCredentials  = errors.New("invalid email or password")
+	ErrNotVerified     = errors.New("email not verified")
+	ErrBadToken        = errors.New("invalid or expired verification code")
 	ErrAlreadyVerified = errors.New("email already verified")
 )
 

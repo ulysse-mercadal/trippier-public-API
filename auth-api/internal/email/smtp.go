@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html/template"
 	"net/smtp"
-	"strings"
 	"time"
 )
 
@@ -182,45 +181,7 @@ var otpTmpl = template.Must(template.New("otp").Parse(`<!DOCTYPE html>
 type otpData struct {
 	Code, Email, SentAt, ExpiresAt string
 	IP                             string
-	D1, D2, D3, D4, D5, D6        string
-}
-
-// parseDevice returns a short browser + OS description from a User-Agent string.
-func parseDevice(ua string) string {
-	if ua == "" {
-		return "—"
-	}
-	browser := "Navigateur inconnu"
-	switch {
-	case strings.Contains(ua, "Edg/"):
-		browser = "Edge"
-	case strings.Contains(ua, "OPR/") || strings.Contains(ua, "Opera"):
-		browser = "Opera"
-	case strings.Contains(ua, "Chrome"):
-		browser = "Chrome"
-	case strings.Contains(ua, "Firefox"):
-		browser = "Firefox"
-	case strings.Contains(ua, "Safari"):
-		browser = "Safari"
-	case strings.Contains(ua, "curl"):
-		browser = "curl"
-	}
-	os := "OS inconnu"
-	switch {
-	case strings.Contains(ua, "iPhone"):
-		os = "iOS"
-	case strings.Contains(ua, "iPad"):
-		os = "iPadOS"
-	case strings.Contains(ua, "Android"):
-		os = "Android"
-	case strings.Contains(ua, "Macintosh"):
-		os = "macOS"
-	case strings.Contains(ua, "Windows"):
-		os = "Windows"
-	case strings.Contains(ua, "Linux"):
-		os = "Linux"
-	}
-	return browser + " · " + os
+	D1, D2, D3, D4, D5, D6         string
 }
 
 // SendOTPCode sends a 6-digit verification code to addr.
@@ -239,7 +200,7 @@ func (s *Sender) SendOTPCode(to, code, clientIP, userAgent, appURL string) error
 		SentAt:    now.Format("2 Jan 2006 · 15:04 UTC"),
 		ExpiresAt: now.Add(15 * time.Minute).Format("15:04 UTC"),
 		IP:        clientIP,
-		D1: string(digits[0]), D2: string(digits[1]), D3: string(digits[2]),
+		D1:        string(digits[0]), D2: string(digits[1]), D3: string(digits[2]),
 		D4: string(digits[3]), D5: string(digits[4]), D6: string(digits[5]),
 	}
 	var buf bytes.Buffer

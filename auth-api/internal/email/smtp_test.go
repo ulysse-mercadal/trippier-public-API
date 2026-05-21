@@ -117,7 +117,7 @@ func TestSendOTPCode_BodyContainsCode(t *testing.T) {
 	s := email.New(srv.host(), srv.port(), "noreply@trippier.dev", "", "")
 	code := "482917"
 
-	if err := s.SendOTPCode("user@example.com", code); err != nil {
+	if err := s.SendOTPCode("user@example.com", code, "", "", ""); err != nil {
 		t.Fatalf("SendOTPCode: %v", err)
 	}
 
@@ -131,7 +131,7 @@ func TestSendOTPCode_BodyContainsSubject(t *testing.T) {
 	srv := startFakeSMTP(t)
 
 	s := email.New(srv.host(), srv.port(), "noreply@trippier.dev", "", "")
-	if err := s.SendOTPCode("user@example.com", "123456"); err != nil {
+	if err := s.SendOTPCode("user@example.com", "123456", "", "", ""); err != nil {
 		t.Fatalf("SendOTPCode: %v", err)
 	}
 
@@ -147,7 +147,7 @@ func TestSendOTPCode_SubjectContainsCode(t *testing.T) {
 	s := email.New(srv.host(), srv.port(), "noreply@trippier.dev", "", "")
 	code := "739201"
 
-	if err := s.SendOTPCode("to@example.com", code); err != nil {
+	if err := s.SendOTPCode("to@example.com", code, "", "", ""); err != nil {
 		t.Fatalf("SendOTPCode: %v", err)
 	}
 
@@ -160,7 +160,7 @@ func TestSendOTPCode_SubjectContainsCode(t *testing.T) {
 
 func TestNew_SMTP_Unreachable(t *testing.T) {
 	s := email.New("127.0.0.1", 1, "noreply@trippier.dev", "", "")
-	err := s.SendOTPCode("to@example.com", "000000")
+	err := s.SendOTPCode("to@example.com", "000000", "", "", "")
 	if err == nil {
 		t.Error("expected error when SMTP host is unreachable, got nil")
 	}
