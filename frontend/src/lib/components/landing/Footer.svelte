@@ -6,11 +6,7 @@
 	<div class="foot-grid">
 		<div class="foot-brand">
 			<div class="brand-inline">
-				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color:var(--accent)">
-					<path d="M4 18c4-8 12-8 16 0"/>
-					<path d="M6 14c3-5 9-5 12 0" opacity="0.6"/>
-					<circle cx="12" cy="20" r="1.2" fill="currentColor"/>
-				</svg>
+				<img src="/favicon.png" alt="trippier" class="brand-logo" width="24" height="24" />
 				<span>trippier<span class="brand-dot">/</span>api</span>
 			</div>
 			<p>{$t('footer_tagline')}</p>
@@ -69,6 +65,13 @@
 		letter-spacing: -0.01em;
 	}
 	.brand-dot { color: var(--text-3); margin: 0 1px; }
+	.brand-logo {
+		width: 24px;
+		height: 24px;
+		object-fit: contain;
+		border-radius: 6px;
+		display: block;
+	}
 	.foot-brand p { color: var(--text-3); font-size: 13px; margin: 14px 0 0; max-width: 280px; line-height: 1.5; }
 	.foot-grid h4 {
 		font-size: 12px;
