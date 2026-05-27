@@ -19,6 +19,15 @@
 	--accent-soft: #4ee39a22;
 	--accent-dim:  #34c47e;
 	--accent-glow: rgba(78, 227, 154, 0.15);
+	--accent-on:   #0a1411;
+	--code-bg:        oklch(10% 0.01 175);
+	--code-bg-2:      oklch(9% 0.01 175);
+	--code-surface:   oklch(15% 0.014 175);
+	--code-border:    oklch(26% 0.018 175);
+	--code-text:      oklch(96% 0.005 175);
+	--code-text-2:    oklch(78% 0.008 175);
+	--code-text-3:    oklch(60% 0.012 175);
+	--shadow-card: 0 24px 60px -28px rgba(0, 0, 0, 0.5);
 	--danger:      #e78f8f;
 	--warn:        #e4c87a;
 
@@ -34,6 +43,34 @@
 	--font: var(--font-sans);
 	--mono: var(--font-mono);
 	--muted: var(--text-3);
+}
+
+[data-theme="light"] {
+	--bg:          oklch(98.5% 0.004 175);
+	--bg-2:        oklch(96.5% 0.005 175);
+	--surface:     oklch(94% 0.006 175);
+	--surface-2:   oklch(91% 0.008 175);
+	--border:      oklch(86% 0.011 175);
+	--border-2:    oklch(78% 0.014 175);
+	--text:        oklch(20% 0.012 175);
+	--text-2:      oklch(36% 0.014 175);
+	--text-3:      oklch(50% 0.014 175);
+	--text-4:      oklch(64% 0.012 175);
+	--accent:      #169a5d;
+	--accent-soft: #169a5d22;
+	--accent-dim:  #137a4a;
+	--accent-glow: rgba(22, 154, 93, 0.18);
+	--accent-on:   #ffffff;
+	--code-bg:        oklch(97% 0.005 175);
+	--code-bg-2:      oklch(94.5% 0.007 175);
+	--code-surface:   oklch(92% 0.008 175);
+	--code-border:    oklch(85% 0.011 175);
+	--code-text:      oklch(22% 0.012 175);
+	--code-text-2:    oklch(38% 0.014 175);
+	--code-text-3:    oklch(52% 0.014 175);
+	--shadow-card: 0 24px 60px -28px rgba(20, 40, 30, 0.18);
+	--danger:      #c34a4a;
+	--warn:        #a87814;
 }
 
 html { scroll-behavior: smooth; }
@@ -62,7 +99,7 @@ button {
 input, textarea { font-family: var(--font-sans); }
 code { font-family: var(--font-mono); }
 
-::selection { background: var(--accent); color: #0a0f0e; }
+::selection { background: var(--accent); color: var(--accent-on); }
 
 /* ── Layout helpers ── */
 .wrap {
@@ -72,8 +109,9 @@ code { font-family: var(--font-mono); }
 }
 .eyebrow {
 	font-family: var(--font-mono);
-	font-size: 12px;
-	letter-spacing: 0.06em;
+	font-size: 16px;
+	font-weight: 500;
+	letter-spacing: 0.04em;
 	color: var(--accent);
 	text-transform: lowercase;
 }
@@ -105,7 +143,7 @@ code { font-family: var(--font-mono); }
 	gap: 8px;
 	padding: 10px 16px;
 	background: var(--accent);
-	color: #0a1411;
+	color: var(--accent-on);
 	border-radius: var(--r-md);
 	font-weight: 600;
 	font-size: 14px;

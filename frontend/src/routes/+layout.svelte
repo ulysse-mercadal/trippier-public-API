@@ -7,6 +7,10 @@
 	import TopoBackground from '$lib/components/TopoBackground.svelte';
 	import DocsNav from '$lib/components/docs/DocsNav.svelte';
 	import { initLocale } from '$lib/i18n';
+	import { initTheme, theme } from '$lib/stores/theme';
+
+	$: topoColor = $theme === 'light' ? '#169a5d' : '#4ee39a';
+	$: topoOpacity = $theme === 'light' ? 0.18 : 0.24;
 
 	$: isLogin     = $page.url.pathname === '/login';
 	$: isDocs      = $page.url.pathname.startsWith('/docs');
@@ -14,6 +18,7 @@
 
 	onMount(async () => {
 		initLocale();
+		initTheme();
 		if ($auth.user) return;
 		const token = auth.getStoredToken();
 		if (!token) return;
@@ -34,7 +39,7 @@
 {#if isLogin || isDocs}
 	<slot />
 {:else}
-	{#if browser}<TopoBackground density={28} opacity={0.24} color="#4ee39a" />{/if}
+	{#if browser}<TopoBackground density={28} opacity={topoOpacity} color={topoColor} />{/if}
 
 	<div class="page">
 		<DocsNav />

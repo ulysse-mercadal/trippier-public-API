@@ -94,9 +94,9 @@
 <style>
 	.console-section { padding-block: 96px; }
 	.terminal {
-		border: 1px solid var(--border);
+		border: 1px solid var(--code-border);
 		border-radius: var(--r-lg);
-		background: oklch(10% 0.01 175);
+		background: var(--code-bg);
 		overflow: hidden;
 		box-shadow: 0 20px 60px -20px rgba(0,0,0,0.6);
 	}
@@ -105,27 +105,27 @@
 		align-items: center;
 		gap: 6px;
 		padding: 12px 16px;
-		background: var(--surface);
-		border-bottom: 1px solid var(--border);
+		background: var(--code-surface);
+		border-bottom: 1px solid var(--code-border);
 	}
 	.tdot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
 	.terminal-title {
 		margin-left: 12px;
 		font-family: var(--font-mono);
 		font-size: 12px;
-		color: var(--text-3);
+		color: var(--code-text-3);
 		flex: 1;
 	}
 	.terminal-replay {
 		font-family: var(--font-mono);
 		font-size: 11px;
-		color: var(--text-3);
+		color: var(--code-text-3);
 		padding: 4px 8px;
 		border-radius: 4px;
 		transition: background .15s ease, color .15s ease;
 		cursor: pointer;
 	}
-	.terminal-replay:hover { background: var(--bg); color: var(--text); }
+	.terminal-replay:hover { background: var(--code-bg-2); color: var(--code-text); }
 	.terminal-body {
 		padding: 20px 22px;
 		font-family: var(--font-mono);
@@ -133,7 +133,7 @@
 		line-height: 1.55;
 		min-height: 320px;
 	}
-	.t-cmd { margin: 0; color: var(--text); white-space: pre-wrap; word-break: break-all; }
+	.t-cmd { margin: 0; color: var(--code-text); white-space: pre-wrap; word-break: break-all; }
 	.tprompt { color: var(--accent); margin-right: 6px; }
 	.caret {
 		display: inline-block;
@@ -142,8 +142,8 @@
 		animation: blink 1s steps(2) infinite;
 	}
 	@keyframes blink { 50% { opacity: 0; } }
-	.t-status { margin-top: 14px; font-size: 12px; color: var(--text-3); }
-	.status-pending { color: var(--text-3); }
+	.t-status { margin-top: 14px; font-size: 12px; color: var(--code-text-3); }
+	.status-pending { color: var(--code-text-3); }
 	.status-pending::before {
 		content: '';
 		display: inline-block;
@@ -157,5 +157,5 @@
 	@keyframes pulse-warn { 50% { opacity: 0.3; } }
 	.status-ok { color: var(--accent); }
 	.status-ok::before { content: '●'; margin-right: 8px; }
-	.t-resp { margin: 14px 0 0; color: var(--text-2); white-space: pre-wrap; }
+	.t-resp { margin: 14px 0 0; color: var(--code-text-2); white-space: pre-wrap; }
 </style>

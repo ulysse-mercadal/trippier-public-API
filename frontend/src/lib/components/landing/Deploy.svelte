@@ -167,13 +167,13 @@ curl localhost:8080/v1/healthz`}</pre>
 	.deploy-list :global(svg) { color: var(--accent); margin-top: 3px; flex-shrink: 0; }
 	.deploy-list strong { color: var(--text); font-weight: 600; }
 	.deploy-cmd {
-		background: oklch(9% 0.01 175);
-		border: 1px solid color-mix(in oklch, var(--accent) 12%, var(--border));
+		background: var(--code-bg-2);
+		border: 1px solid color-mix(in oklch, var(--accent) 12%, var(--code-border));
 		border-radius: var(--r-md);
 		padding: 16px 18px;
 		font-family: var(--font-mono);
 		font-size: 12.5px;
-		color: var(--text-2);
+		color: var(--code-text-2);
 		margin: 4px 0 8px;
 		line-height: 1.6;
 		white-space: pre;

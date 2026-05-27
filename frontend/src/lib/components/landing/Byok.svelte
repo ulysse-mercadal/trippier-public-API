@@ -2,15 +2,21 @@
 	import { t } from '$lib/i18n';
 
 	const PROVIDERS = [
-		{ name: 'OpenStreetMap',  kind: 'POI · free',    env: 'OSM_OVERPASS_URL'    },
-		{ name: 'Wikivoyage',     kind: 'POI · free',    env: '(built-in)'          },
-		{ name: 'Wikipedia',      kind: 'POI + Events',  env: '(built-in)'          },
-		{ name: 'GeoNames',       kind: 'POI · optional',env: 'GEONAMES_USERNAME'   },
-		{ name: 'Eventbrite',     kind: 'Events · BYOK', env: 'EVENTBRITE_TOKEN'    },
-		{ name: 'Ticketmaster',   kind: 'Events · BYOK', env: 'TICKETMASTER_KEY'    },
+		{ name: 'OpenStreetMap',  kind: 'POI · free',      env: 'OSM_OVERPASS_URL'    },
+		{ name: 'Wikivoyage',     kind: 'POI · free',      env: '(built-in)'          },
+		{ name: 'Wikipedia',      kind: 'POI + Events',    env: '(built-in)'          },
+		{ name: 'GeoNames',       kind: 'POI · optional',  env: 'GEONAMES_USERNAME'   },
+		{ name: 'Ticketmaster',   kind: 'Events · BYOK',   env: 'X-Ticketmaster-Key'  },
+		{ name: 'Eventbrite',     kind: 'Events · BYOK',   env: 'X-Eventbrite-Token'  },
+		{ name: 'Meetup',         kind: 'Events · BYOK',   env: 'X-Meetup-Token'      },
+		{ name: 'OpenAgenda',     kind: 'Events · BYOK',   env: 'X-OpenAgenda-Key'    },
+		{ name: 'Foursquare',     kind: 'POI · BYOK',      env: 'X-Foursquare-Key'    },
+		{ name: 'Baidu Maps',     kind: 'POI · BYOK (CN)', env: 'X-Baidu-Key'         },
+		{ name: 'Kakao Maps',     kind: 'POI · BYOK (KR)', env: 'X-Kakao-Key'         },
+		{ name: 'Navitime',       kind: 'POI · BYOK (JP)', env: 'X-Navitime-Key'      },
 	];
 
-	$: envLines = PROVIDERS.map(p => `${p.env.padEnd(22)} = sk_•••••••••  # ${p.kind}`).join('\n');
+	$: envLines = PROVIDERS.slice(0, 6).map(p => `${p.env.padEnd(24)} = sk_•••••••••  # ${p.kind}`).join('\n');
 </script>
 
 <section class="byok-section" id="byok">
@@ -91,9 +97,9 @@
 	.byok-bullets li { display: flex; align-items: flex-start; gap: 12px; color: var(--text-2); }
 	.byok-bullets :global(svg) { color: var(--accent); margin-top: 3px; flex-shrink: 0; }
 	.byok-panel {
-		border: 1px solid var(--border);
+		border: 1px solid var(--code-border);
 		border-radius: var(--r-lg);
-		background: oklch(10% 0.01 175);
+		background: var(--code-bg);
 		overflow: hidden;
 		box-shadow: 0 24px 60px -28px rgba(0,0,0,0.5);
 	}
@@ -102,15 +108,15 @@
 		align-items: center;
 		gap: 8px;
 		padding: 12px 16px;
-		background: var(--surface);
-		border-bottom: 1px solid var(--border);
+		background: var(--code-surface);
+		border-bottom: 1px solid var(--code-border);
 		font-family: var(--font-mono);
 		font-size: 12px;
-		color: var(--text-2);
+		color: var(--code-text-2);
 	}
 	.byok-panel-head :global(svg) { color: var(--accent); }
 	.byok-spacer { flex: 1; }
-	.byok-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-3); }
+	.byok-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--code-text-3); }
 	.byok-dot {
 		width: 6px; height: 6px;
 		border-radius: 50%;
@@ -123,12 +129,12 @@
 		font-family: var(--font-mono);
 		font-size: 12px;
 		line-height: 1.65;
-		color: var(--text-2);
+		color: var(--code-text-2);
 		white-space: pre;
 		overflow-x: auto;
 	}
 	.byok-providers {
-		border-top: 1px dashed var(--border);
+		border-top: 1px dashed var(--code-border);
 		padding: 14px 18px;
 		display: grid;
 		grid-template-columns: 1fr 1fr;
@@ -136,8 +142,8 @@
 		background: color-mix(in oklch, var(--accent) 3%, transparent);
 	}
 	.byok-prov { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12.5px; padding: 4px 0; }
-	.byok-prov-name { color: var(--text); font-weight: 500; }
-	.byok-prov-kind { color: var(--text-3); font-family: var(--font-mono); font-size: 11px; }
+	.byok-prov-name { color: var(--code-text); font-weight: 500; }
+	.byok-prov-kind { color: var(--code-text-3); font-family: var(--font-mono); font-size: 11px; }
 
 	@media (max-width: 980px) {
 		.byok-grid { grid-template-columns: 1fr; }

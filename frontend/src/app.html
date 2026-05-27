@@ -4,7 +4,15 @@
 		<meta charset="utf-8" />
 		<link rel="icon" type="image/png" href="%sveltekit.assets%/favicon.png" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="description" content="Trippier Public API — Travel data, beautifully simple." />
+		<meta name="description" content="Trippier Public API. Travel data, beautifully simple." />
+		<script>
+			(function () {
+				try {
+					var t = localStorage.getItem('trp_theme');
+					if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+				} catch (e) {}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

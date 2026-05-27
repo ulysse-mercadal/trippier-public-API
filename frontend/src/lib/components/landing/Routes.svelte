@@ -237,13 +237,13 @@
 	}
 	.elapsed { font-family: var(--font-mono); font-size: 10px; color: var(--text-3); }
 	.rd-code {
-		background: oklch(10% 0.01 175);
-		border: 1px solid var(--border);
+		background: var(--code-bg);
+		border: 1px solid var(--code-border);
 		border-radius: var(--r-md);
 		padding: 14px 16px;
 		font-family: var(--font-mono);
 		font-size: 12.5px;
-		color: var(--text-2);
+		color: var(--code-text-2);
 		line-height: 1.6;
 		margin: 0;
 		white-space: pre-wrap;

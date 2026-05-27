@@ -7,39 +7,81 @@
 	export let page: DocPage | null;
 
 	type Lang = 'curl' | 'js' | 'py';
+	type RouteType = 'events' | 'pois' | 'itinerary' | 'other';
 
+	// ── BYOK provider registry ────────────────────────────────────────────────
+	// Add new providers here — the UI builds itself from this list.
+	const BYOK_PROVIDERS = [
+		// Event providers
+		{ id: 'ticketmaster', label: 'Ticketmaster', header: 'X-Ticketmaster-Key',  storageKey: 'byok_tm', placeholder: 'API Key',              routeTypes: ['events'] as RouteType[] },
+		{ id: 'eventbrite',   label: 'Eventbrite',   header: 'X-Eventbrite-Token',  storageKey: 'byok_eb', placeholder: 'Private Token',         routeTypes: ['events'] as RouteType[] },
+		{ id: 'meetup',       label: 'Meetup',        header: 'X-Meetup-Token',      storageKey: 'byok_mu', placeholder: 'Personal Access Token', routeTypes: ['events'] as RouteType[] },
+		{ id: 'openagenda',   label: 'OpenAgenda',    header: 'X-OpenAgenda-Key',    storageKey: 'byok_oa', placeholder: 'API Key',              routeTypes: ['events'] as RouteType[] },
+		// POI providers (custom routes)
+		{ id: 'foursquare', label: 'Foursquare',   header: 'X-Foursquare-Key', storageKey: 'byok_fs',  placeholder: 'API Key',    routeTypes: ['pois'] as RouteType[] },
+		{ id: 'baidu',      label: 'Baidu Maps',   header: 'X-Baidu-Key',      storageKey: 'byok_bd',  placeholder: 'API Key',    routeTypes: ['pois'] as RouteType[] },
+		{ id: 'kakao',      label: 'Kakao Maps',   header: 'X-Kakao-Key',      storageKey: 'byok_kk',  placeholder: 'REST API Key',routeTypes: ['pois'] as RouteType[] },
+		{ id: 'navitime',   label: 'Navitime',     header: 'X-Navitime-Key',   storageKey: 'byok_nv',  placeholder: 'API Key',    routeTypes: ['pois'] as RouteType[] },
+		{ id: 'mappls',     label: 'Mappls (IN)',  header: 'X-Mappls-Key',     storageKey: 'byok_mp',  placeholder: 'API Key',    routeTypes: ['pois'] as RouteType[] },
+		{ id: 'grabmaps',   label: 'GrabMaps (SEA)',header: 'X-Grabmaps-Key',  storageKey: 'byok_gm',  placeholder: 'API Key',    routeTypes: ['pois'] as RouteType[] },
+	];
+
+	// ── State ─────────────────────────────────────────────────────────────────
 	let lang: Lang = 'curl';
 	let running    = false;
 	let copied     = false;
 
-	// If PUBLIC_POI_API_URL is set (dev), always use it — ignore localStorage to avoid stale prod URL.
 	const envBaseUrl          = env.PUBLIC_POI_API_URL ?? '';
 	const envItineraryBaseUrl = env.PUBLIC_ITINERARY_API_URL ?? '';
 	const defaultBaseUrl      = envBaseUrl || 'https://api.poi.trippier.dev';
 
 	let apiKey  = browser ? (localStorage.getItem('docs_api_key') ?? '') : '';
 	let baseUrl = envBaseUrl || (browser ? (localStorage.getItem('docs_base_url') ?? defaultBaseUrl) : defaultBaseUrl);
-	let tmKey   = browser ? (localStorage.getItem('docs_tm_key') ?? '') : '';
-	let ebToken = browser ? (localStorage.getItem('docs_eb_token') ?? '') : '';
 
-	$: isEventsRoute = page?.path?.includes('/events') ?? false;
+	// Per-provider: selected (chip toggled) + key value
+	type ProviderState = { selected: boolean; key: string };
+	let byok: Record<string, ProviderState> = Object.fromEntries(
+		BYOK_PROVIDERS.map(p => [p.id, {
+			selected: browser ? localStorage.getItem(p.storageKey + '_on') === '1' : false,
+			key:      browser ? (localStorage.getItem(p.storageKey) ?? '') : '',
+		}])
+	);
 
 	let responseBody: string | null = null;
 	let responseStatus: number | null = null;
 	let responseMs: number | null = null;
 	let responseError: string | null = null;
 
+	// ── Derived ───────────────────────────────────────────────────────────────
+	$: routeType = ((): RouteType => {
+		const path = page?.path ?? '';
+		if (path.includes('/events'))    return 'events';
+		if (path.startsWith('/pois'))    return 'pois';
+		if (path.startsWith('/itinerar')) return 'itinerary';
+		return 'other';
+	})();
+
+	$: visibleProviders = BYOK_PROVIDERS.filter(p => p.routeTypes.includes(routeType));
+
 	$: snippets = page ? { curl: buildCurl(page, baseUrl), js: buildJs(page, baseUrl), py: buildPy(page, baseUrl) } : null;
 	$: code     = snippets?.[lang] ?? '';
 
 	$: { page; responseBody = null; responseStatus = null; responseMs = null; responseError = null; running = false; }
 
+	// ── Helpers ───────────────────────────────────────────────────────────────
 	function saveSettings() {
 		if (!browser) return;
 		localStorage.setItem('docs_api_key',  apiKey);
 		localStorage.setItem('docs_base_url', baseUrl);
-		localStorage.setItem('docs_tm_key',   tmKey);
-		localStorage.setItem('docs_eb_token', ebToken);
+		BYOK_PROVIDERS.forEach(p => {
+			localStorage.setItem(p.storageKey,         byok[p.id].key);
+			localStorage.setItem(p.storageKey + '_on', byok[p.id].selected ? '1' : '0');
+		});
+	}
+
+	function toggleProvider(id: string) {
+		byok[id] = { ...byok[id], selected: !byok[id].selected };
+		saveSettings();
 	}
 
 	function copySnippet() {
@@ -71,8 +113,12 @@
 		const headers: Record<string, string> = {};
 		if (apiKey) headers['X-API-Key'] = apiKey;
 		if (page.method !== 'GET') headers['Content-Type'] = 'application/json';
-		if (isEventsRoute && tmKey)   headers['X-Ticketmaster-Key']   = tmKey;
-		if (isEventsRoute && ebToken) headers['X-Eventbrite-Token'] = ebToken;
+
+		// Inject all active BYOK headers
+		for (const p of visibleProviders) {
+			const state = byok[p.id];
+			if (state.selected && state.key) headers[p.header] = state.key;
+		}
 
 		const t0 = performance.now();
 		try {
@@ -84,11 +130,8 @@
 			responseMs     = Math.round(performance.now() - t0);
 			responseStatus = res.status;
 			const text = await res.text();
-			try {
-				responseBody = JSON.stringify(JSON.parse(text), null, 2);
-			} catch {
-				responseBody = text;
-			}
+			try { responseBody = JSON.stringify(JSON.parse(text), null, 2); }
+			catch { responseBody = text; }
 		} catch (e) {
 			responseMs    = Math.round(performance.now() - t0);
 			responseError = e instanceof Error ? e.message : String(e);
@@ -107,46 +150,42 @@
 		<div class="d-settings-body">
 			<label class="d-field">
 				<span>Base URL</span>
-				<input
-					type="text"
-					bind:value={baseUrl}
-					on:blur={saveSettings}
-					placeholder="https://api.poi.trippier.dev"
-					spellcheck="false"
-				/>
+				<input type="text" bind:value={baseUrl} on:blur={saveSettings}
+					placeholder="https://api.poi.trippier.dev" spellcheck="false" />
 			</label>
 			<label class="d-field">
 				<span>X-API-Key</span>
-				<input
-					type="password"
-					bind:value={apiKey}
-					on:blur={saveSettings}
-					placeholder="Votre clé API"
-					spellcheck="false"
-				/>
+				<input type="password" bind:value={apiKey} on:blur={saveSettings}
+					placeholder="Votre clé API" spellcheck="false" />
 			</label>
-			{#if isEventsRoute}
-				<div class="d-byok-sep">Clés providers (BYOK)</div>
-				<label class="d-field">
-					<span>X-Ticketmaster-Key</span>
-					<input
-						type="password"
-						bind:value={tmKey}
-						on:blur={saveSettings}
-						placeholder="Votre clé Ticketmaster"
-						spellcheck="false"
-					/>
-				</label>
-				<label class="d-field">
-					<span>X-Eventbrite-Token</span>
-					<input
-						type="password"
-						bind:value={ebToken}
-						on:blur={saveSettings}
-						placeholder="Votre token Eventbrite"
-						spellcheck="false"
-					/>
-				</label>
+
+			{#if visibleProviders.length > 0}
+				<div class="d-byok-sep">Providers (BYOK)</div>
+
+				<!-- Provider chip selector -->
+				<div class="d-chips">
+					{#each visibleProviders as p}
+						<button
+							class="d-chip"
+							class:active={byok[p.id].selected}
+							on:click={() => toggleProvider(p.id)}
+						>{p.label}</button>
+					{/each}
+				</div>
+
+				<!-- Key inputs for selected providers -->
+				{#each visibleProviders.filter(p => byok[p.id].selected) as p}
+					<label class="d-field">
+						<span>{p.header}</span>
+						<input
+							type="password"
+							bind:value={byok[p.id].key}
+							on:blur={saveSettings}
+							placeholder={p.placeholder}
+							spellcheck="false"
+						/>
+					</label>
+				{/each}
 			{/if}
 		</div>
 	</div>
@@ -241,11 +280,7 @@
 		flex-direction: column;
 		gap: 10px;
 	}
-	.d-field {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
+	.d-field { display: flex; flex-direction: column; gap: 4px; }
 	.d-field span {
 		font-family: var(--font-mono);
 		font-size: 10px;
@@ -266,6 +301,7 @@
 	}
 	.d-field input:focus { border-color: var(--accent); }
 	.d-field input::placeholder { color: var(--text-3); }
+
 	.d-byok-sep {
 		font-family: var(--font-mono);
 		font-size: 10px;
@@ -276,10 +312,29 @@
 		border-top: 1px solid var(--border);
 	}
 
-	.d-panel-block {
+	.d-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+	.d-chip {
+		font-family: var(--font-mono);
+		font-size: 11px;
+		padding: 4px 10px;
+		border-radius: 20px;
 		border: 1px solid var(--border);
+		background: var(--bg);
+		color: var(--text-3);
+		cursor: pointer;
+		transition: all .12s ease;
+	}
+	.d-chip:hover { border-color: var(--accent); color: var(--text); }
+	.d-chip.active {
+		background: color-mix(in oklch, var(--accent) 12%, transparent);
+		border-color: var(--accent);
+		color: var(--accent);
+	}
+
+	.d-panel-block {
+		border: 1px solid var(--code-border);
 		border-radius: var(--r-md);
-		background: oklch(9% 0.01 175);
+		background: var(--code-bg-2);
 		overflow: hidden;
 	}
 	.d-panel-head {
@@ -288,14 +343,14 @@
 		justify-content: space-between;
 		gap: 10px;
 		padding: 8px 12px;
-		background: var(--surface);
-		border-bottom: 1px solid var(--border);
+		background: var(--code-surface);
+		border-bottom: 1px solid var(--code-border);
 	}
 	.d-tabs { display: flex; gap: 2px; }
 	.d-tabs button {
 		font-family: var(--font-mono);
 		font-size: 11.5px;
-		color: var(--text-3);
+		color: var(--code-text-3);
 		padding: 4px 10px;
 		border-radius: 4px;
 		border: none;
@@ -303,7 +358,7 @@
 		cursor: pointer;
 		transition: color .12s ease, background .12s ease;
 	}
-	.d-tabs button:hover { color: var(--text); }
+	.d-tabs button:hover { color: var(--code-text); }
 	.d-tabs button.active {
 		color: var(--accent);
 		background: color-mix(in oklch, var(--accent) 10%, transparent);
@@ -314,7 +369,7 @@
 		gap: 4px;
 		font-family: var(--font-mono);
 		font-size: 11px;
-		color: var(--text-3);
+		color: var(--code-text-3);
 		padding: 3px 8px;
 		border-radius: 4px;
 		border: none;
@@ -322,13 +377,13 @@
 		cursor: pointer;
 		transition: color .12s ease, background .12s ease;
 	}
-	.d-panel-copy:hover { color: var(--text); background: var(--bg); }
+	.d-panel-copy:hover { color: var(--code-text); background: var(--code-bg); }
 	.d-panel-code {
 		margin: 0;
 		padding: 14px 16px;
 		font-family: var(--font-mono);
 		font-size: 12px;
-		color: var(--text-2);
+		color: var(--code-text-2);
 		line-height: 1.6;
 		white-space: pre-wrap;
 		word-break: break-word;
@@ -336,15 +391,15 @@
 		max-height: 360px;
 		overflow-y: auto;
 	}
-	.d-panel-code.resp { color: var(--text-3); }
+	.d-panel-code.resp { color: var(--code-text-3); }
 	.d-err-text { color: oklch(72% 0.16 25); }
 	.d-panel-actions {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		padding: 10px 12px;
-		border-top: 1px solid var(--border);
-		background: var(--surface);
+		border-top: 1px solid var(--code-border);
+		background: var(--code-surface);
 	}
 	.d-btn-primary {
 		display: inline-flex;
@@ -352,7 +407,7 @@
 		gap: 8px;
 		padding: 8px 14px;
 		background: var(--accent);
-		color: #08120e;
+		color: var(--accent-on);
 		border-radius: var(--r-md);
 		font-weight: 600;
 		font-size: 13px;
@@ -365,13 +420,13 @@
 	.d-try { padding: 7px 14px; font-size: 12.5px; }
 	.d-spin { display: inline-block; animation: spin .7s linear infinite; }
 	@keyframes spin { to { transform: rotate(360deg); } }
-	.d-panel-base { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); }
+	.d-panel-base { font-family: var(--font-mono); font-size: 11px; color: var(--code-text-3); }
 	.d-resp-label {
 		font-family: var(--font-mono);
 		font-size: 11px;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
-		color: var(--text-3);
+		color: var(--code-text-3);
 		display: flex;
 		align-items: center;
 		gap: 8px;
@@ -383,12 +438,12 @@
 		border-radius: 3px;
 		letter-spacing: 0.04em;
 		text-transform: none;
-		color: var(--text-3);
-		background: var(--surface);
+		color: var(--code-text-3);
+		background: var(--code-bg);
 	}
 	.d-status-pill.ok      { color: var(--accent); background: color-mix(in oklch, var(--accent) 14%, transparent); }
 	.d-status-pill.warn    { color: oklch(82% 0.12 80); background: color-mix(in oklch, oklch(82% 0.12 80) 12%, transparent); }
 	.d-status-pill.err     { color: oklch(72% 0.16 25); background: color-mix(in oklch, oklch(72% 0.16 25) 12%, transparent); }
 	.d-status-pill.pending { color: oklch(82% 0.12 80); background: color-mix(in oklch, oklch(82% 0.12 80) 12%, transparent); }
-	.d-status-pill.timing  { color: var(--text-3); }
+	.d-status-pill.timing  { color: var(--code-text-3); }
 </style>

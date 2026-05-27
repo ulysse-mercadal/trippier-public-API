@@ -4,6 +4,7 @@
 	import { t, locale, setLocale } from '$lib/i18n';
 	import { page } from '$app/stores';
 	import { activeNavHash } from '$lib/stores/nav';
+	import { theme, toggleTheme } from '$lib/stores/theme';
 
 	export let active: string = '';
 
@@ -33,6 +34,18 @@
 	</div>
 
 	<div class="d-nav-cta">
+		<button class="theme-btn" on:click={toggleTheme} aria-label="Toggle theme" title="Toggle theme">
+			{#if $theme === 'dark'}
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<circle cx="12" cy="12" r="4" />
+					<path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M5.6 18.4l1.4-1.4M17 7l1.4-1.4" />
+				</svg>
+			{:else}
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+					<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+				</svg>
+			{/if}
+		</button>
 		<button class="locale-btn" on:click={() => setLocale($locale === 'fr' ? 'en' : 'fr')}>
 			{$locale === 'fr' ? 'EN' : 'FR'}
 		</button>
@@ -122,6 +135,20 @@
 		transition: color .12s ease, border-color .12s ease;
 	}
 	.locale-btn:hover { color: var(--accent); border-color: var(--accent); }
+	.theme-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border: 1px solid var(--border);
+		border-radius: var(--r-md);
+		background: none;
+		color: var(--text-3);
+		cursor: pointer;
+		transition: color .12s ease, border-color .12s ease;
+	}
+	.theme-btn:hover { color: var(--accent); border-color: var(--accent); }
 	.btn-ghost {
 		display: inline-flex;
 		align-items: center;

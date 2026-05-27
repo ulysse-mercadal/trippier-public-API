@@ -6,6 +6,7 @@
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import { PAGES } from '$lib/data/docs';
+	import { theme } from '$lib/stores/theme';
 	import TopoBackground from '$lib/components/TopoBackground.svelte';
 	import DocsNav      from '$lib/components/docs/DocsNav.svelte';
 	import DocsSidebar  from '$lib/components/docs/DocsSidebar.svelte';
@@ -16,6 +17,8 @@
 	let activeId = 'quickstart';
 
 	$: currentPage = PAGES.find(p => p.id === activeId) ?? PAGES[0];
+	$: topoColor = $theme === 'light' ? '#139450' : '#34d39c';
+	$: topoOpacity = $theme === 'light' ? 0.12 : 0.14;
 	$: routePage   = currentPage.kind === 'route' ? currentPage : null;
 	$: pageIdx     = PAGES.indexOf(currentPage);
 	$: prevPage    = PAGES[pageIdx - 1] ?? null;
@@ -44,7 +47,7 @@
 </script>
 
 <div class="d-page">
-	{#if browser}<TopoBackground density={28} opacity={0.14} color="#34d39c" />{/if}
+	{#if browser}<TopoBackground density={28} opacity={topoOpacity} color={topoColor} />{/if}
 
 	<DocsNav />
 
