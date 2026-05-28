@@ -115,6 +115,14 @@ code { font-family: var(--font-mono); }
 	color: var(--accent);
 	text-transform: lowercase;
 }
+
+/* Brand logo color treatment per theme. The bundled PNG is a pale
+   topographic pin designed for dark backgrounds, so on light theme
+   we invert it (and keep contrast) to keep it readable on white. */
+.brand-logo,
+.d-brand-logo { filter: none; }
+[data-theme="light"] .brand-logo,
+[data-theme="light"] .d-brand-logo { filter: invert(1) contrast(1.4); }
 .accent-fg { color: var(--accent); }
 .muted-fg  { color: var(--text-3); }
 
