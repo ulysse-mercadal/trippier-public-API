@@ -15,6 +15,8 @@
 	import DocsPanel    from '$lib/components/docs/DocsPanel.svelte';
 
 	let activeId = 'quickstart';
+	let sidebarOpen = false;
+	let panelOpen = false;
 
 	$: currentPage = PAGES.find(p => p.id === activeId) ?? PAGES[0];
 	$: topoColor = $theme === 'light' ? '#139450' : '#34d39c';
@@ -27,10 +29,26 @@
 	// Updates URL hash and scrolls main column to top
 	function select(id: string) {
 		activeId = id;
+		sidebarOpen = false;
 		if (browser) {
 			window.location.hash = id;
 			document.querySelector('.d-main')?.scrollTo({ top: 0, behavior: 'smooth' });
 		}
+	}
+
+	function closeDrawers() {
+		sidebarOpen = false;
+		panelOpen = false;
+	}
+
+	function toggleSidebar() {
+		sidebarOpen = !sidebarOpen;
+		if (sidebarOpen) panelOpen = false;
+	}
+
+	function togglePanel() {
+		panelOpen = !panelOpen;
+		if (panelOpen) sidebarOpen = false;
 	}
 
 	onMount(() => {
@@ -41,8 +59,15 @@
 			const h = window.location.hash.slice(1);
 			if (h && PAGES.some(p => p.id === h)) activeId = h;
 		};
+		const handleKey = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') closeDrawers();
+		};
 		window.addEventListener('hashchange', handleHash);
-		return () => window.removeEventListener('hashchange', handleHash);
+		window.addEventListener('keydown', handleKey);
+		return () => {
+			window.removeEventListener('hashchange', handleHash);
+			window.removeEventListener('keydown', handleKey);
+		};
 	});
 </script>
 
@@ -51,8 +76,25 @@
 
 	<DocsNav />
 
+	<div class="d-mobile-bar">
+		<button class="d-mb-btn" class:active={sidebarOpen} on:click={toggleSidebar}>
+			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+			Routes
+		</button>
+		{#if routePage}
+			<button class="d-mb-btn" class:active={panelOpen} on:click={togglePanel}>
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+				Tester
+			</button>
+		{:else}
+			<span></span>
+		{/if}
+	</div>
+
 	<div class="d-layout">
-		<DocsSidebar {activeId} onSelect={select} />
+		<div class="d-side-wrap" class:open={sidebarOpen}>
+			<DocsSidebar {activeId} onSelect={select} />
+		</div>
 
 		<main class="d-main">
 			<div class="d-main-inner">
@@ -83,8 +125,14 @@
 			</div>
 		</main>
 
-		<DocsPanel page={routePage} />
+		<div class="d-panel-wrap" class:open={panelOpen}>
+			<DocsPanel page={routePage} />
+		</div>
 	</div>
+
+	{#if sidebarOpen || panelOpen}
+		<button class="d-backdrop" on:click={closeDrawers} aria-label="Fermer"></button>
+	{/if}
 </div>
 
 <style>
@@ -103,7 +151,6 @@
 		grid-template-columns: 280px minmax(0, 1fr) 460px;
 		flex: 1;
 		position: relative;
-		z-index: 1;
 	}
 	.d-main {
 		height: calc(100vh - 56px);
@@ -139,15 +186,103 @@
 	.d-pager-link span  { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); letter-spacing: 0.04em; }
 	.d-pager-link strong { font-size: 14px; color: var(--text); font-weight: 500; }
 
+	.d-mobile-bar { display: none; }
+
+	.d-side-wrap,
+	.d-panel-wrap { display: contents; }
+
 	@media (max-width: 1280px) {
 		.d-layout { grid-template-columns: 260px minmax(0, 1fr) 400px; }
 		.d-main-inner { padding: 48px 40px 64px; }
 	}
+
 	@media (max-width: 1100px) {
-		.d-layout { grid-template-columns: 240px minmax(0, 1fr); }
-	}
-	@media (max-width: 800px) {
 		.d-layout { grid-template-columns: 1fr; }
+
+		.d-mobile-bar {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			gap: 12px;
+			padding: 10px 20px;
+			border-bottom: 1px solid var(--border);
+			background: color-mix(in oklch, var(--bg) 90%, transparent);
+			backdrop-filter: blur(10px);
+			position: sticky;
+			top: 56px;
+			z-index: 15;
+		}
+		.d-mb-btn {
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			padding: 7px 14px;
+			border: 1px solid var(--border);
+			border-radius: var(--r-md);
+			background: none;
+			color: var(--text-2);
+			font-size: 13px;
+			font-family: var(--font-sans);
+			cursor: pointer;
+			transition: color .15s ease, border-color .15s ease, background .15s ease;
+		}
+		.d-mb-btn:hover,
+		.d-mb-btn.active {
+			color: var(--accent);
+			border-color: var(--accent);
+			background: color-mix(in oklch, var(--accent) 8%, transparent);
+		}
+
+		.d-side-wrap,
+		.d-panel-wrap {
+			display: block;
+			position: fixed;
+			top: 56px;
+			bottom: 0;
+			width: min(360px, 90vw);
+			z-index: 30;
+			transition: transform .25s ease;
+			background: var(--bg);
+			box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.35);
+		}
+		.d-side-wrap {
+			left: 0;
+			transform: translateX(-100%);
+			border-right: 1px solid var(--border);
+		}
+		.d-side-wrap.open { transform: translateX(0); }
+		.d-panel-wrap {
+			right: 0;
+			width: min(480px, 94vw);
+			transform: translateX(100%);
+			border-left: 1px solid var(--border);
+		}
+		.d-panel-wrap.open { transform: translateX(0); }
+
+		.d-side-wrap :global(.d-side),
+		.d-panel-wrap :global(.d-panel) {
+			position: static;
+			height: 100%;
+			top: auto;
+			border-left: 0;
+			border-right: 0;
+			background: var(--bg);
+		}
+
+		.d-backdrop {
+			position: fixed;
+			inset: 56px 0 0;
+			background: rgba(0, 0, 0, 0.45);
+			border: none;
+			cursor: pointer;
+			z-index: 25;
+			padding: 0;
+		}
+		[data-theme="light"] .d-backdrop { background: rgba(20, 35, 28, 0.35); }
+	}
+
+	@media (max-width: 800px) {
 		.d-main-inner { padding: 32px 24px 64px; }
+		.d-mobile-bar { padding: 10px 16px; }
 	}
 </style>
