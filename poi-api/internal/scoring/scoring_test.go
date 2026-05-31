@@ -11,7 +11,7 @@ func TestScoreRange(t *testing.T) {
 	poi := types.EnrichedPoi{
 		Type:     types.TypeSee,
 		Distance: 200,
-		Sources:  []types.Provider{types.ProviderOverpass, types.ProviderWikipedia},
+		Sources:  []types.SourceLink{{Provider: types.ProviderOverpass}, {Provider: types.ProviderWikipedia}},
 		Coords:   &types.Coordinates{Lat: 48.85, Lng: 2.35, Approximate: false},
 	}
 	q := types.SearchQuery{
@@ -32,7 +32,7 @@ func TestScoreRange(t *testing.T) {
 func TestScoreWeightedTypeBetter(t *testing.T) {
 	base := types.EnrichedPoi{
 		Distance: 100,
-		Sources:  []types.Provider{types.ProviderOverpass},
+		Sources:  []types.SourceLink{{Provider: types.ProviderOverpass}},
 		Coords:   &types.Coordinates{},
 	}
 	q := types.SearchQuery{
@@ -57,15 +57,15 @@ func TestScoreMoreSourcesBetter(t *testing.T) {
 	q := types.SearchQuery{Radius: 5000}
 	one := types.EnrichedPoi{
 		Distance: 100,
-		Sources:  []types.Provider{types.ProviderOverpass},
+		Sources:  []types.SourceLink{{Provider: types.ProviderOverpass}},
 		Coords:   &types.Coordinates{},
 	}
 	many := types.EnrichedPoi{
 		Distance: 100,
-		Sources: []types.Provider{
-			types.ProviderOverpass,
-			types.ProviderWikivoyage,
-			types.ProviderWikipedia,
+		Sources: []types.SourceLink{
+			{Provider: types.ProviderOverpass},
+			{Provider: types.ProviderWikivoyage},
+			{Provider: types.ProviderWikipedia},
 		},
 		Coords: &types.Coordinates{},
 	}
@@ -79,12 +79,12 @@ func TestScoreCloserIsBetter(t *testing.T) {
 	q := types.SearchQuery{Radius: 5000}
 	near := types.EnrichedPoi{
 		Distance: 100,
-		Sources:  []types.Provider{types.ProviderOverpass},
+		Sources:  []types.SourceLink{{Provider: types.ProviderOverpass}},
 		Coords:   &types.Coordinates{},
 	}
 	far := types.EnrichedPoi{
 		Distance: 4900,
-		Sources:  []types.Provider{types.ProviderOverpass},
+		Sources:  []types.SourceLink{{Provider: types.ProviderOverpass}},
 		Coords:   &types.Coordinates{},
 	}
 
@@ -97,12 +97,12 @@ func TestScoreApproximateCoordsLower(t *testing.T) {
 	q := types.SearchQuery{Radius: 5000}
 	exact := types.EnrichedPoi{
 		Distance: 100,
-		Sources:  []types.Provider{types.ProviderOverpass},
+		Sources:  []types.SourceLink{{Provider: types.ProviderOverpass}},
 		Coords:   &types.Coordinates{Approximate: false},
 	}
 	approx := types.EnrichedPoi{
 		Distance: 100,
-		Sources:  []types.Provider{types.ProviderOverpass},
+		Sources:  []types.SourceLink{{Provider: types.ProviderOverpass}},
 		Coords:   &types.Coordinates{Approximate: true},
 	}
 

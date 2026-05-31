@@ -6,9 +6,56 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 
 	"github.com/trippier/poi-api/pkg/types"
 )
+
+// BuildConfig carries every input a provider's Factory may need. New
+// providers can declare new dependencies by adding fields — existing
+// factories ignore what they don't use.
+type BuildConfig struct {
+	Lang             string
+	GeoNamesUsername string
+	Redis            *redis.Client
+	CacheTTL         time.Duration
+	Log              *zap.Logger
+}
+
+// Factory builds a concrete Provider from BuildConfig. Returning (nil, nil)
+// is a clean opt-out — used when a required env var is absent (e.g. GeoNames
+// with no username) so the rest of the boot is unaffected.
+type Factory func(BuildConfig) (Provider, error)
+
+var factories = map[types.Provider]Factory{}
+
+// Register associates a Factory with a provider id. Called from each provider
+// package's init() so the binary only needs `_ "…/providers/<name>"` blank
+// imports to enrol every backend — no central switch statement to maintain.
+func Register(id types.Provider, f Factory) {
+	factories[id] = f
+}
+
+// BuildAll instantiates every registered Factory with cfg. Providers that
+// opted out (returned nil) are dropped silently; the first hard error stops
+// the boot.
+func BuildAll(cfg BuildConfig) ([]Provider, error) {
+	out := make([]Provider, 0, len(factories))
+	for _, f := range factories {
+		p, err := f(cfg)
+		if err != nil {
+			return nil, err
+		}
+		if p == nil {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
 
 const userAgent = "Trippier/1.0 (+https://github.com/trippier)"
 
@@ -31,6 +78,20 @@ func CommonsFileURL(ref string) string {
 	return "https://commons.wikimedia.org/wiki/Special:FilePath/" + url.PathEscape(ref)
 }
 
+// @param s a URL string drawn from untrusted upstream data (OSM tags, MediaWiki listings).
+// @return s if it starts with http:// / https:// / mailto:, otherwise the empty string — defangs javascript: and other XSS-prone schemes before they reach API consumers.
+func SafeURL(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	lower := strings.ToLower(s)
+	if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") || strings.HasPrefix(lower, "mailto:") {
+		return s
+	}
+	return ""
+}
+
 // SetUserAgent stamps the shared User-Agent on an outgoing request.
 // All provider HTTP calls must use this so external APIs (Overpass, Wikimedia)
 // can identify the application.
@@ -51,14 +112,25 @@ type Provider interface {
 	Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error)
 }
 
-// Pingable is an optional interface for providers that offer a lightweight
-// health-check endpoint. ProvidersStatus uses Ping instead of Search when available,
-// avoiding quota consumption on quota-constrained APIs (Ticketmaster, Eventbrite).
-type Pingable interface {
-	Ping(ctx context.Context) error
-}
-
 // ByokProvider is an optional interface for providers that require a user-supplied key.
 type ByokProvider interface {
 	IsByok() bool
+}
+
+// Enricher is an optional interface for providers that lend attributes
+// (WikidataID, SourceURL, Description, …) to nearby POIs returned by other
+// providers. The core enrichment loop is provider-agnostic: it runs every
+// registered Enricher and lets each one decide what to copy onto target
+// POIs found within its declared EnrichmentRadius. Provider-specific
+// borrowing rules live inside the implementing package, never in the core.
+type Enricher interface {
+	// EnrichmentRadius returns the maximum distance, in metres, at which one
+	// of this provider's POIs is considered "the same place" as a target POI
+	// for the purpose of borrowing attributes.
+	EnrichmentRadius() float64
+
+	// EnrichTarget applies this provider's contribution to target, given that
+	// source is the nearest matching POI returned by this provider during the
+	// current request. Implementations decide which fields to fill or replace.
+	EnrichTarget(target *types.RawPoi, source types.RawPoi)
 }

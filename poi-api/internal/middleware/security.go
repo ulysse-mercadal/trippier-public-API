@@ -2,8 +2,12 @@ package middleware
 
 import (
 	"net/http"
+	"sort"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/trippier/poi-api/internal/registry"
 )
 
 // SecureHeaders adds defensive HTTP response headers to every response.
@@ -16,23 +20,27 @@ func SecureHeaders() gin.HandlerFunc {
 	}
 }
 
-// allowedHeaders lists every request header that BYOK-aware clients may send.
-// When adding a new provider, append its key header here.
-const allowedHeaders = "Authorization, X-API-Key, Content-Type, " +
-	// Global BYOK providers
-	"X-Foursquare-Key, X-Here-Key, " +
-	// China
-	"X-Baidu-Key, X-Amap-Key, " +
-	// Korea
-	"X-Kakao-Key, " +
-	// Japan
-	"X-Navitime-Key, " +
-	// India
-	"X-Mappls-Key, " +
-	// Southeast Asia
-	"X-Grabmaps-Key, " +
-	// Event providers
-	"X-Ticketmaster-Key, X-Eventbrite-Token, X-Meetup-Token, X-OpenAgenda-Key"
+// allowedHeaders is computed once at startup from the registry plus the
+// always-on auth headers. Adding a new BYOK provider only requires editing
+// the registry — the CORS preflight picks the new header automatically.
+var allowedHeaders = buildAllowedHeaders()
+
+func buildAllowedHeaders() string {
+	base := []string{"Authorization", "X-API-Key", "X-Internal-Auth", "Content-Type"}
+	seen := make(map[string]bool, len(base))
+	for _, h := range base {
+		seen[h] = true
+	}
+	for _, meta := range registry.All {
+		if meta.ByokHeader == "" || seen[meta.ByokHeader] {
+			continue
+		}
+		base = append(base, meta.ByokHeader)
+		seen[meta.ByokHeader] = true
+	}
+	sort.Strings(base)
+	return strings.Join(base, ", ")
+}
 
 // CORS allows all origins — this is a public API.
 func CORS() gin.HandlerFunc {

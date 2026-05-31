@@ -38,31 +38,16 @@ const (
 	ProviderOpenAgenda   Provider = "openagenda"
 )
 
-// AllProviders is the default set used when no providers are specified on a places search.
-// Wikipedia is intentionally excluded: its geosearch returns non-physical articles
-// (historical events, meta-articles, organisations) that cannot be filtered reliably
-// at query time without prohibitive latency. It is used for enrichment only.
-var AllProviders = []Provider{
-	ProviderOverpass,
-	ProviderWikivoyage,
-	ProviderGeoNames,
-}
+// Default provider sets are now derived from the registry at startup — see
+// search.DefaultProviders / search.DefaultEventProviders.
 
-// AllEventProviders is the default set used when no providers are specified on an events search.
-// Includes live event providers (Ticketmaster, Eventbrite) alongside Wikipedia festivals.
-var AllEventProviders = []Provider{
-	ProviderWikipediaEvents,
-	ProviderTicketmaster,
-	ProviderEventbrite,
-}
-
-// ProviderStatus is returned by GET /pois/providers.
+// ProviderStatus is returned by GET /pois/providers. It carries only the
+// static metadata we can produce without calling the upstream — historical
+// availability/latency fields were dropped because the probe consumed paid
+// quota without delivering reliable signal.
 type ProviderStatus struct {
-	Name      Provider `json:"name"`
-	Available bool     `json:"available"`
-	LatencyMs int64    `json:"latency_ms"`
-	Byok      bool     `json:"byok,omitempty"`
-	Error     string   `json:"error,omitempty"`
+	Name Provider `json:"name"`
+	Byok bool     `json:"byok,omitempty"`
 }
 
 // ProviderCatalogEntry is one item in the GET /pois/providers/catalog response.

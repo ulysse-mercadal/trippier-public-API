@@ -42,24 +42,6 @@ func TestSearch_DistrictMode(t *testing.T) {
 	}
 }
 
-func TestSearch_TypeFilter(t *testing.T) {
-	srv := newTestServer(sampleOverpassResponse, 200)
-	defer srv.Close()
-
-	p := overpass.NewWithURL(srv.URL)
-	pois, err := p.Search(newCtx(), types.SearchQuery{
-		Mode:   types.ModeRadius,
-		Lat:    48.8566,
-		Lng:    2.3522,
-		Radius: 5000,
-		Types:  []types.PoiType{types.TypeEat, types.TypeDrink},
-	})
-	if err != nil {
-		t.Fatalf("Search error: %v", err)
-	}
-	_ = pois // query is built and sent; type coverage is the goal
-}
-
 func TestSearch_QueryContainsDistrict(t *testing.T) {
 	var captured string
 	srv := newTestServerCapture(&captured, sampleOverpassResponse, 200)

@@ -19,14 +19,17 @@ import (
 	"github.com/trippier/poi-api/internal/config"
 	"github.com/trippier/poi-api/internal/middleware"
 	"github.com/trippier/poi-api/internal/providers"
-	"github.com/trippier/poi-api/internal/providers/eventbrite"
-	"github.com/trippier/poi-api/internal/providers/geonames"
-	"github.com/trippier/poi-api/internal/providers/overpass"
-	"github.com/trippier/poi-api/internal/providers/ticketmaster"
-	"github.com/trippier/poi-api/internal/providers/wikipedia"
-	"github.com/trippier/poi-api/internal/providers/wikivoyage"
 	"github.com/trippier/poi-api/internal/search"
-	"github.com/trippier/poi-api/internal/tilecache"
+
+	// Blank imports trigger each provider package's init() which registers
+	// its Factory with the providers package. Adding a new provider only
+	// requires another blank import here (and the registry entry).
+	_ "github.com/trippier/poi-api/internal/providers/eventbrite"
+	_ "github.com/trippier/poi-api/internal/providers/geonames"
+	_ "github.com/trippier/poi-api/internal/providers/overpass"
+	_ "github.com/trippier/poi-api/internal/providers/ticketmaster"
+	_ "github.com/trippier/poi-api/internal/providers/wikipedia"
+	_ "github.com/trippier/poi-api/internal/providers/wikivoyage"
 )
 
 func main() {
@@ -49,7 +52,16 @@ func main() {
 	}
 
 	cacheTTL := time.Duration(cfg.CacheTTLSeconds) * time.Second
-	pp := buildProviders(cfg, rdb, cacheTTL, log)
+	pp, err := providers.BuildAll(providers.BuildConfig{
+		Lang:             cfg.Lang,
+		GeoNamesUsername: cfg.GeoNamesUsername,
+		Redis:            rdb,
+		CacheTTL:         cacheTTL,
+		Log:              log,
+	})
+	if err != nil {
+		log.Fatal("build providers", zap.Error(err))
+	}
 	svc := search.NewService(pp, time.Duration(cfg.ProviderTimeout)*time.Second, log)
 	handler := search.NewHandler(svc)
 
@@ -117,30 +129,6 @@ func buildAuthMiddlewares(cfg *config.Config) (global, events gin.HandlerFunc) {
 		"/health", "/pois/events", "/pois/events/slim", "/pois/events/custom", "/pois/events/custom/slim")
 	events = middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 10)
 	return global, events
-}
-
-// buildProviders constructs the list of active POI and event providers based on config.
-// Ticketmaster and Eventbrite use BYOK (Bring Your Own Key): they are always registered
-// but only activate when the caller supplies X-Ticketmaster-Key / X-Eventbrite-Token headers.
-// GeoNames is only added when POI_GEONAMES_USERNAME is set.
-//
-// Overpass and GeoNames are wrapped in tilecache.CachedProvider so radius-mode
-// queries reuse POIs from neighbouring H3 r8 tiles instead of re-hitting the
-// upstream API on every pan/zoom. The other providers keep their natural
-// behaviour and rely solely on the HTTP response cache middleware.
-func buildProviders(cfg *config.Config, rdb *redis.Client, cacheTTL time.Duration, log *zap.Logger) []providers.Provider {
-	pp := []providers.Provider{
-		tilecache.NewCachedProvider(overpass.New(), rdb, cacheTTL, log),
-		wikivoyage.New(cfg.Lang),
-		wikipedia.New(cfg.Lang),
-		wikipedia.NewEventProvider(cfg.Lang),
-		ticketmaster.New(),
-		eventbrite.New(),
-	}
-	if cfg.GeoNamesUsername != "" {
-		pp = append(pp, tilecache.NewCachedProvider(geonames.New(cfg.GeoNamesUsername), rdb, cacheTTL, log))
-	}
-	return pp
 }
 
 // buildLogger returns a production zap logger, or a development logger when level is "debug".

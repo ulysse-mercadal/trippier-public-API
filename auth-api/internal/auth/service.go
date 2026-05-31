@@ -21,7 +21,6 @@ import (
 var (
 	ErrEmailTaken      = errors.New("email already registered")
 	ErrWeakPassword    = errors.New("password must be at least 8 characters")
-	ErrNotFound        = errors.New("user not found")
 	ErrBadCredentials  = errors.New("invalid email or password")
 	ErrNotVerified     = errors.New("email not verified")
 	ErrBadToken        = errors.New("invalid or expired verification code")
@@ -30,7 +29,17 @@ var (
 
 // dummyHash is used in Login to run a constant-time bcrypt comparison when the
 // queried email does not exist, preventing email enumeration via response timing.
-var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dummy-sentinel-value"), bcrypt.DefaultCost)
+// We panic on init if bcrypt itself fails — there is no safe fallback for a
+// security-critical timing-defence value.
+var dummyHash = mustBcrypt([]byte("dummy-sentinel-value"))
+
+func mustBcrypt(in []byte) []byte {
+	h, err := bcrypt.GenerateFromPassword(in, bcrypt.DefaultCost)
+	if err != nil {
+		panic(fmt.Sprintf("bcrypt init: %v", err))
+	}
+	return h
+}
 
 // Service handles user auth operations.
 type Service struct {
@@ -170,10 +179,9 @@ func (s *Service) Me(ctx context.Context, userID string) (*models.User, error) {
 		`SELECT id, email, verified, created_at FROM users WHERE id = $1`,
 		userID,
 	).Scan(&u.ID, &u.Email, &u.Verified, &u.CreatedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, ErrNotFound
-	}
 	if err != nil {
+		// Includes pgx.ErrNoRows — an authenticated user with no row is a DB
+		// inconsistency, not a routine 404, so the handler maps everything to 500.
 		return nil, fmt.Errorf("query: %w", err)
 	}
 	return &u, nil
@@ -190,12 +198,19 @@ func (s *Service) signJWT(userID string) (string, error) {
 }
 
 // randomCode returns a uniformly random 6-digit decimal string (000000–999999).
+// Rejection sampling avoids the tiny modulo bias that `n % 1_000_000` would
+// introduce when n is drawn uniformly from [0, 2^32).
 func randomCode() (string, error) {
-	var n uint32
-	if err := binary.Read(rand.Reader, binary.BigEndian, &n); err != nil {
-		return "", fmt.Errorf("rand: %w", err)
+	const maxBias = (1 << 32) - ((1 << 32) % 1_000_000)
+	for {
+		var n uint32
+		if err := binary.Read(rand.Reader, binary.BigEndian, &n); err != nil {
+			return "", fmt.Errorf("rand: %w", err)
+		}
+		if n < maxBias {
+			return fmt.Sprintf("%06d", n%1_000_000), nil
+		}
 	}
-	return fmt.Sprintf("%06d", n%1_000_000), nil
 }
 
 // isDuplicateKey detects PostgreSQL unique-constraint violations.

@@ -78,21 +78,29 @@ type SlimEventResult struct {
 	Results []SlimEvent `json:"results"`
 }
 
+// SourceLink names one provider that contributed to a merged POI and the
+// canonical URL clients can follow for richer detail on that source.
+type SourceLink struct {
+	Provider Provider `json:"provider"`
+	URL      string   `json:"url,omitempty"`
+}
+
 // EnrichedPoi is the final merged and scored result returned to the caller.
+// All per-provider data (description, contact, images) is folded into the
+// top-level fields. Clients that want more detail follow Sources[i].URL.
 type EnrichedPoi struct {
-	ID            string              `json:"id"`
-	Name          string              `json:"name"`
-	Type          PoiType             `json:"type"`
-	Score         float64             `json:"score"`
-	Coords        *Coordinates        `json:"coords,omitempty"`
-	Zone          *Zone               `json:"zone,omitempty"`
-	Distance      float64             `json:"distance"`
-	Description   string              `json:"description,omitempty"`
-	Contact       Contact             `json:"contact,omitempty"`
-	Thumbnail     string              `json:"thumbnail,omitempty"`
-	Images        []string            `json:"images,omitempty"`
-	Sources       []Provider          `json:"sources"`
-	ProvidersData map[Provider]RawPoi `json:"providers_data,omitempty"`
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	Type        PoiType      `json:"type"`
+	Score       float64      `json:"score"`
+	Coords      *Coordinates `json:"coords,omitempty"`
+	Zone        *Zone        `json:"zone,omitempty"`
+	Distance    float64      `json:"distance"`
+	Description string       `json:"description,omitempty"`
+	Contact     Contact      `json:"contact,omitempty"`
+	Thumbnail   string       `json:"thumbnail,omitempty"`
+	Images      []string     `json:"images,omitempty"`
+	Sources     []SourceLink `json:"sources"`
 	// Event-specific fields — nil/zero for non-event POIs.
 	DateStart *time.Time `json:"date_start,omitempty"`
 	DateEnd   *time.Time `json:"date_end,omitempty"`

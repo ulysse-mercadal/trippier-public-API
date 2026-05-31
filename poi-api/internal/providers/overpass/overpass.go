@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/trippier/poi-api/internal/providers"
+	"github.com/trippier/poi-api/internal/tilecache"
 	"github.com/trippier/poi-api/pkg/types"
 )
 
@@ -303,7 +304,7 @@ func (p *Provider) toRawPois(elements []overpassElement) []types.RawPoi {
 				Lng: lng,
 			},
 			Contact: types.Contact{
-				Website: el.Tags["website"],
+				Website: providers.SafeURL(el.Tags["website"]),
 				Phone:   el.Tags["phone"],
 				Hours:   el.Tags["opening_hours"],
 			},
@@ -370,4 +371,10 @@ func (p *Provider) resolveType(tags map[string]string) types.PoiType {
 		}
 	}
 	return types.TypeGeneric
+}
+
+func init() {
+	providers.Register(types.ProviderOverpass, func(cfg providers.BuildConfig) (providers.Provider, error) {
+		return tilecache.NewCachedProvider(New(), cfg.Redis, cfg.CacheTTL, cfg.Log), nil
+	})
 }

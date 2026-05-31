@@ -118,7 +118,7 @@ func (h *Handler) events(c *gin.Context) {
 	if !ok {
 		return
 	}
-	result, err := h.service.SearchEvents(byokContext(c), q)
+	result, err := h.service.SearchEvents(allByokContext(c), q)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorResponse{Error: "internal server error"})
 		return
@@ -132,7 +132,7 @@ func (h *Handler) eventsSlim(c *gin.Context) {
 	if !ok {
 		return
 	}
-	result, err := h.service.SearchEvents(byokContext(c), q)
+	result, err := h.service.SearchEvents(allByokContext(c), q)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorResponse{Error: "internal server error"})
 		return
@@ -256,8 +256,6 @@ func parseQuery(c *gin.Context) (types.SearchQuery, bool) {
 	}
 	q.Weights = weights
 
-	applyQueryDefaults(&q)
-
 	if err := Validate(q); err != nil {
 		c.JSON(http.StatusBadRequest, errorResponse{Error: err.Error()})
 		return q, false
@@ -285,50 +283,18 @@ func parseCustomQuery(c *gin.Context) (types.SearchQuery, bool) {
 	return q, true
 }
 
-// applyQueryDefaults sets mode=radius when no mode is provided by the caller.
-func applyQueryDefaults(q *types.SearchQuery) {
-	if q.Mode == "" {
-		q.Mode = types.ModeRadius
-	}
-}
+// ── BYOK context helper ────────────────────────────────────────────────────────
 
-// ── BYOK context helpers ───────────────────────────────────────────────────────
-
-// byokContext injects the legacy Ticketmaster and Eventbrite BYOK keys into ctx.
-// Used by the standard event routes to preserve backward compatibility.
-func byokContext(c *gin.Context) context.Context {
-	ctx := c.Request.Context()
-	if k := c.GetHeader("X-Ticketmaster-Key"); k != "" {
-		ctx = context.WithValue(ctx, byok.TicketmasterKey, k)
-	}
-	if t := c.GetHeader("X-Eventbrite-Token"); t != "" {
-		ctx = context.WithValue(ctx, byok.EventbriteKey, t)
-	}
-	return ctx
-}
-
-// allByokContext injects all BYOK keys from the registry into ctx.
-// Used by the custom routes so every known provider can receive its key.
-// Legacy Ticketmaster and Eventbrite keys are injected under both the old specific
-// constant AND the generic provider-keyed slot, ensuring all providers find their key.
+// @param c the gin request, carrying any inbound BYOK headers.
+// @return a context with every BYOK key declared in the registry injected under its provider ID. New providers participate automatically the moment their meta.ByokHeader is registered.
 func allByokContext(c *gin.Context) context.Context {
 	ctx := c.Request.Context()
 	for id, meta := range registry.All {
 		if !meta.Byok || meta.ByokHeader == "" {
 			continue
 		}
-		v := c.GetHeader(meta.ByokHeader)
-		if v == "" {
-			continue
-		}
-		// Generic slot — used by new providers.
-		ctx = byok.WithProviderKey(ctx, id, v)
-		// Legacy slots — keep existing Ticketmaster/Eventbrite providers working.
-		switch meta.ByokHeader {
-		case "X-Ticketmaster-Key":
-			ctx = context.WithValue(ctx, byok.TicketmasterKey, v)
-		case "X-Eventbrite-Token":
-			ctx = context.WithValue(ctx, byok.EventbriteKey, v)
+		if v := c.GetHeader(meta.ByokHeader); v != "" {
+			ctx = byok.WithProviderKey(ctx, id, v)
 		}
 	}
 	return ctx
