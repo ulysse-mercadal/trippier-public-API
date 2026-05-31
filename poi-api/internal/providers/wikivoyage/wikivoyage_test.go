@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/trippier/poi-api/internal/providers/wikivoyage"
@@ -292,6 +293,113 @@ func TestSearch_ImageFromListingField(t *testing.T) {
 	}
 	if got := byName["No Image"]; len(got) != 0 {
 		t.Errorf("No Image Images = %v, want nil/empty", got)
+	}
+}
+
+// TestSearch_EmitsWikipediaCrossLink confirms that a listing carrying a
+// wikipedia= field produces a second RawPoi with Provider=wikipedia and the
+// constructed article URL — letting dedup fold the link into the merged POI
+// when the user has Wikipedia among their selected providers. A listing
+// without wikipedia= produces only the main Wikivoyage POI.
+func TestSearch_EmitsWikipediaCrossLink(t *testing.T) {
+	wikitext := `
+{{see|name=Plain Name|lat=48|long=2|wikipedia=Eiffel Tower}}
+{{see|name=With Lang Prefix|lat=48|long=2|wikipedia=fr:Tour Eiffel}}
+{{see|name=Full URL|lat=48|long=2|wikipedia=https://de.wikipedia.org/wiki/Eiffelturm}}
+{{see|name=No Wiki|lat=48|long=2}}
+`
+	srv := newServer(t, "Zone", wikitext)
+	defer srv.Close()
+
+	p := wikivoyage.NewWithURL(srv.URL + "/w/api.php")
+	pois, err := p.Search(context.Background(), types.SearchQuery{Mode: types.ModeDistrict, District: "Zone"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+
+	bySourceURL := map[string]types.RawPoi{}
+	for _, poi := range pois {
+		if poi.Provider == types.ProviderWikipedia {
+			bySourceURL[poi.SourceURL] = poi
+		}
+	}
+
+	// langCode derives from baseURL host. NewWithURL uses srv.URL which is
+	// 127.0.0.1:port — the lang ends up as "127" which is fine for the test
+	// scaffolding; only the host-prefix cases need to match precisely.
+	wantURLs := []string{
+		"https://de.wikipedia.org/wiki/Eiffelturm",
+		"https://fr.wikipedia.org/wiki/Tour_Eiffel",
+	}
+	for _, want := range wantURLs {
+		if _, ok := bySourceURL[want]; !ok {
+			t.Errorf("expected synthetic Wikipedia POI with SourceURL %q, got: %v", want, bySourceURL)
+		}
+	}
+
+	// 4 main wikivoyage POIs + 3 synthetic wikipedia POIs (No Wiki has no field) = 7.
+	if len(pois) != 7 {
+		t.Errorf("expected 7 POIs (4 wikivoyage + 3 wikipedia), got %d", len(pois))
+	}
+	wikipediaCount := 0
+	for _, poi := range pois {
+		if poi.Provider == types.ProviderWikipedia {
+			wikipediaCount++
+		}
+	}
+	if wikipediaCount != 3 {
+		t.Errorf("expected 3 wikipedia POIs, got %d", wikipediaCount)
+	}
+}
+
+// TestSearch_NestedTemplateDoesNotTruncateListing is a regression test for
+// the real Musée Jacquemart-André listing on en.wikivoyage.org: its
+// directions= field uses an inner {{station|…}} template. Before scanListings
+// became brace-depth-aware the outer listing terminated at the first }} from
+// the nested template, dropping every field after directions (including
+// wikipedia=, image=, wikidata= and content=).
+func TestSearch_NestedTemplateDoesNotTruncateListing(t *testing.T) {
+	wikitext := `{{see
+| name=Musée Jacquemart-André | alt=Jacquemart-Andre Museum | url=http://www.musee-jacquemart-andre.com/ | email=
+| address= | lat=48.87543 | long=2.31055 | directions={{station|Miromesnil|9|13}}
+| phone= | tollfree= | fax=
+| hours= | price=
+| wikipedia=Musée Jacquemart-André | image=Musée Jacquemart André 2007 - Recoura.jpg | wikidata=Q1165526
+| content=Private collection of French, Italian, Dutch masterpieces in a typical XIXth century mansion.
+}}`
+	srv := newServer(t, "Paris/8e", wikitext)
+	defer srv.Close()
+
+	p := wikivoyage.NewWithURL(srv.URL)
+	pois, err := p.Search(context.Background(), types.SearchQuery{Mode: types.ModeDistrict, District: "Paris/8e"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+
+	var wv, wp *types.RawPoi
+	for i := range pois {
+		switch pois[i].Provider {
+		case types.ProviderWikivoyage:
+			wv = &pois[i]
+		case types.ProviderWikipedia:
+			wp = &pois[i]
+		}
+	}
+	if wv == nil {
+		t.Fatal("missing wikivoyage POI")
+	}
+	if wp == nil {
+		t.Fatal("missing synthetic wikipedia POI — the nested template must not truncate the listing")
+	}
+	wantDesc := "Private collection of French, Italian, Dutch masterpieces in a typical XIXth century mansion."
+	if wv.Description != wantDesc {
+		t.Errorf("wikivoyage Description = %q, want %q", wv.Description, wantDesc)
+	}
+	if len(wv.Images) != 1 {
+		t.Errorf("wikivoyage Images len = %d, want 1", len(wv.Images))
+	}
+	if !strings.Contains(wp.SourceURL, "Mus%C3%A9e_Jacquemart-Andr%C3%A9") {
+		t.Errorf("wikipedia SourceURL = %q, want it to point at the article", wp.SourceURL)
 	}
 }
 

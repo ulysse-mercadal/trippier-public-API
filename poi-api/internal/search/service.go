@@ -357,7 +357,27 @@ func (s *Service) fetchAll(ctx context.Context, q types.SearchQuery) []types.Raw
 	for _, r := range results {
 		all = append(all, r...)
 	}
-	return all
+	return filterToSelectedProviders(all, q.Providers)
+}
+
+// @param raw POIs as returned by every selected provider's Search.
+// @param selected the provider IDs the user actually asked for.
+// @return raw with any RawPoi whose Provider isn't in selected dropped — protects against cross-provider hints (e.g. a Wikivoyage listing referencing a Wikipedia article) leaking into a response when the user did not ask for that provider.
+func filterToSelectedProviders(raw []types.RawPoi, selected []types.Provider) []types.RawPoi {
+	if len(raw) == 0 {
+		return raw
+	}
+	allowed := make(map[types.Provider]bool, len(selected))
+	for _, p := range selected {
+		allowed[p] = true
+	}
+	out := raw[:0]
+	for _, p := range raw {
+		if allowed[p.Provider] {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // selectProviders filters registered providers to those in q.Providers that support q.Mode.
