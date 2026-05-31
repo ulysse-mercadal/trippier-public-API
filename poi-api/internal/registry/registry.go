@@ -70,7 +70,7 @@ var All = map[types.Provider]Meta{
 		ForEvents:  false,
 		Categories: []types.PoiType{types.TypeSee, types.TypeEat, types.TypeDrink, types.TypeDo, types.TypeBuy, types.TypeSleep},
 		CountryScores: map[string]float64{
-			"*":  0.75,
+			"*": 0.75,
 			// Europe — OSM is exceptional
 			"DE": 0.97, "AT": 0.96, "CH": 0.95, "NL": 0.95, "BE": 0.93,
 			"FR": 0.92, "GB": 0.92, "SE": 0.93, "NO": 0.92, "DK": 0.91,
@@ -290,7 +290,7 @@ var All = map[types.Provider]Meta{
 		CountryScores: map[string]float64{
 			"SG": 0.96, "ID": 0.93, "MY": 0.92, "TH": 0.91,
 			"PH": 0.89, "VN": 0.89, "MM": 0.83, "KH": 0.81,
-			"*":  0.05,
+			"*": 0.05,
 		},
 		CategoryScores: map[types.PoiType]float64{
 			types.TypeEat: 0.91, types.TypeDrink: 0.86, types.TypeSleep: 0.82,
@@ -365,7 +365,7 @@ var All = map[types.Provider]Meta{
 		Categories: []types.PoiType{types.TypeEvent},
 		CountryScores: map[string]float64{
 			"FR": 0.96, "BE": 0.77, "CH": 0.72, "LU": 0.72,
-			"*":  0.12,
+			"*": 0.12,
 		},
 	},
 }

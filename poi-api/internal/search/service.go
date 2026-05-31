@@ -172,7 +172,7 @@ func (s *Service) ProvidersRecommend(ctx context.Context, lat, lng float64, forE
 		entry types.RecommendedProvider
 		score float64
 	}
-	var candidates []scored
+	candidates := make([]scored, 0, len(registry.All))
 
 	for id, meta := range registry.All {
 		if meta.ForEvents != forEvents {
@@ -251,7 +251,7 @@ func (s *Service) selectByCountry(
 		id    types.Provider
 		score float64
 	}
-	var list []candidate
+	list := make([]candidate, 0, len(registry.All))
 
 	for id, meta := range registry.All {
 		if meta.ForEvents != forEvents {

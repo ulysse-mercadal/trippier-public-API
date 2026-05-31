@@ -29,8 +29,16 @@ class PoiClient:
         params = query.model_dump(exclude_none=True)
         if params.get("types"):
             params["types"] = ",".join(params["types"])
-        headers = {"X-Internal-Auth": _build_internal_auth(self._internal_secret)} if self._internal_secret else {}
-        response = await self._client.get(f"{self._base_url}/pois/search", params=params, headers=headers)
+        headers = (
+            {"X-Internal-Auth": _build_internal_auth(self._internal_secret)}
+            if self._internal_secret
+            else {}
+        )
+        response = await self._client.get(
+            f"{self._base_url}/pois/search",
+            params=params,
+            headers=headers,
+        )
         response.raise_for_status()
         data = response.json()
         return [Poi(**item) for item in data.get("results", [])]

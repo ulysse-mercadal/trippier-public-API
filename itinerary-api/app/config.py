@@ -30,7 +30,11 @@ def get_settings() -> Settings:
 
 def get_poi_client() -> PoiClient:
     s = get_settings()
-    return PoiClient(base_url=s.poi_api_url, timeout=s.poi_client_timeout, internal_secret=s.internal_secret)
+    return PoiClient(
+        base_url=s.poi_api_url,
+        timeout=s.poi_client_timeout,
+        internal_secret=s.internal_secret,
+    )
 
 
 def get_itinerary_service() -> ItineraryService:

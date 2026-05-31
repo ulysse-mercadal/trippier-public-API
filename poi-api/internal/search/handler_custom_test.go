@@ -22,7 +22,9 @@ func TestHandlerSearchCustom_OK(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body: %s", w.Code, w.Body.String())
 	}
-	var body struct{ Total int `json:"total"` }
+	var body struct {
+		Total int `json:"total"`
+	}
 	json.NewDecoder(w.Body).Decode(&body)
 	if body.Total != 1 {
 		t.Errorf("total = %d, want 1", body.Total)
@@ -64,7 +66,9 @@ func TestHandlerSearchCustom_ExcludeProviders(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
-	var body struct{ Total int `json:"total"` }
+	var body struct {
+		Total int `json:"total"`
+	}
 	json.NewDecoder(w.Body).Decode(&body)
 	if body.Total != 1 {
 		t.Errorf("total = %d, want 1 (wikivoyage excluded)", body.Total)
@@ -94,7 +98,9 @@ func TestHandlerSearchCustomSlim_OK(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 	var body struct {
-		Results []struct{ Name string `json:"name"` } `json:"results"`
+		Results []struct {
+			Name string `json:"name"`
+		} `json:"results"`
 	}
 	json.NewDecoder(w.Body).Decode(&body)
 	if len(body.Results) != 1 {
@@ -190,7 +196,9 @@ func TestHandlerEventsCustomSlim_OK(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 	var body struct {
-		Results []struct{ Name string `json:"name"` } `json:"results"`
+		Results []struct {
+			Name string `json:"name"`
+		} `json:"results"`
 	}
 	json.NewDecoder(w.Body).Decode(&body)
 	if len(body.Results) == 0 {
