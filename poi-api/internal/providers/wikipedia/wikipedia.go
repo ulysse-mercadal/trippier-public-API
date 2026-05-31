@@ -246,7 +246,10 @@ func (b *base) wikidataClassMembers(ctx context.Context, ids []string, wikidataC
 }
 
 // toRawPoi converts an enriched Wikipedia page to a RawPoi of the given type.
-func toRawPoi(ep enrichedPage, poiType types.PoiType) types.RawPoi {
+// The base is used to derive the canonical article URL from the configured
+// MediaWiki endpoint (e.g. "https://en.wikipedia.org/w/api.php" →
+// "https://en.wikipedia.org/?curid=<id>").
+func (b *base) toRawPoi(ep enrichedPage, poiType types.PoiType) types.RawPoi {
 	return types.RawPoi{
 		ID:          fmt.Sprintf("wikipedia:%d", ep.PageID),
 		Name:        ep.Title,
@@ -257,7 +260,17 @@ func toRawPoi(ep enrichedPage, poiType types.PoiType) types.RawPoi {
 		Coords:      &types.Coordinates{Lat: ep.Geo.Lat, Lng: ep.Geo.Lon},
 		Distance:    ep.Geo.Dist,
 		WikidataID:  ep.WikidataID,
+		SourceURL:   articleURL(b.baseURL, ep.PageID),
 	}
+}
+
+// articleURL derives the canonical Wikipedia article URL from the configured
+// MediaWiki API endpoint. Returns "" if the host cannot be extracted.
+func articleURL(mediawikiURL string, pageID int) string {
+	if i := strings.Index(mediawikiURL, "/w/api.php"); i > 0 {
+		return fmt.Sprintf("%s/?curid=%d", mediawikiURL[:i], pageID)
+	}
+	return ""
 }
 
 // ── Provider (physical places) ────────────────────────────────────────────────
@@ -310,7 +323,7 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 	enriched := p.base.enrich(ctx, pages)
 	pois := make([]types.RawPoi, 0, len(enriched))
 	for _, ep := range enriched {
-		pois = append(pois, toRawPoi(ep, types.TypeSee))
+		pois = append(pois, p.base.toRawPoi(ep, types.TypeSee))
 	}
 	return pois, nil
 }
@@ -380,7 +393,7 @@ func (p *EventProvider) Search(ctx context.Context, q types.SearchQuery) ([]type
 		if ep.WikidataID == "" || !festivalIDs[ep.WikidataID] {
 			continue
 		}
-		poi := toRawPoi(ep, types.TypeEvent)
+		poi := p.base.toRawPoi(ep, types.TypeEvent)
 		poi.Provider = types.ProviderWikipediaEvents
 		poi.Recurring = true
 		pois = append(pois, poi)

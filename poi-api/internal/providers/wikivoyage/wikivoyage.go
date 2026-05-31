@@ -54,6 +54,17 @@ func NewWithURL(baseURL string) *Provider {
 // Name implements providers.Provider.
 func (p *Provider) Name() types.Provider { return types.ProviderWikivoyage }
 
+// zoneURL returns the canonical Wikivoyage article URL for a zone title.
+// Derived from the configured MediaWiki endpoint so tests against a local
+// httptest server produce predictable URLs.
+func (p *Provider) zoneURL(zone string) string {
+	i := strings.Index(p.baseURL, "/w/api.php")
+	if i <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s/wiki/%s", p.baseURL[:i], url.PathEscape(zone))
+}
+
 // SupportsMode implements providers.Provider.
 func (p *Provider) SupportsMode(mode types.SearchMode) bool {
 	return mode == types.ModeDistrict || mode == types.ModeRadius
@@ -214,7 +225,8 @@ func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 				Phone:   strings.TrimSpace(fields["phone"]),
 				Hours:   strings.TrimSpace(fields["hours"]),
 			},
-			Zone: &types.Zone{Name: zone, Source: types.ProviderWikivoyage},
+			Zone:      &types.Zone{Name: zone, Source: types.ProviderWikivoyage},
+			SourceURL: p.zoneURL(zone),
 		}
 
 		if lat, lng, ok := p.parseCoords(fields); ok {

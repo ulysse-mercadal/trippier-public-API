@@ -126,6 +126,29 @@ func TestSearch_WayUsesCenter(t *testing.T) {
 	}
 }
 
+func TestSearch_SourceURL_NodeAndWay(t *testing.T) {
+	srv := newTestServer(sampleOverpassResponse, http.StatusOK)
+	defer srv.Close()
+
+	p := overpass.NewWithURL(srv.URL)
+	pois, err := p.Search(context.Background(), types.SearchQuery{
+		Mode: types.ModeRadius, Lat: 48.8566, Lng: 2.3522, Radius: 5000,
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+
+	want := map[string]string{
+		"overpass:12345": "https://www.openstreetmap.org/node/12345",
+		"overpass:99999": "https://www.openstreetmap.org/way/99999",
+	}
+	for _, poi := range pois {
+		if expected, ok := want[poi.ID]; ok && poi.SourceURL != expected {
+			t.Errorf("%s SourceURL = %q, want %q", poi.ID, poi.SourceURL, expected)
+		}
+	}
+}
+
 func TestSearch_TypeResolution(t *testing.T) {
 	srv := newTestServer(sampleOverpassResponse, http.StatusOK)
 	defer srv.Close()

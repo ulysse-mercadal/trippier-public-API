@@ -135,6 +135,9 @@ func TestSearch_WithKey_ParsesEvents(t *testing.T) {
 	if pois[0].Type != types.TypeEvent {
 		t.Errorf("first event type = %q, want %q", pois[0].Type, types.TypeEvent)
 	}
+	if pois[0].SourceURL != "https://example.com/tm1" {
+		t.Errorf("first event SourceURL = %q, want %q", pois[0].SourceURL, "https://example.com/tm1")
+	}
 }
 
 func TestSearch_EmptyEmbedded_ReturnsNil(t *testing.T) {

@@ -308,9 +308,21 @@ func (p *Provider) toRawPois(elements []overpassElement) []types.RawPoi {
 				Hours:   el.Tags["opening_hours"],
 			},
 			WikidataID: el.Tags["wikidata"],
+			SourceURL:  osmURL(el.Type, el.ID),
 		})
 	}
 	return pois
+}
+
+// osmURL returns the canonical openstreetmap.org browse URL for an element.
+// Overpass elements are one of "node", "way", or "relation"; anything else
+// (e.g. centred ways) is safe to skip — the empty string signals "no link".
+func osmURL(elementType string, id int64) string {
+	switch elementType {
+	case "node", "way", "relation":
+		return fmt.Sprintf("https://www.openstreetmap.org/%s/%d", elementType, id)
+	}
+	return ""
 }
 
 // resolveType maps OSM tags to a PoiType by checking tourism, amenity, leisure, and shop keys in order.

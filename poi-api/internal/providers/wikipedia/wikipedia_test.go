@@ -118,6 +118,31 @@ func TestProvider_ReturnsEnrichedPois(t *testing.T) {
 	}
 }
 
+func TestProvider_SourceURL_DerivedFromBaseHost(t *testing.T) {
+	wikiSrv := httptest.NewServer(newWikipediaHandler(geosearchResp, enrichResp))
+	defer wikiSrv.Close()
+	sparqlSrv := httptest.NewServer(newSPARQLHandler(sparqlNone))
+	defer sparqlSrv.Close()
+
+	// Pass the URL with the expected /w/api.php suffix so articleURL can
+	// derive the article host — the handler still answers regardless of path.
+	p := wikipedia.NewWithURLs(wikiSrv.URL+"/w/api.php", sparqlSrv.URL)
+	pois, err := p.Search(context.Background(), testQuery)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	for _, poi := range pois {
+		if poi.ID == "wikipedia:1" {
+			want := wikiSrv.URL + "/?curid=1"
+			if poi.SourceURL != want {
+				t.Errorf("SourceURL = %q, want %q", poi.SourceURL, want)
+			}
+			return
+		}
+	}
+	t.Fatal("Eiffel Tower not found")
+}
+
 func TestProvider_ReturnsAllGeosearchResults(t *testing.T) {
 	// The places Provider no longer filters by Wikidata — it is excluded from
 	// AllProviders and used only for enrichment. All geosearch results are returned.

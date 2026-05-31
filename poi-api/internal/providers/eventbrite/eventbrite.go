@@ -169,6 +169,7 @@ func (p *Provider) toRawPois(events []ebEvent) []types.RawPoi {
 			Thumbnail:   thumbnail,
 			Coords:      &types.Coordinates{Lat: lat, Lng: lng},
 			Contact:     types.Contact{Website: ev.URL},
+			SourceURL:   ev.URL,
 		}
 
 		if t, err := time.Parse(time.RFC3339, ev.Start.UTC); err == nil {

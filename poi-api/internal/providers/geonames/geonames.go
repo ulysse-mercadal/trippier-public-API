@@ -163,11 +163,12 @@ func (p *Provider) toRawPois(items []geonameItem) []types.RawPoi {
 			continue
 		}
 		pois = append(pois, types.RawPoi{
-			ID:       fmt.Sprintf("geonames:%d", item.GeonameID),
-			Name:     item.Name,
-			Type:     poiType,
-			Provider: types.ProviderGeoNames,
-			Coords:   &types.Coordinates{Lat: lat, Lng: lng},
+			ID:        fmt.Sprintf("geonames:%d", item.GeonameID),
+			Name:      item.Name,
+			Type:      poiType,
+			Provider:  types.ProviderGeoNames,
+			Coords:    &types.Coordinates{Lat: lat, Lng: lng},
+			SourceURL: fmt.Sprintf("https://www.geonames.org/%d", item.GeonameID),
 		})
 	}
 	return pois
