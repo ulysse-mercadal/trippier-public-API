@@ -189,3 +189,96 @@ func TestSupportsMode(t *testing.T) {
 		}
 	}
 }
+
+// TestSearch_FallsThroughOn5xx verifies that a server-error response on the
+// first mirror is treated as retryable and the next mirror is tried.
+func TestSearch_FallsThroughOn5xx(t *testing.T) {
+	primaryHits, secondaryHits := 0, 0
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		primaryHits++
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer primary.Close()
+	secondary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		secondaryHits++
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(sampleOverpassResponse))
+	}))
+	defer secondary.Close()
+
+	p := overpass.NewWithURLs([]string{primary.URL, secondary.URL})
+	q := types.SearchQuery{Mode: types.ModeRadius, Lat: 48.85, Lng: 2.35, Radius: 1000}
+	pois, err := p.Search(context.Background(), q)
+	if err != nil {
+		t.Fatalf("expected fallback success, got: %v", err)
+	}
+	if primaryHits != 1 {
+		t.Errorf("primary should be hit once, got %d", primaryHits)
+	}
+	if secondaryHits != 1 {
+		t.Errorf("secondary should be hit once, got %d", secondaryHits)
+	}
+	if len(pois) == 0 {
+		t.Error("expected POIs from the secondary mirror")
+	}
+}
+
+// TestSearch_FallsThroughOn429 verifies the rate-limit case is retryable.
+func TestSearch_FallsThroughOn429(t *testing.T) {
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer primary.Close()
+	secondary := newTestServer(sampleOverpassResponse, http.StatusOK)
+	defer secondary.Close()
+
+	p := overpass.NewWithURLs([]string{primary.URL, secondary.URL})
+	q := types.SearchQuery{Mode: types.ModeRadius, Lat: 48.85, Lng: 2.35, Radius: 1000}
+	if _, err := p.Search(context.Background(), q); err != nil {
+		t.Fatalf("expected fallback success on 429, got: %v", err)
+	}
+}
+
+// TestSearch_DoesNotRetryOn4xx verifies that a client error short-circuits
+// the mirror loop — the same request would fail everywhere.
+func TestSearch_DoesNotRetryOn4xx(t *testing.T) {
+	primaryHits, secondaryHits := 0, 0
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		primaryHits++
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer primary.Close()
+	secondary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		secondaryHits++
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(sampleOverpassResponse))
+	}))
+	defer secondary.Close()
+
+	p := overpass.NewWithURLs([]string{primary.URL, secondary.URL})
+	q := types.SearchQuery{Mode: types.ModeRadius, Lat: 48.85, Lng: 2.35, Radius: 1000}
+	if _, err := p.Search(context.Background(), q); err == nil {
+		t.Error("expected hard failure on HTTP 400, got nil")
+	}
+	if primaryHits != 1 || secondaryHits != 0 {
+		t.Errorf("4xx should short-circuit: primary=%d secondary=%d", primaryHits, secondaryHits)
+	}
+}
+
+// TestSearch_AllMirrorsFail reports the last error when every mirror fails.
+func TestSearch_AllMirrorsFail(t *testing.T) {
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer primary.Close()
+	secondary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusGatewayTimeout)
+	}))
+	defer secondary.Close()
+
+	p := overpass.NewWithURLs([]string{primary.URL, secondary.URL})
+	q := types.SearchQuery{Mode: types.ModeRadius, Lat: 48.85, Lng: 2.35, Radius: 1000}
+	if _, err := p.Search(context.Background(), q); err == nil {
+		t.Error("expected failure when all mirrors return 5xx")
+	}
+}

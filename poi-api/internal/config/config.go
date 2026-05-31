@@ -31,7 +31,10 @@ func Load() (*Config, error) {
 
 	v.SetDefault("port", "8080")
 	v.SetDefault("redis_url", "redis://localhost:6379")
-	v.SetDefault("cache_ttl_seconds", 3600)
+	// 24 h: OSM-backed POI data barely changes day-to-day, so a long TTL
+	// massively cuts Overpass / Wikivoyage calls and keeps us under each
+	// public mirror's per-IP quota.
+	v.SetDefault("cache_ttl_seconds", 86400)
 	v.SetDefault("provider_timeout", 8)
 	v.SetDefault("log_level", "info")
 	v.SetDefault("lang", "en")

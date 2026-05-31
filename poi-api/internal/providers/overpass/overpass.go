@@ -15,10 +15,23 @@ import (
 	"github.com/trippier/poi-api/pkg/types"
 )
 
-const (
-	defaultAPIURL  = "https://overpass-api.de/api/interpreter"
-	defaultTimeout = 10 * time.Second
-)
+const defaultTimeout = 10 * time.Second
+
+// defaultAPIURLs lists the public Overpass mirrors we try in order. Each has
+// its own per-IP quota, so rotating between them on transport / 429 / 5xx
+// errors effectively multiplies the available headroom without paying for a
+// self-hosted instance. Order is "best-effort first":
+//   - overpass-api.de: the canonical instance.
+//   - overpass.kumi.systems: privately-operated mirror, very reliable.
+//   - lz4.overpass-api.de: alternate edge of the canonical pool.
+//
+// Keep additions conservative — a banned mirror still costs one connect
+// attempt per call before we fall through.
+var defaultAPIURLs = []string{
+	"https://overpass-api.de/api/interpreter",
+	"https://overpass.kumi.systems/api/interpreter",
+	"https://lz4.overpass-api.de/api/interpreter",
+}
 
 var osmTagMap = map[string]types.PoiType{
 	"museum":      types.TypeSee,
@@ -78,25 +91,45 @@ type overpassCenter struct {
 }
 
 // Provider fetches POIs from the OpenStreetMap Overpass API.
+//
+// `apiURLs` holds an ordered list of Overpass endpoints — the first reachable
+// one wins. On a transport error / 429 / 5xx the next URL is tried, so a
+// banned IP on one mirror or a transient outage doesn't surface as a hard
+// failure to callers.
 type Provider struct {
-	client *http.Client
-	apiURL string
+	client  *http.Client
+	apiURLs []string
 }
 
-// New returns a Provider targeting the public Overpass API.
+// New returns a Provider rotating across the public Overpass mirrors listed
+// in {@link defaultAPIURLs}.
 func New() *Provider {
+	urls := make([]string, len(defaultAPIURLs))
+	copy(urls, defaultAPIURLs)
 	return &Provider{
-		client: &http.Client{Timeout: defaultTimeout},
-		apiURL: defaultAPIURL,
+		client:  &http.Client{Timeout: defaultTimeout},
+		apiURLs: urls,
 	}
 }
 
-// NewWithURL returns a Provider targeting a custom Overpass endpoint.
+// NewWithURL returns a Provider targeting a single custom Overpass endpoint.
 // Intended for testing against a local httptest server.
-func NewWithURL(url string) *Provider {
+func NewWithURL(u string) *Provider {
 	return &Provider{
-		client: &http.Client{Timeout: defaultTimeout},
-		apiURL: url,
+		client:  &http.Client{Timeout: defaultTimeout},
+		apiURLs: []string{u},
+	}
+}
+
+// NewWithURLs returns a Provider rotating across an explicit list of
+// Overpass endpoints — used when a caller wants to override the public
+// mirror list (e.g. a self-hosted instance first, public mirrors as fallback).
+func NewWithURLs(urls []string) *Provider {
+	cp := make([]string, len(urls))
+	copy(cp, urls)
+	return &Provider{
+		client:  &http.Client{Timeout: defaultTimeout},
+		apiURLs: cp,
 	}
 }
 
@@ -106,33 +139,64 @@ func (p *Provider) Name() types.Provider { return types.ProviderOverpass }
 // SupportsMode implements providers.Provider. Overpass supports all search modes.
 func (p *Provider) SupportsMode(_ types.SearchMode) bool { return true }
 
-// Search implements providers.Provider.
+// Search implements providers.Provider. Walks the configured mirror list and
+// returns the first successful response. Only retries on transient failures
+// (transport errors, HTTP 429, HTTP 5xx) — a 4xx is the same query failing
+// everywhere, so we fail fast.
 func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {
 	body := url.Values{"data": {p.buildQuery(q)}}.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.apiURL, strings.NewReader(body))
+	var lastErr error
+	for _, apiURL := range p.apiURLs {
+		pois, retryable, err := p.searchOnce(ctx, apiURL, body)
+		if err == nil {
+			return pois, nil
+		}
+		lastErr = err
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("overpass: %w", ctx.Err())
+		}
+		if !retryable {
+			return nil, err
+		}
+	}
+	if lastErr == nil {
+		return nil, fmt.Errorf("overpass: no mirrors configured")
+	}
+	return nil, fmt.Errorf("overpass: all mirrors failed: %w", lastErr)
+}
+
+// searchOnce performs a single POST against `apiURL`. The boolean second
+// return indicates whether the caller should try the next mirror — true for
+// transport errors / 429 / 5xx, false for 4xx (bad query — won't work on
+// any mirror) or a decode failure (a successful 200 with malformed JSON
+// suggests we hit a wrong-route placeholder, not a typical overload).
+func (p *Provider) searchOnce(ctx context.Context, apiURL, body string) ([]types.RawPoi, bool, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, strings.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("overpass: build request: %w", err)
+		return nil, false, fmt.Errorf("overpass: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	providers.SetUserAgent(req)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("overpass: do request: %w", err)
+		// Transport-level failure (connection refused, DNS, TLS, timeout).
+		// Always retry on the next mirror.
+		return nil, true, fmt.Errorf("overpass: do request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("overpass: unexpected status %d", resp.StatusCode)
+		retryable := resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500
+		return nil, retryable, fmt.Errorf("overpass: unexpected status %d", resp.StatusCode)
 	}
 
 	var result overpassResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("overpass: decode response: %w", err)
+		return nil, false, fmt.Errorf("overpass: decode response: %w", err)
 	}
-
-	return p.toRawPois(result.Elements), nil
+	return p.toRawPois(result.Elements), false, nil
 }
 
 // escapeOQLString escapes a string for safe embedding in an Overpass QL double-quoted context.
