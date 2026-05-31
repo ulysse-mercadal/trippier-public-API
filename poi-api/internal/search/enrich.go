@@ -11,10 +11,10 @@ import (
 
 const wikidataProximityMeters = 50.0
 
-// @param ctx
-// @param raw POIs to enrich in place
-// @param q search query forwarded to the Wikipedia provider
-// @return raw with WikidataID filled when missing, plus SourceURL and Description filled on GeoNames POIs from the nearest Wikipedia neighbour within wikidataProximityMeters
+// @param ctx.
+// @param raw POIs to enrich in place.
+// @param q search query forwarded to the Wikipedia provider.
+// @return raw with WikidataID filled when missing, plus SourceURL and Description filled on GeoNames POIs from the nearest Wikipedia neighbour within wikidataProximityMeters.
 func (s *Service) enrichWithWikidata(ctx context.Context, raw []types.RawPoi, q types.SearchQuery) []types.RawPoi {
 	if len(raw) == 0 {
 		return raw
@@ -59,8 +59,8 @@ func (s *Service) enrichWithWikidata(ctx context.Context, raw []types.RawPoi, q 
 	return raw
 }
 
-// @param p candidate raw POI
-// @return true when p has real coordinates and either lacks a WikidataID or is a GeoNames entry (which is always evaluated for SourceURL/Description swap)
+// @param p candidate raw POI.
+// @return true when p has real coordinates and either lacks a WikidataID or is a GeoNames entry (which is always evaluated for SourceURL/Description swap).
 func needsWikipediaEnrichment(p types.RawPoi) bool {
 	if p.Provider == types.ProviderWikipedia || p.Provider == types.ProviderWikipediaEvents {
 		return false
@@ -74,8 +74,8 @@ func needsWikipediaEnrichment(p types.RawPoi) bool {
 	return p.Provider == types.ProviderGeoNames
 }
 
-// @param raw POI batch
-// @return true when at least one POI satisfies needsWikipediaEnrichment
+// @param raw POI batch.
+// @return true when at least one POI satisfies needsWikipediaEnrichment.
 func hasPoiNeedingEnrichment(raw []types.RawPoi) bool {
 	for _, p := range raw {
 		if needsWikipediaEnrichment(p) {
@@ -85,9 +85,9 @@ func hasPoiNeedingEnrichment(raw []types.RawPoi) bool {
 	return false
 }
 
-// @param p target POI used as the reference point
-// @param wikiPois Wikipedia provider output
-// @return the Wikipedia RawPoi within wikidataProximityMeters of p, nearest first, or nil
+// @param p target POI used as the reference point.
+// @param wikiPois Wikipedia provider output.
+// @return the Wikipedia RawPoi within wikidataProximityMeters of p, nearest first, or nil.
 func closestWikipediaNeighbour(p types.RawPoi, wikiPois []types.RawPoi) *types.RawPoi {
 	bestDist := wikidataProximityMeters + 1
 	var best *types.RawPoi
