@@ -10,20 +10,18 @@ import (
 
 // Config holds all runtime configuration for auth-api.
 type Config struct {
-	Port                  string
-	DatabaseURL           string
-	RedisURL              string
-	JWTSecret             string
-	InternalSecret        string
-	SMTPHost              string
-	SMTPPort              int
-	SMTPFrom              string
-	SMTPUser              string
-	SMTPPass              string
-	AppURL                string
-	DefaultTokensLimit    int
-	DefaultResetIntervalS int
-	LogLevel              string
+	Port           string
+	DatabaseURL    string
+	RedisURL       string
+	JWTSecret      string
+	InternalSecret string
+	SMTPHost       string
+	SMTPPort       int
+	SMTPFrom       string
+	SMTPUser       string
+	SMTPPass       string
+	AppURL         string
+	LogLevel       string
 }
 
 // Load reads configuration from environment variables (prefixed AUTH_)
@@ -43,25 +41,21 @@ func Load() (*Config, error) {
 	v.SetDefault("SMTP_PORT", 1025)
 	v.SetDefault("SMTP_FROM", "noreply@trippier.dev")
 	v.SetDefault("APP_URL", "http://localhost:3000")
-	v.SetDefault("DEFAULT_TOKENS_LIMIT", 1000)
-	v.SetDefault("DEFAULT_RESET_INTERVAL_S", 2592000) // 30 days
 	v.SetDefault("LOG_LEVEL", "info")
 
 	cfg := &Config{
-		Port:                  v.GetString("PORT"),
-		DatabaseURL:           v.GetString("DATABASE_URL"),
-		RedisURL:              v.GetString("REDIS_URL"),
-		JWTSecret:             v.GetString("JWT_SECRET"),
-		InternalSecret:        v.GetString("INTERNAL_SECRET"),
-		SMTPHost:              v.GetString("SMTP_HOST"),
-		SMTPPort:              v.GetInt("SMTP_PORT"),
-		SMTPFrom:              v.GetString("SMTP_FROM"),
-		SMTPUser:              v.GetString("SMTP_USER"),
-		SMTPPass:              v.GetString("SMTP_PASS"),
-		AppURL:                v.GetString("APP_URL"),
-		DefaultTokensLimit:    v.GetInt("DEFAULT_TOKENS_LIMIT"),
-		DefaultResetIntervalS: v.GetInt("DEFAULT_RESET_INTERVAL_S"),
-		LogLevel:              v.GetString("LOG_LEVEL"),
+		Port:           v.GetString("PORT"),
+		DatabaseURL:    v.GetString("DATABASE_URL"),
+		RedisURL:       v.GetString("REDIS_URL"),
+		JWTSecret:      v.GetString("JWT_SECRET"),
+		InternalSecret: v.GetString("INTERNAL_SECRET"),
+		SMTPHost:       v.GetString("SMTP_HOST"),
+		SMTPPort:       v.GetInt("SMTP_PORT"),
+		SMTPFrom:       v.GetString("SMTP_FROM"),
+		SMTPUser:       v.GetString("SMTP_USER"),
+		SMTPPass:       v.GetString("SMTP_PASS"),
+		AppURL:         v.GetString("APP_URL"),
+		LogLevel:       v.GetString("LOG_LEVEL"),
 	}
 
 	if len(cfg.JWTSecret) < 32 {

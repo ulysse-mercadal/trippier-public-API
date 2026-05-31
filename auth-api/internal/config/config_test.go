@@ -77,19 +77,3 @@ func TestLoad_JWTSecretExactly32Chars(t *testing.T) {
 		t.Fatalf("32-char JWT secret should be accepted, got: %v", err)
 	}
 }
-
-func TestLoad_DefaultTokenLimits(t *testing.T) {
-	t.Setenv("AUTH_JWT_SECRET", "32-char-secret-value-for-testing!")
-	t.Setenv("AUTH_INTERNAL_SECRET", "16-char-secret!!")
-
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if cfg.DefaultTokensLimit <= 0 {
-		t.Errorf("DefaultTokensLimit should be positive, got %d", cfg.DefaultTokensLimit)
-	}
-	if cfg.DefaultResetIntervalS <= 0 {
-		t.Errorf("DefaultResetIntervalS should be positive, got %d", cfg.DefaultResetIntervalS)
-	}
-}
