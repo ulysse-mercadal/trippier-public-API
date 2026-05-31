@@ -195,6 +195,7 @@ func (p *Provider) toRawPois(events []tmEvent, centerLat, centerLng float64) []t
 			Thumbnail:   p.pickThumbnail(ev.Images),
 			Coords:      &types.Coordinates{Lat: lat, Lng: lng, Approximate: approximate},
 			Contact:     types.Contact{Website: ev.URL},
+			SourceURL:   ev.URL,
 		}
 
 		if t, err := time.Parse(time.RFC3339, ev.Dates.Start.DateTime); err == nil {

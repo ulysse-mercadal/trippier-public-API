@@ -120,6 +120,9 @@ func TestSearch_WithToken_ParsesEvents(t *testing.T) {
 	if pois[0].Type != types.TypeEvent {
 		t.Errorf("first event type = %q, want %q", pois[0].Type, types.TypeEvent)
 	}
+	if pois[0].SourceURL != "https://example.com/eb1" {
+		t.Errorf("first event SourceURL = %q, want %q", pois[0].SourceURL, "https://example.com/eb1")
+	}
 }
 
 func TestSearch_ChecksAuthHeader(t *testing.T) {

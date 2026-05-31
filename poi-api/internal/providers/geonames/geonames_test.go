@@ -102,6 +102,29 @@ func TestSearch_RadiusMode_IDFormat(t *testing.T) {
 	}
 }
 
+func TestSearch_RadiusMode_SourceURL(t *testing.T) {
+	srv := newTestServer(t, sampleResponse, http.StatusOK)
+	defer srv.Close()
+
+	p := geonames.NewWithURL(srv.URL, "testuser")
+	pois, err := p.Search(context.Background(), types.SearchQuery{
+		Mode: types.ModeRadius, Lat: 45.83, Lng: 6.86, Radius: 10000,
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	for _, poi := range pois {
+		if poi.ID == "geonames:6255148" {
+			want := "https://www.geonames.org/6255148"
+			if poi.SourceURL != want {
+				t.Errorf("SourceURL = %q, want %q", poi.SourceURL, want)
+			}
+			return
+		}
+	}
+	t.Fatal("Aiguille du Midi not found")
+}
+
 func TestSearch_RadiusMode_TypeResolution(t *testing.T) {
 	srv := newTestServer(t, sampleResponse, http.StatusOK)
 	defer srv.Close()

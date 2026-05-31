@@ -114,6 +114,28 @@ func TestSearch_DistrictMode_TypeMapping(t *testing.T) {
 	}
 }
 
+func TestSearch_DistrictMode_SourceURL(t *testing.T) {
+	srv := newServer(t, "Paris", sampleWikitext)
+	defer srv.Close()
+
+	// Append /w/api.php so zoneURL can derive the article host — the test
+	// server's handler answers regardless of the request path.
+	p := wikivoyage.NewWithURL(srv.URL + "/w/api.php")
+	pois, err := p.Search(context.Background(), types.SearchQuery{
+		Mode:     types.ModeDistrict,
+		District: "Paris",
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	want := srv.URL + "/wiki/Paris"
+	for _, poi := range pois {
+		if poi.SourceURL != want {
+			t.Errorf("%s SourceURL = %q, want %q", poi.Name, poi.SourceURL, want)
+		}
+	}
+}
+
 func TestSearch_DistrictMode_CoordinatesPresent(t *testing.T) {
 	srv := newServer(t, "Paris", sampleWikitext)
 	defer srv.Close()

@@ -38,7 +38,11 @@ type RawPoi struct {
 	Thumbnail   string       `json:"thumbnail,omitempty"`
 	Provider    Provider     `json:"provider"`
 	WikidataID  string       `json:"wikidata_id,omitempty"`
-	Distance    float64      `json:"distance,omitempty"`
+	// SourceURL is the canonical link to this POI's page on the originating
+	// provider (e.g. https://www.openstreetmap.org/node/12345). Empty when
+	// the provider does not expose a stable browse URL.
+	SourceURL   string  `json:"source_url,omitempty"`
+	Distance    float64 `json:"distance,omitempty"`
 	// Event-specific fields — nil/zero for non-event POIs.
 	DateStart *time.Time `json:"date_start,omitempty"`
 	DateEnd   *time.Time `json:"date_end,omitempty"`
