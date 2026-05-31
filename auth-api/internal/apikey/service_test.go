@@ -24,7 +24,7 @@ func TestErrNotFound_IsError(t *testing.T) {
 
 func TestNew_ReturnsNonNil(t *testing.T) {
 	// Passing nil pool/rdb is intentional — we only check construction, not operation.
-	svc := apikey.New(nil, nil, 1000, 2592000, nil)
+	svc := apikey.New(nil, nil, nil)
 	if svc == nil {
 		t.Fatal("New() returned nil")
 	}

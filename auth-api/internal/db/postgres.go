@@ -18,6 +18,9 @@ var migration002 string
 //go:embed migrations/003_user_level_tokens.sql
 var migration003 string
 
+//go:embed migrations/004_user_quota.sql
+var migration004 string
+
 // Connect creates a pgx connection pool and runs migrations.
 func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	poolCfg, err := pgxpool.ParseConfig(databaseURL)
@@ -37,7 +40,7 @@ func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("ping: %w", err)
 	}
 
-	for i, sql := range []string{migration001, migration002, migration003} {
+	for i, sql := range []string{migration001, migration002, migration003, migration004} {
 		if _, err := pool.Exec(ctx, sql); err != nil {
 			pool.Close()
 			return nil, fmt.Errorf("migration %d: %w", i+1, err)

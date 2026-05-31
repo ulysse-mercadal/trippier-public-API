@@ -122,7 +122,7 @@ DELETE /auth/keys/:id        Bearer <jwt>    → revoke API key
 
 ## Token model
 
-Every account starts with **1 000 tokens per month**, shared across all API keys. The bucket refills every 30 days (configurable via `AUTH_DEFAULT_TOKENS_LIMIT` and `AUTH_DEFAULT_RESET_INTERVAL_S`).
+Every account starts with **1 000 tokens per month**, shared across all API keys. The bucket refills every 30 days. Quota is stored per-user in `users.tokens_limit` / `users.tokens_reset_interval_secs` and can be raised at any time via `POST /internal/admin/user-quota` (HMAC-signed `X-Internal-Auth` header).
 
 | Endpoint | Cost |
 |---|---|

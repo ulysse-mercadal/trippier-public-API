@@ -19,26 +19,23 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var ErrNotFound = errors.New("api key not found")
+var (
+	ErrNotFound     = errors.New("api key not found")
+	ErrUserNotFound = errors.New("user not found")
+)
 
-// Service manages API keys and their Redis token buckets.
+// Service manages API keys and the per-user Redis token buckets. The quota
+// (tokens_limit / tokens_reset_interval_secs) lives on the users row — keys
+// belonging to the same user share a single bucket.
 type Service struct {
-	db              *pgxpool.Pool
-	rdb             *redis.Client
-	log             *zap.Logger
-	defaultLimit    int
-	defaultInterval int // seconds
+	db  *pgxpool.Pool
+	rdb *redis.Client
+	log *zap.Logger
 }
 
 // New creates a Service.
-func New(db *pgxpool.Pool, rdb *redis.Client, defaultLimit, defaultInterval int, log *zap.Logger) *Service {
-	return &Service{
-		db:              db,
-		rdb:             rdb,
-		log:             log,
-		defaultLimit:    defaultLimit,
-		defaultInterval: defaultInterval,
-	}
+func New(db *pgxpool.Pool, rdb *redis.Client, log *zap.Logger) *Service {
+	return &Service{db: db, rdb: rdb, log: log}
 }
 
 // CreateResult holds the one-time plaintext key and its metadata.
@@ -47,8 +44,13 @@ type CreateResult struct {
 	Key          models.APIKey
 }
 
-// Create generates a new API key for userID.
+// Create generates a new API key for userID, reading the quota from the users row.
 func (s *Service) Create(ctx context.Context, userID, name string) (*CreateResult, error) {
+	limit, interval, err := s.getUserQuota(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
 	raw, err := randomBytes(20) // 40-char hex → "trp_" + 40 = 44 chars total
 	if err != nil {
 		return nil, err
@@ -66,18 +68,17 @@ func (s *Service) Create(ctx context.Context, userID, name string) (*CreateResul
 
 	var id string
 	err = s.db.QueryRow(ctx,
-		`INSERT INTO api_keys
-		 (user_id, name, key_hash_bcrypt, key_hash_sha256, key_prefix, tokens_limit, tokens_reset_interval_secs)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		`INSERT INTO api_keys (user_id, name, key_hash_bcrypt, key_hash_sha256, key_prefix)
+		 VALUES ($1, $2, $3, $4, $5)
 		 RETURNING id`,
-		userID, name, string(bcryptHash), sha256Hash, prefix, s.defaultLimit, s.defaultInterval,
+		userID, name, string(bcryptHash), sha256Hash, prefix,
 	).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("insert: %w", err)
 	}
 
-	ttl := time.Duration(s.defaultInterval) * time.Second
-	if err := rl.InitBucket(ctx, s.rdb, userID, s.defaultLimit, ttl); err != nil {
+	ttl := time.Duration(interval) * time.Second
+	if err := rl.InitBucket(ctx, s.rdb, userID, limit, ttl); err != nil {
 		s.log.Warn("could not prime redis bucket", zap.String("user_id", userID), zap.Error(err))
 	}
 
@@ -86,19 +87,23 @@ func (s *Service) Create(ctx context.Context, userID, name string) (*CreateResul
 		UserID:                  userID,
 		Name:                    name,
 		KeyPrefix:               prefix,
-		TokensLimit:             s.defaultLimit,
-		TokensResetIntervalSecs: s.defaultInterval,
+		TokensLimit:             limit,
+		TokensResetIntervalSecs: interval,
 		CreatedAt:               time.Now(),
 	}
 	return &CreateResult{PlaintextKey: plaintext, Key: key}, nil
 }
 
-// List returns all non-revoked keys for a user, enriched with the shared
-// user-level Redis usage data (all keys draw from the same pool).
+// List returns all non-revoked keys for a user, enriched with the user-level
+// quota (from users) and live Redis usage data (shared bucket).
 func (s *Service) List(ctx context.Context, userID string) ([]models.APIKeyWithUsage, error) {
+	limit, interval, err := s.getUserQuota(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
 	rows, err := s.db.Query(ctx,
-		`SELECT id, user_id, name, key_prefix,
-		        tokens_limit, tokens_reset_interval_secs, revoked, created_at, last_used_at
+		`SELECT id, user_id, name, key_prefix, revoked, created_at, last_used_at
 		 FROM api_keys WHERE user_id = $1 AND revoked = false ORDER BY created_at DESC`,
 		userID,
 	)
@@ -112,11 +117,12 @@ func (s *Service) List(ctx context.Context, userID string) ([]models.APIKeyWithU
 		var k models.APIKey
 		if err := rows.Scan(
 			&k.ID, &k.UserID, &k.Name, &k.KeyPrefix,
-			&k.TokensLimit, &k.TokensResetIntervalSecs, &k.Revoked,
-			&k.CreatedAt, &k.LastUsedAt,
+			&k.Revoked, &k.CreatedAt, &k.LastUsedAt,
 		); err != nil {
 			return nil, err
 		}
+		k.TokensLimit = limit
+		k.TokensResetIntervalSecs = interval
 		rawKeys = append(rawKeys, k)
 	}
 	if err := rows.Err(); err != nil {
@@ -125,8 +131,8 @@ func (s *Service) List(ctx context.Context, userID string) ([]models.APIKeyWithU
 
 	remaining, ttlSecs, err := rl.GetUsage(ctx, s.rdb, userID)
 	if err != nil || remaining == -1 {
-		remaining = s.defaultLimit
-		ttlSecs = int64(s.defaultInterval)
+		remaining = limit
+		ttlSecs = int64(interval)
 	}
 
 	keys := make([]models.APIKeyWithUsage, 0, len(rawKeys))
@@ -155,13 +161,17 @@ func (s *Service) Revoke(ctx context.Context, userID, keyID string) error {
 	return nil
 }
 
-// ValidateBySHA256 is the fast path used by internal middleware validation.
+// ValidateBySHA256 is the fast path used by internal middleware validation. The
+// returned quota reflects the current users row, so admin updates take effect
+// on the next request without restart.
 func (s *Service) ValidateBySHA256(ctx context.Context, sha256Hash string) (*models.InternalKeyInfo, error) {
 	var info models.InternalKeyInfo
 	err := s.db.QueryRow(ctx,
-		`SELECT user_id, id FROM api_keys WHERE key_hash_sha256 = $1 AND revoked = false`,
+		`SELECT k.user_id, k.id, u.tokens_limit, u.tokens_reset_interval_secs
+		   FROM api_keys k JOIN users u ON u.id = k.user_id
+		  WHERE k.key_hash_sha256 = $1 AND k.revoked = false`,
 		sha256Hash,
-	).Scan(&info.UserID, &info.KeyID)
+	).Scan(&info.UserID, &info.KeyID, &info.TokensLimit, &info.TokensResetIntervalSecs)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return &models.InternalKeyInfo{Valid: false}, nil
 	}
@@ -175,17 +185,74 @@ func (s *Service) ValidateBySHA256(ctx context.Context, sha256Hash string) (*mod
 		s.db.Exec(ctx2, `UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`, info.KeyID) //nolint:errcheck
 	}()
 
-	info.TokensLimit = s.defaultLimit
-	info.TokensResetIntervalSecs = s.defaultInterval
-
 	remaining, _, err := rl.GetUsage(ctx, s.rdb, info.UserID)
 	if err != nil || remaining == -1 {
-		ttl := time.Duration(s.defaultInterval) * time.Second
-		rl.InitBucket(ctx, s.rdb, info.UserID, s.defaultLimit, ttl) //nolint:errcheck
+		ttl := time.Duration(info.TokensResetIntervalSecs) * time.Second
+		rl.InitBucket(ctx, s.rdb, info.UserID, info.TokensLimit, ttl) //nolint:errcheck
 	}
 
 	info.Valid = true
 	return &info, nil
+}
+
+// SetUserQuota updates the quota for a user and forces the Redis bucket to the
+// new limit immediately. intervalSecs == 0 keeps the existing interval.
+func (s *Service) SetUserQuota(ctx context.Context, userID string, limit, intervalSecs int) error {
+	var newInterval int
+	err := s.db.QueryRow(ctx,
+		`UPDATE users
+		    SET tokens_limit               = $1,
+		        tokens_reset_interval_secs = COALESCE(NULLIF($2, 0), tokens_reset_interval_secs),
+		        updated_at                 = NOW()
+		  WHERE id = $3
+		  RETURNING tokens_reset_interval_secs`,
+		limit, intervalSecs, userID,
+	).Scan(&newInterval)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrUserNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("update user quota: %w", err)
+	}
+
+	ttl := time.Duration(newInterval) * time.Second
+	if err := rl.SetTokens(ctx, s.rdb, userID, limit, ttl); err != nil {
+		return fmt.Errorf("redis set: %w", err)
+	}
+	return nil
+}
+
+// SetUserQuotaByEmail is a convenience for admin tooling: resolves the user by
+// email and delegates to SetUserQuota.
+func (s *Service) SetUserQuotaByEmail(ctx context.Context, email string, limit, intervalSecs int) (string, error) {
+	var userID string
+	err := s.db.QueryRow(ctx, `SELECT id FROM users WHERE email = $1`, email).Scan(&userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrUserNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("lookup user: %w", err)
+	}
+	if err := s.SetUserQuota(ctx, userID, limit, intervalSecs); err != nil {
+		return userID, err
+	}
+	return userID, nil
+}
+
+// getUserQuota returns (tokens_limit, tokens_reset_interval_secs) for a user.
+func (s *Service) getUserQuota(ctx context.Context, userID string) (int, int, error) {
+	var limit, interval int
+	err := s.db.QueryRow(ctx,
+		`SELECT tokens_limit, tokens_reset_interval_secs FROM users WHERE id = $1`,
+		userID,
+	).Scan(&limit, &interval)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, 0, ErrUserNotFound
+	}
+	if err != nil {
+		return 0, 0, fmt.Errorf("user quota: %w", err)
+	}
+	return limit, interval, nil
 }
 
 // randomBytes returns n random bytes encoded as a hex string.
