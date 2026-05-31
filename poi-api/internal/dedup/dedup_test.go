@@ -153,6 +153,69 @@ func TestTourEiffelMergedViaWikidataBridge(t *testing.T) {
 	}
 }
 
+// TestMergeImages_CapsAtThreeAndPrefersHigherPriority gathers images from
+// every group member, keeps the highest-priority provider's URLs first,
+// drops duplicates, and caps the result at maxImagesPerPoi (3).
+func TestMergeImages_CapsAtThreeAndPrefersHigherPriority(t *testing.T) {
+	pois := []types.RawPoi{
+		// GeoNames (lowest priority) — listed first to verify ordering still
+		// puts Overpass URLs ahead of it in the output.
+		{
+			ID: "geonames:1", Provider: types.ProviderGeoNames,
+			Coords:     coords(48.86, 2.29),
+			WikidataID: "Q1",
+			Images:     []string{"https://img/geonames.jpg"},
+		},
+		// Overpass (highest priority) — its two URLs should occupy slots 0+1.
+		{
+			ID: "overpass:1", Provider: types.ProviderOverpass,
+			Coords:     coords(48.86, 2.29),
+			WikidataID: "Q1",
+			Images:     []string{"https://img/overpass-a.jpg", "https://img/overpass-b.jpg"},
+		},
+		// Wikipedia — contributes one new URL and one duplicate (overpass-a).
+		// The duplicate must be dropped; the new URL fills slot 2.
+		{
+			ID: "wikipedia:1", Provider: types.ProviderWikipedia,
+			Coords:     coords(48.86, 2.29),
+			WikidataID: "Q1",
+			Images:     []string{"https://img/overpass-a.jpg", "https://img/wikipedia.jpg"},
+		},
+	}
+
+	merged := dedup.Merge(pois)
+	if len(merged) != 1 {
+		t.Fatalf("expected 1 merged POI, got %d", len(merged))
+	}
+	want := []string{
+		"https://img/overpass-a.jpg",
+		"https://img/overpass-b.jpg",
+		"https://img/wikipedia.jpg",
+	}
+	got := merged[0].Images
+	if len(got) != len(want) {
+		t.Fatalf("Images = %v, want %v", got, want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Errorf("[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// TestMergeImages_EmptyWhenNoSourceHasAny returns a nil/empty slice when no
+// group member carries any image URL, so the JSON output omits the field.
+func TestMergeImages_EmptyWhenNoSourceHasAny(t *testing.T) {
+	pois := []types.RawPoi{
+		{ID: "overpass:1", Provider: types.ProviderOverpass, Coords: coords(48.86, 2.29), WikidataID: "Q1"},
+		{ID: "geonames:1", Provider: types.ProviderGeoNames, Coords: coords(48.86, 2.29), WikidataID: "Q1"},
+	}
+	merged := dedup.Merge(pois)
+	if len(merged[0].Images) != 0 {
+		t.Errorf("Images = %v, want empty", merged[0].Images)
+	}
+}
+
 // TestMergeContactMerge confirms that contact fields are combined across providers.
 func TestMergeContactMerge(t *testing.T) {
 	pois := []types.RawPoi{

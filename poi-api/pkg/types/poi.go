@@ -36,6 +36,7 @@ type RawPoi struct {
 	Description string       `json:"description,omitempty"`
 	Contact     Contact      `json:"contact,omitempty"`
 	Thumbnail   string       `json:"thumbnail,omitempty"`
+	Images      []string     `json:"images,omitempty"`
 	Provider    Provider     `json:"provider"`
 	WikidataID  string       `json:"wikidata_id,omitempty"`
 	// SourceURL is the canonical link to this POI's page on the originating
@@ -89,6 +90,7 @@ type EnrichedPoi struct {
 	Description   string              `json:"description,omitempty"`
 	Contact       Contact             `json:"contact,omitempty"`
 	Thumbnail     string              `json:"thumbnail,omitempty"`
+	Images        []string            `json:"images,omitempty"`
 	Sources       []Provider          `json:"sources"`
 	ProvidersData map[Provider]RawPoi `json:"providers_data,omitempty"`
 	// Event-specific fields — nil/zero for non-event POIs.

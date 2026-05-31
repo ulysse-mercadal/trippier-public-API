@@ -288,6 +288,79 @@ func TestSearch_DoesNotRetryOn4xx(t *testing.T) {
 	}
 }
 
+// TestSearch_ImagesFromOSMTags exercises image/image:url/wikimedia_commons
+// tag handling: direct URLs kept, non-http values dropped, Commons file refs
+// turned into Special:FilePath URLs, duplicates removed and the result capped
+// at 3 entries.
+func TestSearch_ImagesFromOSMTags(t *testing.T) {
+	body := `{"elements":[
+		{"type":"node","id":1,"lat":48.86,"lon":2.29,"tags":{
+			"name":"Direct URL","tourism":"attraction",
+			"image":"https://example.org/a.jpg"
+		}},
+		{"type":"node","id":2,"lat":48.86,"lon":2.29,"tags":{
+			"name":"Both tags","tourism":"attraction",
+			"image":"https://example.org/b.jpg",
+			"image:url":"https://example.org/b-alt.jpg"
+		}},
+		{"type":"node","id":3,"lat":48.86,"lon":2.29,"tags":{
+			"name":"Commons file","tourism":"attraction",
+			"wikimedia_commons":"File:Eiffel Tower.jpg"
+		}},
+		{"type":"node","id":4,"lat":48.86,"lon":2.29,"tags":{
+			"name":"Commons category dropped","tourism":"attraction",
+			"wikimedia_commons":"Category:Paris"
+		}},
+		{"type":"node","id":5,"lat":48.86,"lon":2.29,"tags":{
+			"name":"Non-http image dropped","tourism":"attraction",
+			"image":"file:///local/foo.jpg"
+		}},
+		{"type":"node","id":6,"lat":48.86,"lon":2.29,"tags":{
+			"name":"Duplicate dropped","tourism":"attraction",
+			"image":"https://example.org/x.jpg",
+			"image:url":"https://example.org/x.jpg"
+		}}
+	]}`
+	var got string
+	srv := newTestServerCapture(&got, body, http.StatusOK)
+	defer srv.Close()
+
+	p := overpass.NewWithURLs([]string{srv.URL})
+	pois, err := p.Search(newCtx(), types.SearchQuery{Mode: types.ModeRadius, Lat: 48.86, Lng: 2.29, Radius: 1000})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	byName := map[string][]string{}
+	for _, poi := range pois {
+		byName[poi.Name] = poi.Images
+	}
+
+	cases := []struct {
+		name string
+		want []string
+	}{
+		{"Direct URL", []string{"https://example.org/a.jpg"}},
+		{"Both tags", []string{"https://example.org/b.jpg", "https://example.org/b-alt.jpg"}},
+		{"Commons file", []string{"https://commons.wikimedia.org/wiki/Special:FilePath/Eiffel%20Tower.jpg"}},
+		{"Commons category dropped", nil},
+		{"Non-http image dropped", nil},
+		{"Duplicate dropped", []string{"https://example.org/x.jpg"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := byName[c.name]
+			if len(got) != len(c.want) {
+				t.Fatalf("len = %d, want %d (got=%v)", len(got), len(c.want), got)
+			}
+			for i := range got {
+				if got[i] != c.want[i] {
+					t.Errorf("[%d] = %q, want %q", i, got[i], c.want[i])
+				}
+			}
+		})
+	}
+}
+
 // TestSearch_AllMirrorsFail reports the last error when every mirror fails.
 func TestSearch_AllMirrorsFail(t *testing.T) {
 	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

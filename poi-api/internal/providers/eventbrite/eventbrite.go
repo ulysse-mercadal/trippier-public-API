@@ -156,8 +156,10 @@ func (p *Provider) toRawPois(events []ebEvent) []types.RawPoi {
 		}
 
 		thumbnail := ""
-		if ev.Logo != nil {
+		var images []string
+		if ev.Logo != nil && ev.Logo.URL != "" {
 			thumbnail = ev.Logo.URL
+			images = []string{ev.Logo.URL}
 		}
 
 		poi := types.RawPoi{
@@ -167,6 +169,7 @@ func (p *Provider) toRawPois(events []ebEvent) []types.RawPoi {
 			Provider:    types.ProviderEventbrite,
 			Description: ev.Description.Text,
 			Thumbnail:   thumbnail,
+			Images:      images,
 			Coords:      &types.Coordinates{Lat: lat, Lng: lng},
 			Contact:     types.Contact{Website: ev.URL},
 			SourceURL:   ev.URL,

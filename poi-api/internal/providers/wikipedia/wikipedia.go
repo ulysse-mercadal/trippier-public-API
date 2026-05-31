@@ -250,6 +250,10 @@ func (b *base) wikidataClassMembers(ctx context.Context, ids []string, wikidataC
 // MediaWiki endpoint (e.g. "https://en.wikipedia.org/w/api.php" →
 // "https://en.wikipedia.org/?curid=<id>").
 func (b *base) toRawPoi(ep enrichedPage, poiType types.PoiType) types.RawPoi {
+	var images []string
+	if ep.Thumbnail != "" {
+		images = []string{ep.Thumbnail}
+	}
 	return types.RawPoi{
 		ID:          fmt.Sprintf("wikipedia:%d", ep.PageID),
 		Name:        ep.Title,
@@ -257,6 +261,7 @@ func (b *base) toRawPoi(ep enrichedPage, poiType types.PoiType) types.RawPoi {
 		Provider:    types.ProviderWikipedia,
 		Description: ep.Extract,
 		Thumbnail:   ep.Thumbnail,
+		Images:      images,
 		Coords:      &types.Coordinates{Lat: ep.Geo.Lat, Lng: ep.Geo.Lon},
 		Distance:    ep.Geo.Dist,
 		WikidataID:  ep.WikidataID,
