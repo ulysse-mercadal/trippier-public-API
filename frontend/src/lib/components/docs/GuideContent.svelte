@@ -21,14 +21,14 @@
 		<li><strong>Self-hosted :</strong> une image Docker, vos serveurs, démarrez avec <code>POI_AUTH_DISABLED=true</code> pour désactiver l'auth.</li>
 	</ul>
 	<h2>2. Premier appel (sans auth)</h2>
-	<p><code>/health</code> et <code>/pois/providers</code> ne nécessitent aucun token ni authentification :</p>
+	<p><code>GET /health</code> est la seule route ouverte : aucun token, aucune authentification.</p>
 	<CodeBlock lang="bash" code={CURL_HEALTH} />
 	<h2>3. Appel authentifié</h2>
-	<p>Pour les routes facturées, passez votre clé via l'en-tête <code>X-API-Key</code> :</p>
+	<p>Pour toutes les autres routes, passez votre clé via l'en-tête <code>X-API-Key</code> :</p>
 	<CodeBlock lang="bash" code={CURL_AUTH} />
 	<div class="d-callout">
-		<strong>Routes gratuites.</strong>
-		<span><code>GET /health</code> et <code>GET /pois/providers</code> sont publiques et ne consomment aucun token.</span>
+		<strong>Route gratuite.</strong>
+		<span>Seul <code>GET /health</code> est publique et ne consomme aucun token. Les routes <code>/pois/providers*</code> coûtent 1 token chacune.</span>
 	</div>
 
 {:else if pageId === 'auth'}
@@ -77,17 +77,23 @@
 	<table class="d-table">
 		<thead><tr><th>Route</th><th>Tokens</th></tr></thead>
 		<tbody>
-			<tr><td><code>GET /pois/search</code> · <code>GET /pois/search/slim</code></td><td>1</td></tr>
-			<tr><td><code>GET /pois/events</code> · <code>GET /pois/events/slim</code></td><td>10</td></tr>
-			<tr><td><code>GET /pois/providers</code> · <code>GET /health</code></td><td>0 (gratuit)</td></tr>
+			<tr><td><code>GET /pois/search</code> · <code>/slim</code> · <code>/custom</code> · <code>/custom/slim</code></td><td>1</td></tr>
+			<tr><td><code>GET /pois/providers</code> · <code>/catalog</code> · <code>/recommend</code></td><td>1</td></tr>
+			<tr><td><code>GET /pois/events</code> · <code>/slim</code> · <code>/custom</code> · <code>/custom/slim</code></td><td>10</td></tr>
+			<tr><td><code>POST /itinerary/generate</code></td><td>50</td></tr>
+			<tr><td><code>GET /health</code></td><td>0 (gratuit)</td></tr>
 		</tbody>
 	</table>
 	<div class="d-callout">
 		<strong>Pourquoi les évènements coûtent 10 tokens ?</strong>
-		<span>L'appel fan-out vers Ticketmaster et Eventbrite consomme des quotas API payants côté infrastructure. Le coût reflète cela.</span>
+		<span>L'appel fan-out vers Ticketmaster, Eventbrite et autres consomme des quotas API payants côté infrastructure. Le coût reflète cela.</span>
+	</div>
+	<div class="d-callout">
+		<strong>Pourquoi l'itinéraire coûte 50 tokens ?</strong>
+		<span>La génération combine un appel <code>/pois/search</code>, un appel LLM, et l'optimisation horaire/géographique. Si vous fournissez directement <code>pois</code> au lieu de <code>poi_query</code>, l'appel POI est économisé mais le coût reste identique.</span>
 	</div>
 	<h2>BYOK (Bring Your Own Key)</h2>
-	<p>Apportez vos propres clés Ticketmaster / Eventbrite pour débloquer les évènements même sans solde suffisant :</p>
+	<p>Apportez vos propres clés provider pour débloquer les routes <code>/events*</code> et <code>/custom*</code> même sans solde suffisant. Headers reconnus : <code>X-Ticketmaster-Key</code>, <code>X-Eventbrite-Token</code>, <code>X-Meetup-Token</code>, <code>X-OpenAgenda-Key</code>, <code>X-Foursquare-Key</code>, <code>X-Here-Key</code>, <code>X-Baidu-Key</code>, <code>X-Amap-Key</code>, <code>X-Kakao-Key</code>, <code>X-Navitime-Key</code>, <code>X-Mappls-Key</code>, <code>X-Grabmaps-Key</code>.</p>
 	<CodeBlock lang="bash" code={CURL_BYOK} />
 {/if}
 
