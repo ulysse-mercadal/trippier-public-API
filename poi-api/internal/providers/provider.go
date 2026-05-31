@@ -4,11 +4,32 @@ package providers
 import (
 	"context"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/trippier/poi-api/pkg/types"
 )
 
 const userAgent = "Trippier/1.0 (+https://github.com/trippier)"
+
+// @param ref a Wikimedia file reference such as "File:Eiffel_Tower.jpg", "Eiffel_Tower.jpg" or "Category:Eiffel".
+// @return the canonical Special:FilePath URL for the file, or empty string when ref is empty, a category, or otherwise unusable.
+func CommonsFileURL(ref string) string {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return ""
+	}
+	if strings.HasPrefix(strings.ToLower(ref), "category:") {
+		return ""
+	}
+	if strings.HasPrefix(ref, "File:") || strings.HasPrefix(ref, "file:") {
+		ref = ref[len("File:"):]
+	}
+	if ref == "" {
+		return ""
+	}
+	return "https://commons.wikimedia.org/wiki/Special:FilePath/" + url.PathEscape(ref)
+}
 
 // SetUserAgent stamps the shared User-Agent on an outgoing request.
 // All provider HTTP calls must use this so external APIs (Overpass, Wikimedia)

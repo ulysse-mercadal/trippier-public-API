@@ -308,10 +308,42 @@ func (p *Provider) toRawPois(elements []overpassElement) []types.RawPoi {
 				Hours:   el.Tags["opening_hours"],
 			},
 			WikidataID: el.Tags["wikidata"],
+			Images:     osmImages(el.Tags),
 			SourceURL:  osmURL(el.Type, el.ID),
 		})
 	}
 	return pois
+}
+
+// @param tags OSM key/value tag map for an element.
+// @return up to 3 image URLs gathered from the image, image:url and wikimedia_commons tags, in that order.
+func osmImages(tags map[string]string) []string {
+	out := make([]string, 0, 3)
+	seen := make(map[string]bool, 3)
+	for _, k := range []string{"image", "image:url"} {
+		v := strings.TrimSpace(tags[k])
+		if v == "" || seen[v] {
+			continue
+		}
+		if !strings.HasPrefix(v, "http://") && !strings.HasPrefix(v, "https://") {
+			continue
+		}
+		out = append(out, v)
+		seen[v] = true
+	}
+	if wc := strings.TrimSpace(tags["wikimedia_commons"]); wc != "" {
+		if u := providers.CommonsFileURL(wc); u != "" && !seen[u] {
+			out = append(out, u)
+			seen[u] = true
+		}
+	}
+	if len(out) > 3 {
+		out = out[:3]
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // osmURL returns the canonical openstreetmap.org browse URL for an element.

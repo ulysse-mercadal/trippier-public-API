@@ -258,6 +258,36 @@ func TestSearch_PolygonMode_ReturnsNil(t *testing.T) {
 	}
 }
 
+// TestSearch_ImageFromListingField confirms the image= listing field is
+// resolved to a Commons Special:FilePath URL. A listing without image= ends
+// up with a nil Images slice.
+func TestSearch_ImageFromListingField(t *testing.T) {
+	wikitext := `
+{{see|name=With Image|lat=48|long=2|image=Eiffel Tower.jpg}}
+{{see|name=No Image|lat=48|long=2}}
+`
+	srv := newServer(t, "Zone", wikitext)
+	defer srv.Close()
+
+	p := wikivoyage.NewWithURL(srv.URL)
+	pois, err := p.Search(context.Background(), types.SearchQuery{Mode: types.ModeDistrict, District: "Zone"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	byName := map[string][]string{}
+	for _, poi := range pois {
+		byName[poi.Name] = poi.Images
+	}
+
+	want := "https://commons.wikimedia.org/wiki/Special:FilePath/Eiffel%20Tower.jpg"
+	if got := byName["With Image"]; len(got) != 1 || got[0] != want {
+		t.Errorf("With Image Images = %v, want [%q]", got, want)
+	}
+	if got := byName["No Image"]; len(got) != 0 {
+		t.Errorf("No Image Images = %v, want nil/empty", got)
+	}
+}
+
 func TestName(t *testing.T) {
 	p := wikivoyage.New("en")
 	if p.Name() != types.ProviderWikivoyage {

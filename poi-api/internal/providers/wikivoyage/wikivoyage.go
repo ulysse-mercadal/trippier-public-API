@@ -214,6 +214,11 @@ func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 			continue
 		}
 
+		var images []string
+		if u := providers.CommonsFileURL(fields["image"]); u != "" {
+			images = []string{u}
+		}
+
 		poi := types.RawPoi{
 			ID:          fmt.Sprintf("wikivoyage:%s:%s", zone, name),
 			Name:        name,
@@ -225,6 +230,7 @@ func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 				Phone:   strings.TrimSpace(fields["phone"]),
 				Hours:   strings.TrimSpace(fields["hours"]),
 			},
+			Images:    images,
 			Zone:      &types.Zone{Name: zone, Source: types.ProviderWikivoyage},
 			SourceURL: p.zoneURL(zone),
 		}

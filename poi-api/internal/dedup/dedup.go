@@ -2,6 +2,7 @@
 package dedup
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/trippier/poi-api/internal/mathutil"
@@ -159,6 +160,7 @@ func toEnriched(group []types.RawPoi) types.EnrichedPoi {
 		Distance:      primary.Distance,
 		Description:   firstNonEmpty(group, func(p types.RawPoi) string { return p.Description }),
 		Thumbnail:     firstNonEmpty(group, func(p types.RawPoi) string { return p.Thumbnail }),
+		Images:        mergeImages(group),
 		Contact:       mergeContact(group),
 		Sources:       sources,
 		ProvidersData: data,
@@ -190,6 +192,39 @@ func bestCoords(group []types.RawPoi) *types.Coordinates {
 		}
 	}
 	return best
+}
+
+// maxImagesPerPoi caps the merged Images slice. Three is enough to display a
+// small gallery and keeps the response payload bounded when many providers
+// each contribute a few URLs.
+const maxImagesPerPoi = 3
+
+// @param group raw POIs sharing a single deduplicated place.
+// @return up to maxImagesPerPoi distinct image URLs, taken in provider iteration order with the highest-priority provider first.
+func mergeImages(group []types.RawPoi) []string {
+	ordered := make([]types.RawPoi, len(group))
+	copy(ordered, group)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		return providerPriority[ordered[i].Provider] > providerPriority[ordered[j].Provider]
+	})
+	out := make([]string, 0, maxImagesPerPoi)
+	seen := make(map[string]bool, maxImagesPerPoi)
+	for _, p := range ordered {
+		for _, u := range p.Images {
+			if len(out) >= maxImagesPerPoi {
+				return out
+			}
+			if u == "" || seen[u] {
+				continue
+			}
+			out = append(out, u)
+			seen[u] = true
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // mergeContact fills each Contact field with the first non-empty value across the group.

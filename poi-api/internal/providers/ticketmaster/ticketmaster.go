@@ -193,6 +193,7 @@ func (p *Provider) toRawPois(events []tmEvent, centerLat, centerLng float64) []t
 			Provider:    types.ProviderTicketmaster,
 			Description: ev.Info,
 			Thumbnail:   p.pickThumbnail(ev.Images),
+			Images:      p.pickImages(ev.Images),
 			Coords:      &types.Coordinates{Lat: lat, Lng: lng, Approximate: approximate},
 			Contact:     types.Contact{Website: ev.URL},
 			SourceURL:   ev.URL,
@@ -238,4 +239,38 @@ func (p *Provider) pickThumbnail(images []tmImage) string {
 		return images[0].URL
 	}
 	return ""
+}
+
+// @param images the raw Ticketmaster images array for an event.
+// @return up to 3 distinct image URLs, prioritising 16:9 at width ≥ 640 then filling with any remaining.
+func (p *Provider) pickImages(images []tmImage) []string {
+	const max = 3
+	out := make([]string, 0, max)
+	seen := make(map[string]bool, max)
+	for _, img := range images {
+		if len(out) >= max {
+			break
+		}
+		if img.URL == "" || seen[img.URL] {
+			continue
+		}
+		if img.Ratio == "16_9" && img.Width >= 640 {
+			out = append(out, img.URL)
+			seen[img.URL] = true
+		}
+	}
+	for _, img := range images {
+		if len(out) >= max {
+			break
+		}
+		if img.URL == "" || seen[img.URL] {
+			continue
+		}
+		out = append(out, img.URL)
+		seen[img.URL] = true
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

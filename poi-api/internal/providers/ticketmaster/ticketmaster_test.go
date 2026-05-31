@@ -218,6 +218,57 @@ func TestSearch_WithDate_UsesDateFilter(t *testing.T) {
 	}
 }
 
+// TestSearch_ImagesUpToThreePreferLandscape confirms pickImages returns at
+// most 3 URLs, prioritising 16:9 entries at width ≥ 640 before falling back
+// to other shapes, and dropping duplicates.
+func TestSearch_ImagesUpToThreePreferLandscape(t *testing.T) {
+	restore := mockNominatim(t, `{"address":{"city":"Paris","country_code":"fr"}}`)
+	defer restore()
+
+	body := `{"_embedded":{"events":[{
+		"id":"tm-images","name":"Show","url":"https://example.com/tm",
+		"images":[
+			{"url":"https://img/portrait.jpg","width":640,"height":1024,"ratio":"3_4"},
+			{"url":"https://img/large.jpg","width":1024,"height":576,"ratio":"16_9"},
+			{"url":"https://img/medium.jpg","width":800,"height":450,"ratio":"16_9"},
+			{"url":"https://img/large.jpg","width":1024,"height":576,"ratio":"16_9"},
+			{"url":"https://img/wide.jpg","width":1280,"height":720,"ratio":"16_9"},
+			{"url":"https://img/extra.jpg","width":2048,"height":1152,"ratio":"16_9"}
+		],
+		"dates":{"start":{"dateTime":"2026-06-15T19:00:00Z"},"end":{"dateTime":"2026-06-15T23:00:00Z"}},
+		"_embedded":{"venues":[{"location":{"latitude":"48.87","longitude":"2.32"}}]}
+	}]}}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	p := ticketmaster.NewWithURL(srv.URL)
+	pois, err := p.Search(ctxWithTMKey("key"), types.SearchQuery{
+		Mode: types.ModeRadius, Lat: 48.86, Lng: 2.35, Radius: 50_000,
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(pois) != 1 {
+		t.Fatalf("len pois = %d, want 1", len(pois))
+	}
+	want := []string{
+		"https://img/large.jpg",
+		"https://img/medium.jpg",
+		"https://img/wide.jpg",
+	}
+	got := pois[0].Images
+	if len(got) != len(want) {
+		t.Fatalf("Images len = %d (%v), want %d (%v)", len(got), got, len(want), want)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Errorf("[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 func containsStr(s, sub string) bool {
 	for i := 0; i+len(sub) <= len(s); i++ {
 		if s[i:i+len(sub)] == sub {
