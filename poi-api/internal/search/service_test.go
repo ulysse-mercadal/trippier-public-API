@@ -182,6 +182,89 @@ func TestServiceSearch_MinScore(t *testing.T) {
 	}
 }
 
+// TestServiceSearch_DropsCrossProviderHintsWhenProviderNotSelected confirms
+// the generic post-filter applied to fetchAll output: a provider may emit a
+// RawPoi tagged with a foreign provider (e.g. Wikivoyage hinting at a
+// Wikipedia article), but the response must only surface providers the user
+// actually selected.
+func TestServiceSearch_DropsCrossProviderHintsWhenProviderNotSelected(t *testing.T) {
+	wikivoyagePois := []types.RawPoi{
+		{
+			ID: "wikivoyage:zone:Foo", Name: "Foo", Type: types.TypeSee,
+			Provider: types.ProviderWikivoyage,
+			Coords:   newCoords(48.86, 2.30),
+		},
+		// Cross-provider hint emitted by the wikivoyage adapter when the
+		// listing carries a wikipedia= field. Should be dropped when the user
+		// did not select wikipedia.
+		{
+			ID: "wikipedia:zone:Foo", Name: "Foo", Type: types.TypeSee,
+			Provider:  types.ProviderWikipedia,
+			Coords:    newCoords(48.86, 2.30),
+			SourceURL: "https://en.wikipedia.org/wiki/Foo",
+		},
+	}
+	p := &mockProvider{
+		name:  types.ProviderWikivoyage,
+		modes: []types.SearchMode{types.ModeRadius},
+		pois:  wikivoyagePois,
+	}
+
+	svc := search.NewService([]providers.Provider{p}, 5*time.Second, zap.NewNop())
+
+	t.Run("wikipedia not selected drops the hint", func(t *testing.T) {
+		q := types.SearchQuery{
+			Mode: types.ModeRadius, Lat: 48.86, Lng: 2.30, Radius: 5000,
+			Providers: []types.Provider{types.ProviderWikivoyage},
+			Limit:     20, Lang: "en",
+		}
+		result, err := svc.Search(context.Background(), q)
+		if err != nil {
+			t.Fatalf("Search: %v", err)
+		}
+		if result.Total != 1 {
+			t.Fatalf("Total = %d, want 1 (wikipedia hint must be filtered)", result.Total)
+		}
+		for _, src := range result.Results[0].Sources {
+			if src == types.ProviderWikipedia {
+				t.Errorf("Sources unexpectedly contains wikipedia: %v", result.Results[0].Sources)
+			}
+		}
+	})
+
+	t.Run("wikipedia selected keeps the hint and merges", func(t *testing.T) {
+		q := types.SearchQuery{
+			Mode: types.ModeRadius, Lat: 48.86, Lng: 2.30, Radius: 5000,
+			Providers: []types.Provider{types.ProviderWikivoyage, types.ProviderWikipedia},
+			Limit:     20, Lang: "en",
+		}
+		result, err := svc.Search(context.Background(), q)
+		if err != nil {
+			t.Fatalf("Search: %v", err)
+		}
+		if result.Total != 1 {
+			t.Fatalf("Total = %d, want 1 merged POI", result.Total)
+		}
+		got := result.Results[0]
+		hasWikipedia, hasWikivoyage := false, false
+		for _, src := range got.Sources {
+			if src == types.ProviderWikipedia {
+				hasWikipedia = true
+			}
+			if src == types.ProviderWikivoyage {
+				hasWikivoyage = true
+			}
+		}
+		if !hasWikipedia || !hasWikivoyage {
+			t.Errorf("Sources = %v, want both wikipedia and wikivoyage", got.Sources)
+		}
+		if got.ProvidersData[types.ProviderWikipedia].SourceURL != "https://en.wikipedia.org/wiki/Foo" {
+			t.Errorf("wikipedia ProvidersData.SourceURL = %q, want the hint URL",
+				got.ProvidersData[types.ProviderWikipedia].SourceURL)
+		}
+	})
+}
+
 func TestParseWeights(t *testing.T) {
 	tests := []struct {
 		raw     string

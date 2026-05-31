@@ -295,6 +295,62 @@ func TestSearch_ImageFromListingField(t *testing.T) {
 	}
 }
 
+// TestSearch_EmitsWikipediaCrossLink confirms that a listing carrying a
+// wikipedia= field produces a second RawPoi with Provider=wikipedia and the
+// constructed article URL — letting dedup fold the link into the merged POI
+// when the user has Wikipedia among their selected providers. A listing
+// without wikipedia= produces only the main Wikivoyage POI.
+func TestSearch_EmitsWikipediaCrossLink(t *testing.T) {
+	wikitext := `
+{{see|name=Plain Name|lat=48|long=2|wikipedia=Eiffel Tower}}
+{{see|name=With Lang Prefix|lat=48|long=2|wikipedia=fr:Tour Eiffel}}
+{{see|name=Full URL|lat=48|long=2|wikipedia=https://de.wikipedia.org/wiki/Eiffelturm}}
+{{see|name=No Wiki|lat=48|long=2}}
+`
+	srv := newServer(t, "Zone", wikitext)
+	defer srv.Close()
+
+	p := wikivoyage.NewWithURL(srv.URL + "/w/api.php")
+	pois, err := p.Search(context.Background(), types.SearchQuery{Mode: types.ModeDistrict, District: "Zone"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+
+	bySourceURL := map[string]types.RawPoi{}
+	for _, poi := range pois {
+		if poi.Provider == types.ProviderWikipedia {
+			bySourceURL[poi.SourceURL] = poi
+		}
+	}
+
+	// langCode derives from baseURL host. NewWithURL uses srv.URL which is
+	// 127.0.0.1:port — the lang ends up as "127" which is fine for the test
+	// scaffolding; only the host-prefix cases need to match precisely.
+	wantURLs := []string{
+		"https://de.wikipedia.org/wiki/Eiffelturm",
+		"https://fr.wikipedia.org/wiki/Tour_Eiffel",
+	}
+	for _, want := range wantURLs {
+		if _, ok := bySourceURL[want]; !ok {
+			t.Errorf("expected synthetic Wikipedia POI with SourceURL %q, got: %v", want, bySourceURL)
+		}
+	}
+
+	// 4 main wikivoyage POIs + 3 synthetic wikipedia POIs (No Wiki has no field) = 7.
+	if len(pois) != 7 {
+		t.Errorf("expected 7 POIs (4 wikivoyage + 3 wikipedia), got %d", len(pois))
+	}
+	wikipediaCount := 0
+	for _, poi := range pois {
+		if poi.Provider == types.ProviderWikipedia {
+			wikipediaCount++
+		}
+	}
+	if wikipediaCount != 3 {
+		t.Errorf("expected 3 wikipedia POIs, got %d", wikipediaCount)
+	}
+}
+
 func TestName(t *testing.T) {
 	p := wikivoyage.New("en")
 	if p.Name() != types.ProviderWikivoyage {

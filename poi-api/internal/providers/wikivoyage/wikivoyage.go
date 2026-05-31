@@ -79,6 +79,39 @@ func (p *Provider) listingURL(zone, name string) string {
 	return base + "#" + url.PathEscape(anchor)
 }
 
+// @param v raw value of a listing's wikipedia= field (e.g. "Eiffel Tower", "fr:Tour Eiffel", or a full URL).
+// @return a Wikipedia article URL, defaulting to the Wikivoyage language edition when the value has no interwiki prefix, or empty when v is empty.
+func (p *Provider) wikipediaURL(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return ""
+	}
+	if strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://") {
+		return v
+	}
+	lang := p.langCode()
+	if i := strings.Index(v, ":"); i > 0 && i <= 5 {
+		lang = strings.ToLower(v[:i])
+		v = v[i+1:]
+	}
+	v = strings.ReplaceAll(strings.TrimSpace(v), " ", "_")
+	if v == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://%s.wikipedia.org/wiki/%s", lang, url.PathEscape(v))
+}
+
+// langCode extracts the language subdomain from the configured baseURL
+// (e.g. "https://fr.wikivoyage.org/w/api.php" → "fr"). Falls back to "en".
+func (p *Provider) langCode() string {
+	if u, err := url.Parse(p.baseURL); err == nil {
+		if i := strings.Index(u.Host, "."); i > 0 {
+			return u.Host[:i]
+		}
+	}
+	return "en"
+}
+
 // SupportsMode implements providers.Provider.
 func (p *Provider) SupportsMode(mode types.SearchMode) bool {
 	return mode == types.ModeDistrict || mode == types.ModeRadius
@@ -298,6 +331,18 @@ func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 		}
 
 		pois = append(pois, poi)
+
+		if wikiURL := p.wikipediaURL(fields["wikipedia"]); wikiURL != "" {
+			pois = append(pois, types.RawPoi{
+				ID:        fmt.Sprintf("wikipedia:%s:%s", zone, name),
+				Name:      name,
+				Type:      poi.Type,
+				Provider:  types.ProviderWikipedia,
+				Coords:    poi.Coords,
+				Zone:      poi.Zone,
+				SourceURL: wikiURL,
+			})
+		}
 	}
 
 	return pois
