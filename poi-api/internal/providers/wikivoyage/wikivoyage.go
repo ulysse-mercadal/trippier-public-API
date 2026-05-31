@@ -219,8 +219,72 @@ func (p *Provider) fetchWikitext(ctx context.Context, title string) (string, err
 	return result.Parse.Wikitext.Content, nil
 }
 
-var listingRe = regexp.MustCompile(`(?i)\{\{(see|do|eat|drink|buy|sleep|listing)\s*\|([^}]+)\}\}`)
 var fieldRe = regexp.MustCompile(`(\w+)\s*=\s*([^|}\n]+)`)
+
+var listingKinds = map[string]bool{
+	"see": true, "do": true, "eat": true, "drink": true,
+	"buy": true, "sleep": true, "listing": true,
+}
+
+type listingMatch struct {
+	kind string
+	body string
+}
+
+// @param wikitext the full article wikitext returned by MediaWiki.
+// @return every top-level {{see|…}} / {{do|…}} / … template as (kind, body) pairs, where body is the parameter portion between the opening "{{kind|" and the matching "}}" at brace depth 0 — inner templates like {{station|Miromesnil|9|13}} no longer truncate the listing body.
+func scanListings(wikitext string) []listingMatch {
+	var out []listingMatch
+	for i := 0; i+1 < len(wikitext); i++ {
+		if wikitext[i] != '{' || wikitext[i+1] != '{' {
+			continue
+		}
+		j := i + 2
+		for j < len(wikitext) && (wikitext[j] == ' ' || wikitext[j] == '\t' || wikitext[j] == '\n') {
+			j++
+		}
+		k := j
+		for k < len(wikitext) && isAlpha(wikitext[k]) {
+			k++
+		}
+		kind := strings.ToLower(wikitext[j:k])
+		if !listingKinds[kind] {
+			continue
+		}
+		for k < len(wikitext) && (wikitext[k] == ' ' || wikitext[k] == '\t' || wikitext[k] == '\n') {
+			k++
+		}
+		if k >= len(wikitext) || wikitext[k] != '|' {
+			continue
+		}
+		bodyStart := k + 1
+		depth := 1
+		p := bodyStart
+		for p+1 < len(wikitext) {
+			if wikitext[p] == '{' && wikitext[p+1] == '{' {
+				depth++
+				p += 2
+				continue
+			}
+			if wikitext[p] == '}' && wikitext[p+1] == '}' {
+				depth--
+				if depth == 0 {
+					out = append(out, listingMatch{kind: kind, body: wikitext[bodyStart:p]})
+					i = p + 1
+					break
+				}
+				p += 2
+				continue
+			}
+			p++
+		}
+	}
+	return out
+}
+
+func isAlpha(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+}
 
 // wikiLinkRe matches complete [[Target]] or [[Target|Display]] links.
 var wikiLinkRe = regexp.MustCompile(`\[\[[^\]]*\]\]`)
@@ -290,12 +354,12 @@ func stripWikiMarkup(s string) string {
 
 // parseListings extracts listing templates from wikitext and converts them to RawPoi records.
 func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
-	matches := listingRe.FindAllStringSubmatch(wikitext, -1)
+	matches := scanListings(wikitext)
 	pois := make([]types.RawPoi, 0, len(matches))
 
 	for _, match := range matches {
-		kind := strings.ToLower(match[1])
-		fields := p.parseFields(match[2])
+		kind := match.kind
+		fields := p.parseFields(match.body)
 
 		name := stripWikiMarkup(strings.TrimSpace(fields["name"]))
 		if name == "" {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/trippier/poi-api/internal/providers/wikivoyage"
@@ -348,6 +349,57 @@ func TestSearch_EmitsWikipediaCrossLink(t *testing.T) {
 	}
 	if wikipediaCount != 3 {
 		t.Errorf("expected 3 wikipedia POIs, got %d", wikipediaCount)
+	}
+}
+
+// TestSearch_NestedTemplateDoesNotTruncateListing is a regression test for
+// the real Musée Jacquemart-André listing on en.wikivoyage.org: its
+// directions= field uses an inner {{station|…}} template. Before scanListings
+// became brace-depth-aware the outer listing terminated at the first }} from
+// the nested template, dropping every field after directions (including
+// wikipedia=, image=, wikidata= and content=).
+func TestSearch_NestedTemplateDoesNotTruncateListing(t *testing.T) {
+	wikitext := `{{see
+| name=Musée Jacquemart-André | alt=Jacquemart-Andre Museum | url=http://www.musee-jacquemart-andre.com/ | email=
+| address= | lat=48.87543 | long=2.31055 | directions={{station|Miromesnil|9|13}}
+| phone= | tollfree= | fax=
+| hours= | price=
+| wikipedia=Musée Jacquemart-André | image=Musée Jacquemart André 2007 - Recoura.jpg | wikidata=Q1165526
+| content=Private collection of French, Italian, Dutch masterpieces in a typical XIXth century mansion.
+}}`
+	srv := newServer(t, "Paris/8e", wikitext)
+	defer srv.Close()
+
+	p := wikivoyage.NewWithURL(srv.URL)
+	pois, err := p.Search(context.Background(), types.SearchQuery{Mode: types.ModeDistrict, District: "Paris/8e"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+
+	var wv, wp *types.RawPoi
+	for i := range pois {
+		switch pois[i].Provider {
+		case types.ProviderWikivoyage:
+			wv = &pois[i]
+		case types.ProviderWikipedia:
+			wp = &pois[i]
+		}
+	}
+	if wv == nil {
+		t.Fatal("missing wikivoyage POI")
+	}
+	if wp == nil {
+		t.Fatal("missing synthetic wikipedia POI — the nested template must not truncate the listing")
+	}
+	wantDesc := "Private collection of French, Italian, Dutch masterpieces in a typical XIXth century mansion."
+	if wv.Description != wantDesc {
+		t.Errorf("wikivoyage Description = %q, want %q", wv.Description, wantDesc)
+	}
+	if len(wv.Images) != 1 {
+		t.Errorf("wikivoyage Images len = %d, want 1", len(wv.Images))
+	}
+	if !strings.Contains(wp.SourceURL, "Mus%C3%A9e_Jacquemart-Andr%C3%A9") {
+		t.Errorf("wikipedia SourceURL = %q, want it to point at the article", wp.SourceURL)
 	}
 }
 
