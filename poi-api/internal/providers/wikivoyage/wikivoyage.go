@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -63,6 +64,19 @@ func (p *Provider) zoneURL(zone string) string {
 		return ""
 	}
 	return fmt.Sprintf("%s/wiki/%s", p.baseURL[:i], url.PathEscape(zone))
+}
+
+// listingURL returns the article URL with a fragment pointing at the listing
+// inside the page. Wikivoyage listing templates render each entry as a span
+// with id="<listing name>" (spaces become underscores, MediaWiki convention),
+// so the fragment scrolls the reader straight to the row.
+func (p *Provider) listingURL(zone, name string) string {
+	base := p.zoneURL(zone)
+	if base == "" || name == "" {
+		return base
+	}
+	anchor := strings.ReplaceAll(name, " ", "_")
+	return base + "#" + url.PathEscape(anchor)
 }
 
 // SupportsMode implements providers.Provider.
@@ -181,6 +195,47 @@ var wikiLinkRe = regexp.MustCompile(`\[\[[^\]]*\]\]`)
 // wikiFragmentRe matches broken [[ fragments (truncated by the | field delimiter).
 var wikiFragmentRe = regexp.MustCompile(`\[\[.*`)
 
+// Markup patterns used by stripDescriptionMarkup. Order of application matters
+// (refs and templates first to remove their inner content before generic HTML
+// tag stripping picks up the bare angle brackets).
+var (
+	refPairRe    = regexp.MustCompile(`(?is)<ref[^>]*>.*?</ref>`)
+	refSelfRe    = regexp.MustCompile(`(?i)<ref[^>]*/>`)
+	templateRe   = regexp.MustCompile(`\{\{[^{}]*\}\}`)
+	htmlTagRe    = regexp.MustCompile(`<[^>]+>`)
+	boldRe       = regexp.MustCompile(`'''([^']*)'''`)
+	italicRe     = regexp.MustCompile(`''([^']*)''`)
+	multiSpaceRe = regexp.MustCompile(`\s+`)
+)
+
+// @param s raw wikitext value from a listing's content field.
+// @return s with refs, templates, HTML tags, entities, wiki links and bold/italic markup resolved to readable text.
+func stripDescriptionMarkup(s string) string {
+	s = refPairRe.ReplaceAllString(s, "")
+	s = refSelfRe.ReplaceAllString(s, "")
+	for {
+		out := templateRe.ReplaceAllString(s, "")
+		if out == s {
+			break
+		}
+		s = out
+	}
+	s = wikiLinkRe.ReplaceAllStringFunc(s, func(m string) string {
+		inner := m[2 : len(m)-2]
+		if i := strings.LastIndex(inner, "|"); i >= 0 {
+			return inner[i+1:]
+		}
+		return inner
+	})
+	s = wikiFragmentRe.ReplaceAllString(s, "")
+	s = htmlTagRe.ReplaceAllString(s, " ")
+	s = boldRe.ReplaceAllString(s, "$1")
+	s = italicRe.ReplaceAllString(s, "$1")
+	s = html.UnescapeString(s)
+	s = multiSpaceRe.ReplaceAllString(s, " ")
+	return strings.TrimSpace(s)
+}
+
 // stripWikiMarkup resolves [[Target|Display]] → Display, drops broken [[ fragments.
 func stripWikiMarkup(s string) string {
 	s = wikiLinkRe.ReplaceAllStringFunc(s, func(m string) string {
@@ -219,14 +274,14 @@ func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 			Name:        name,
 			Type:        listingTypeMap[kind],
 			Provider:    types.ProviderWikivoyage,
-			Description: strings.TrimSpace(fields["content"]),
+			Description: stripDescriptionMarkup(fields["content"]),
 			Contact: types.Contact{
 				Website: strings.TrimSpace(fields["url"]),
 				Phone:   strings.TrimSpace(fields["phone"]),
 				Hours:   strings.TrimSpace(fields["hours"]),
 			},
 			Zone:      &types.Zone{Name: zone, Source: types.ProviderWikivoyage},
-			SourceURL: p.zoneURL(zone),
+			SourceURL: p.listingURL(zone, name),
 		}
 
 		if lat, lng, ok := p.parseCoords(fields); ok {

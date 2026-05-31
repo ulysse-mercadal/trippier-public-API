@@ -118,8 +118,6 @@ func TestSearch_DistrictMode_SourceURL(t *testing.T) {
 	srv := newServer(t, "Paris", sampleWikitext)
 	defer srv.Close()
 
-	// Append /w/api.php so zoneURL can derive the article host — the test
-	// server's handler answers regardless of the request path.
 	p := wikivoyage.NewWithURL(srv.URL + "/w/api.php")
 	pois, err := p.Search(context.Background(), types.SearchQuery{
 		Mode:     types.ModeDistrict,
@@ -128,8 +126,17 @@ func TestSearch_DistrictMode_SourceURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	want := srv.URL + "/wiki/Paris"
+	wantByName := map[string]string{
+		"Eiffel Tower":    srv.URL + "/wiki/Paris#Eiffel_Tower",
+		"Le Jules Verne":  srv.URL + "/wiki/Paris#Le_Jules_Verne",
+		"No Coords Place": srv.URL + "/wiki/Paris#No_Coords_Place",
+	}
 	for _, poi := range pois {
+		want, ok := wantByName[poi.Name]
+		if !ok {
+			t.Errorf("unexpected POI %q", poi.Name)
+			continue
+		}
 		if poi.SourceURL != want {
 			t.Errorf("%s SourceURL = %q, want %q", poi.Name, poi.SourceURL, want)
 		}
@@ -262,6 +269,79 @@ func TestName(t *testing.T) {
 	p := wikivoyage.New("en")
 	if p.Name() != types.ProviderWikivoyage {
 		t.Errorf("Name() = %q, want %q", p.Name(), types.ProviderWikivoyage)
+	}
+}
+
+// ── stripDescriptionMarkup (tested via Search) ───────────────────────────────
+
+func TestSearch_DescriptionMarkupStripping(t *testing.T) {
+	cases := []struct {
+		desc    string
+		content string
+		want    string
+	}{
+		{
+			desc:    "ref tag with inner content removed",
+			content: `Iconic tower<ref>Bingham 2010</ref>.`,
+			want:    "Iconic tower.",
+		},
+		{
+			desc:    "self-closing ref removed",
+			content: `Iconic tower<ref name="x"/>.`,
+			want:    "Iconic tower.",
+		},
+		{
+			desc:    "wiki link without pipe keeps target",
+			content: `See the [[museum]].`,
+			want:    "See the museum.",
+		},
+		{
+			desc:    "bare html tag becomes space",
+			content: `Line one<br/>line two.`,
+			want:    "Line one line two.",
+		},
+		{
+			desc:    "bold and italic markup removed",
+			content: `'''Important''' and ''subtle'' detail.`,
+			want:    "Important and subtle detail.",
+		},
+		{
+			desc:    "multiple whitespace collapsed",
+			content: `Iconic    tower.`,
+			want:    "Iconic tower.",
+		},
+		{
+			desc:    "html entities decoded",
+			content: `Musée du quai Branly &mdash; Jacques Chirac.`,
+			want:    "Musée du quai Branly — Jacques Chirac.",
+		},
+		{
+			desc:    "realistic quai branly leakage",
+			content: `Musée du quai Branly &mdash; Jacques Chirac<ref name="b">b</ref>. Designed by [[Jean Nouvel]]. ''Open daily.''<br/>Entry: 12&euro;.`,
+			want:    "Musée du quai Branly — Jacques Chirac. Designed by Jean Nouvel. Open daily. Entry: 12€.",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			wikitext := `{{see|name=X|lat=48|long=2|content=` + tc.content + `}}`
+			srv := newServer(t, "Zone", wikitext)
+			defer srv.Close()
+
+			p := wikivoyage.NewWithURL(srv.URL)
+			pois, err := p.Search(context.Background(), types.SearchQuery{
+				Mode: types.ModeDistrict, District: "Zone",
+			})
+			if err != nil {
+				t.Fatalf("Search: %v", err)
+			}
+			if len(pois) != 1 {
+				t.Fatalf("len = %d, want 1", len(pois))
+			}
+			if pois[0].Description != tc.want {
+				t.Errorf("Description = %q, want %q", pois[0].Description, tc.want)
+			}
+		})
 	}
 }
 
