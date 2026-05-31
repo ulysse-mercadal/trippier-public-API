@@ -226,7 +226,7 @@ func TestServiceSearch_DropsCrossProviderHintsWhenProviderNotSelected(t *testing
 			t.Fatalf("Total = %d, want 1 (wikipedia hint must be filtered)", result.Total)
 		}
 		for _, src := range result.Results[0].Sources {
-			if src == types.ProviderWikipedia {
+			if src.Provider == types.ProviderWikipedia {
 				t.Errorf("Sources unexpectedly contains wikipedia: %v", result.Results[0].Sources)
 			}
 		}
@@ -246,21 +246,20 @@ func TestServiceSearch_DropsCrossProviderHintsWhenProviderNotSelected(t *testing
 			t.Fatalf("Total = %d, want 1 merged POI", result.Total)
 		}
 		got := result.Results[0]
-		hasWikipedia, hasWikivoyage := false, false
-		for _, src := range got.Sources {
-			if src == types.ProviderWikipedia {
-				hasWikipedia = true
+		var wikipediaLink, wikivoyageLink *types.SourceLink
+		for i, src := range got.Sources {
+			if src.Provider == types.ProviderWikipedia {
+				wikipediaLink = &got.Sources[i]
 			}
-			if src == types.ProviderWikivoyage {
-				hasWikivoyage = true
+			if src.Provider == types.ProviderWikivoyage {
+				wikivoyageLink = &got.Sources[i]
 			}
 		}
-		if !hasWikipedia || !hasWikivoyage {
+		if wikipediaLink == nil || wikivoyageLink == nil {
 			t.Errorf("Sources = %v, want both wikipedia and wikivoyage", got.Sources)
 		}
-		if got.ProvidersData[types.ProviderWikipedia].SourceURL != "https://en.wikipedia.org/wiki/Foo" {
-			t.Errorf("wikipedia ProvidersData.SourceURL = %q, want the hint URL",
-				got.ProvidersData[types.ProviderWikipedia].SourceURL)
+		if wikipediaLink != nil && wikipediaLink.URL != "https://en.wikipedia.org/wiki/Foo" {
+			t.Errorf("wikipedia SourceLink.URL = %q, want the hint URL", wikipediaLink.URL)
 		}
 	})
 }
