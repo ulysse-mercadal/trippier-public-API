@@ -111,6 +111,48 @@ func TestPrimaryProviderPriority(t *testing.T) {
 	}
 }
 
+func TestTourEiffelMergedViaWikidataBridge(t *testing.T) {
+	pois := []types.RawPoi{
+		{
+			ID: "overpass:5013364", Name: "Tour Eiffel",
+			Provider:   types.ProviderOverpass,
+			Coords:     coords(48.85837, 2.29450),
+			WikidataID: "Q243",
+		},
+		{
+			ID: "wikipedia:Eiffel_Tower", Name: "Eiffel Tower",
+			Provider:   types.ProviderWikipedia,
+			Coords:     coords(48.85840, 2.29470),
+			WikidataID: "Q243",
+		},
+		{
+			ID: "wikivoyage:tour_eiffel", Name: "Tour Eiffel",
+			Provider:   types.ProviderWikivoyage,
+			Coords:     coords(48.85839, 2.29452),
+			WikidataID: "Q243",
+		},
+		{
+			ID: "geonames:6254976", Name: "Eiffel Tower",
+			Provider:   types.ProviderGeoNames,
+			Coords:     coords(48.85838, 2.29453),
+			WikidataID: "Q243",
+		},
+	}
+
+	merged := dedup.Merge(pois)
+
+	if len(merged) != 1 {
+		t.Fatalf("expected 1 merged Eiffel Tower POI, got %d", len(merged))
+	}
+	got := merged[0]
+	if got.ID != "overpass:5013364" {
+		t.Errorf("primary ID = %q, want overpass:5013364", got.ID)
+	}
+	if len(got.Sources) != 4 {
+		t.Errorf("expected 4 sources, got %d: %v", len(got.Sources), got.Sources)
+	}
+}
+
 // TestMergeContactMerge confirms that contact fields are combined across providers.
 func TestMergeContactMerge(t *testing.T) {
 	pois := []types.RawPoi{

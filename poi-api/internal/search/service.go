@@ -322,6 +322,7 @@ func (s *Service) pipeline(ctx context.Context, q *types.SearchQuery) []types.En
 	if q.Mode == types.ModeRadius {
 		raw = geo.FilterByRadius(raw, q.Lat, q.Lng, float64(q.Radius))
 	}
+	raw = s.enrichWithWikidata(ctx, raw, *q)
 	merged := dedup.Merge(raw)
 	for i := range merged {
 		merged[i].Score = scoring.Score(merged[i], *q)
