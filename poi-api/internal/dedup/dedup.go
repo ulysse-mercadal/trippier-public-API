@@ -232,12 +232,14 @@ func toEnriched(group []types.RawPoi) types.EnrichedPoi {
 	}
 }
 
-// mergeSources returns one SourceLink per distinct contributing provider,
-// keyed by the first occurrence of each provider in the input group. The
-// URL is the RawPoi.SourceURL from that first occurrence — empty when the
-// provider does not expose a stable browse URL.
+// mergeSources returns one SourceLink per distinct provider that contributed
+// to the merged POI. Two passes:
+//  1. Real provider sources — each RawPoi's own (Provider, SourceURL).
+//  2. Cross-references — each member's ExtraSources, kept only for providers
+//     not already covered by pass 1. This preserves the "real" URL when a
+//     provider participates AND a sibling listing also points to it.
 func mergeSources(group []types.RawPoi) []types.SourceLink {
-	out := make([]types.SourceLink, 0, len(group))
+	out := make([]types.SourceLink, 0, len(group)*2)
 	seen := make(map[types.Provider]bool, len(group))
 	for _, p := range group {
 		if seen[p.Provider] {
@@ -245,6 +247,15 @@ func mergeSources(group []types.RawPoi) []types.SourceLink {
 		}
 		seen[p.Provider] = true
 		out = append(out, types.SourceLink{Provider: p.Provider, URL: p.SourceURL})
+	}
+	for _, p := range group {
+		for _, extra := range p.ExtraSources {
+			if extra.Provider == "" || seen[extra.Provider] {
+				continue
+			}
+			seen[extra.Provider] = true
+			out = append(out, extra)
+		}
 	}
 	return out
 }
