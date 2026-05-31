@@ -26,6 +26,7 @@ import (
 	"github.com/trippier/poi-api/internal/providers/wikipedia"
 	"github.com/trippier/poi-api/internal/providers/wikivoyage"
 	"github.com/trippier/poi-api/internal/search"
+	"github.com/trippier/poi-api/internal/tilecache"
 )
 
 func main() {
@@ -47,7 +48,8 @@ func main() {
 		log.Fatal("redis url", zap.Error(err))
 	}
 
-	pp := buildProviders(cfg)
+	cacheTTL := time.Duration(cfg.CacheTTLSeconds) * time.Second
+	pp := buildProviders(cfg, rdb, cacheTTL, log)
 	svc := search.NewService(pp, time.Duration(cfg.ProviderTimeout)*time.Second, log)
 	handler := search.NewHandler(svc)
 
@@ -69,7 +71,6 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	cacheTTL := time.Duration(cfg.CacheTTLSeconds) * time.Second
 	pois := r.Group("/pois")
 	pois.Use(middleware.Cache(rdb, cacheTTL))
 	handler.RegisterRoutes(pois)
@@ -112,7 +113,8 @@ func buildAuthMiddlewares(cfg *config.Config) (global, events gin.HandlerFunc) {
 	if cfg.AuthDisabled {
 		return middleware.Passthrough(), middleware.Passthrough()
 	}
-	global = middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 1, "/health", "/pois/events", "/pois/events/slim")
+	global = middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 1,
+		"/health", "/pois/events", "/pois/events/slim", "/pois/events/custom", "/pois/events/custom/slim")
 	events = middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 10)
 	return global, events
 }
@@ -121,9 +123,14 @@ func buildAuthMiddlewares(cfg *config.Config) (global, events gin.HandlerFunc) {
 // Ticketmaster and Eventbrite use BYOK (Bring Your Own Key): they are always registered
 // but only activate when the caller supplies X-Ticketmaster-Key / X-Eventbrite-Token headers.
 // GeoNames is only added when POI_GEONAMES_USERNAME is set.
-func buildProviders(cfg *config.Config) []providers.Provider {
+//
+// Overpass and GeoNames are wrapped in tilecache.CachedProvider so radius-mode
+// queries reuse POIs from neighbouring H3 r8 tiles instead of re-hitting the
+// upstream API on every pan/zoom. The other providers keep their natural
+// behaviour and rely solely on the HTTP response cache middleware.
+func buildProviders(cfg *config.Config, rdb *redis.Client, cacheTTL time.Duration, log *zap.Logger) []providers.Provider {
 	pp := []providers.Provider{
-		overpass.New(),
+		tilecache.NewCachedProvider(overpass.New(), rdb, cacheTTL, log),
 		wikivoyage.New(cfg.Lang),
 		wikipedia.New(cfg.Lang),
 		wikipedia.NewEventProvider(cfg.Lang),
@@ -131,7 +138,7 @@ func buildProviders(cfg *config.Config) []providers.Provider {
 		eventbrite.New(),
 	}
 	if cfg.GeoNamesUsername != "" {
-		pp = append(pp, geonames.New(cfg.GeoNamesUsername))
+		pp = append(pp, tilecache.NewCachedProvider(geonames.New(cfg.GeoNamesUsername), rdb, cacheTTL, log))
 	}
 	return pp
 }
