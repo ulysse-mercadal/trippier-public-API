@@ -7,12 +7,14 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
-const (
-	nominatimURL        = "https://nominatim.openstreetmap.org/search"
-	nominatimReverseURL = "https://nominatim.openstreetmap.org/reverse"
+// NominatimSearchURL and NominatimReverseURL are vars so tests can point them at a local mock server.
+var (
+	NominatimSearchURL  = "https://nominatim.openstreetmap.org/search"
+	NominatimReverseURL = "https://nominatim.openstreetmap.org/reverse"
 )
 
 var nominatimClient = &http.Client{Timeout: 5 * time.Second}
@@ -31,7 +33,7 @@ func GeocodeDistrict(ctx context.Context, name string) (Place, error) {
 		"limit":  {"1"},
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		nominatimURL+"?"+params.Encode(), nil)
+		NominatimSearchURL+"?"+params.Encode(), nil)
 	if err != nil {
 		return Place{}, fmt.Errorf("nominatim: build request: %w", err)
 	}
@@ -62,6 +64,42 @@ func GeocodeDistrict(ctx context.Context, name string) (Place, error) {
 	return Place{Lat: lat, Lng: lng}, nil
 }
 
+// CountryCode resolves coordinates to an ISO 3166-1 alpha-2 country code (uppercase)
+// via Nominatim /reverse at zoom=3 (country granularity).
+func CountryCode(ctx context.Context, lat, lng float64) (string, error) {
+	params := url.Values{
+		"lat":    {strconv.FormatFloat(lat, 'f', 6, 64)},
+		"lon":    {strconv.FormatFloat(lng, 'f', 6, 64)},
+		"format": {"json"},
+		"zoom":   {"3"},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		NominatimReverseURL+"?"+params.Encode(), nil)
+	if err != nil {
+		return "", fmt.Errorf("nominatim country: build request: %w", err)
+	}
+	req.Header.Set("User-Agent", "trippier-poi-api/1.0 (github.com/trippier/poi-api)")
+
+	resp, err := nominatimClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("nominatim country: request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		Address struct {
+			CountryCode string `json:"country_code"`
+		} `json:"address"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("nominatim country: decode: %w", err)
+	}
+	if result.Address.CountryCode == "" {
+		return "", fmt.Errorf("nominatim country: no result for %.4f,%.4f", lat, lng)
+	}
+	return strings.ToUpper(result.Address.CountryCode), nil
+}
+
 // ReverseGeocode resolves coordinates to a city name via the Nominatim OSM API.
 // Returns the most specific populated place name available (city > town > village > county).
 func ReverseGeocode(ctx context.Context, lat, lng float64) (string, error) {
@@ -71,7 +109,7 @@ func ReverseGeocode(ctx context.Context, lat, lng float64) (string, error) {
 		"format": {"json"},
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		nominatimReverseURL+"?"+params.Encode(), nil)
+		NominatimReverseURL+"?"+params.Encode(), nil)
 	if err != nil {
 		return "", fmt.Errorf("nominatim reverse: build request: %w", err)
 	}

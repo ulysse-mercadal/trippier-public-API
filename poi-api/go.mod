@@ -1,16 +1,17 @@
 module github.com/trippier/poi-api
 
-go 1.22.0
+go 1.24
 
 require (
+	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/spf13/viper v1.19.0
+	github.com/uber/h3-go/v4 v4.5.0
 	go.uber.org/zap v1.27.0
 )
 
 require (
-	github.com/alicebob/miniredis/v2 v2.37.0 // indirect
 	github.com/bytedance/sonic v1.11.6 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect

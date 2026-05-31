@@ -221,3 +221,118 @@ func TestEventProvider_SupportsMode(t *testing.T) {
 		t.Error("should NOT support polygon mode")
 	}
 }
+
+// ── Constructors ──────────────────────────────────────────────────────────────
+
+func TestNew_Name(t *testing.T) {
+	p := wikipedia.New("en")
+	if p.Name() != types.ProviderWikipedia {
+		t.Errorf("Name() = %q, want %q", p.Name(), types.ProviderWikipedia)
+	}
+}
+
+func TestNewEventProvider_Name(t *testing.T) {
+	p := wikipedia.NewEventProvider("en")
+	if p.Name() != types.ProviderWikipediaEvents {
+		t.Errorf("Name() = %q, want %q", p.Name(), types.ProviderWikipediaEvents)
+	}
+}
+
+// ── Error paths ───────────────────────────────────────────────────────────────
+
+func TestProvider_GeosearchError(t *testing.T) {
+	// Use a server that closes immediately to force a network error.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("not-json"))
+	}))
+	defer srv.Close()
+
+	p := wikipedia.NewWithURLs(srv.URL, srv.URL)
+	_, err := p.Search(context.Background(), testQuery)
+	if err == nil {
+		t.Error("expected error for invalid geosearch JSON")
+	}
+}
+
+func TestEventProvider_GeosearchError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("not-json"))
+	}))
+	defer srv.Close()
+
+	p := wikipedia.NewEventProviderWithURLs(srv.URL, srv.URL)
+	_, err := p.Search(context.Background(), testQuery)
+	if err == nil {
+		t.Error("expected error for invalid geosearch JSON")
+	}
+}
+
+func TestEventProvider_SPARQLError_ReturnsNil(t *testing.T) {
+	// geosearch and enrich succeed, but SPARQL server is down → festivalIDs = nil → return nil, nil.
+	call := 0
+	wikiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		call++
+		if call == 1 {
+			_, _ = w.Write([]byte(geosearchResp))
+		} else {
+			_, _ = w.Write([]byte(enrichResp))
+		}
+	}))
+	defer wikiSrv.Close()
+
+	// SPARQL server returns invalid JSON → wikidataClassMembers returns nil.
+	sparqlSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("not-json"))
+	}))
+	defer sparqlSrv.Close()
+
+	p := wikipedia.NewEventProviderWithURLs(wikiSrv.URL, sparqlSrv.URL)
+	pois, err := p.Search(context.Background(), testQuery)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if pois != nil {
+		t.Errorf("expected nil pois when SPARQL fails, got %d", len(pois))
+	}
+}
+
+func TestProvider_EnrichFallback(t *testing.T) {
+	// First call (geosearch) succeeds; second call (enrich) returns invalid JSON
+	// → enrichWithoutAPI is used as fallback → minimal pois are still returned.
+	call := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		call++
+		if call == 1 {
+			_, _ = w.Write([]byte(geosearchResp))
+		} else {
+			_, _ = w.Write([]byte("not-json"))
+		}
+	}))
+	defer srv.Close()
+
+	p := wikipedia.NewWithURLs(srv.URL, srv.URL)
+	pois, err := p.Search(context.Background(), testQuery)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Fallback returns title-only POIs — count should match geosearch results.
+	if len(pois) != 2 {
+		t.Errorf("expected 2 fallback pois, got %d", len(pois))
+	}
+}
+
+func TestEventProvider_EmptyGeosearch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"query":{"geosearch":[]}}`))
+	}))
+	defer srv.Close()
+
+	p := wikipedia.NewEventProviderWithURLs(srv.URL, srv.URL)
+	pois, err := p.Search(context.Background(), testQuery)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if pois != nil {
+		t.Errorf("expected nil for empty geosearch, got %d", len(pois))
+	}
+}

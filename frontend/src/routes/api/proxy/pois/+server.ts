@@ -3,7 +3,19 @@ import { json } from '@sveltejs/kit';
 import { proxyToService } from '$lib/server/proxy';
 import type { RequestHandler } from './$types';
 
-const ALLOWED_SUBPATHS = new Set(['search', 'search/slim', 'events', 'events/slim', 'providers']);
+const ALLOWED_SUBPATHS = new Set([
+	'search',
+	'search/slim',
+	'search/custom',
+	'search/custom/slim',
+	'events',
+	'events/slim',
+	'events/custom',
+	'events/custom/slim',
+	'providers',
+	'providers/catalog',
+	'providers/recommend',
+]);
 
 export const GET: RequestHandler = async ({ url }) => {
 	const subpath = url.searchParams.get('subpath') ?? 'search';

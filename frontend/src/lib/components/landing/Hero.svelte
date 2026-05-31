@@ -37,8 +37,8 @@
 		</button>
 	</div>
 	<ul class="hero-meta">
-		<li><strong>7</strong><span>{$t('hero_stat_sources')}</span></li>
-		<li><strong>3</strong><span>{$t('hero_stat_apis')}</span></li>
+		<li><strong>17</strong><span>{$t('hero_stat_sources')}</span></li>
+		<li><strong>12</strong><span>{$t('hero_stat_routes')}</span></li>
 		<li><strong>MIT</strong><span>{$t('hero_stat_license')}</span></li>
 		<li><strong>0€</strong><span>{$t('hero_stat_selfhosted')}</span></li>
 	</ul>
