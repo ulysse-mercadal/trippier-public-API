@@ -296,14 +296,14 @@ func TestSearch_ImageFromListingField(t *testing.T) {
 	}
 }
 
-// TestSearch_EmitsWikipediaCrossLink confirms that a listing carrying a
-// wikipedia= field produces a second RawPoi with Provider=wikipedia and the
-// constructed article URL — letting dedup fold the link into the merged POI
-// when the user has Wikipedia among their selected providers. A listing
-// without wikipedia= produces only the main Wikivoyage POI.
-func TestSearch_EmitsWikipediaCrossLink(t *testing.T) {
+// TestSearch_AttachesWikiExtraSources confirms that a listing carrying a
+// wikipedia= field surfaces the resolved article URL through the POI's
+// ExtraSources slice. dedup folds those into EnrichedPoi.Sources without
+// needing a phantom Wikipedia RawPoi in the merge group, and the cross-link
+// shows up regardless of whether Wikipedia is in q.Providers.
+func TestSearch_AttachesWikiExtraSources(t *testing.T) {
 	wikitext := `
-{{see|name=Plain Name|lat=48|long=2|wikipedia=Eiffel Tower}}
+{{see|name=Plain Name|lat=48|long=2|wikipedia=Eiffel Tower|wikidata=Q243}}
 {{see|name=With Lang Prefix|lat=48|long=2|wikipedia=fr:Tour Eiffel}}
 {{see|name=Full URL|lat=48|long=2|wikipedia=https://de.wikipedia.org/wiki/Eiffelturm}}
 {{see|name=No Wiki|lat=48|long=2}}
@@ -317,38 +317,40 @@ func TestSearch_EmitsWikipediaCrossLink(t *testing.T) {
 		t.Fatalf("Search: %v", err)
 	}
 
-	bySourceURL := map[string]types.RawPoi{}
+	if len(pois) != 4 {
+		t.Fatalf("expected 4 POIs (one per listing, no phantom Wikipedia entries), got %d", len(pois))
+	}
+
+	byName := map[string]types.RawPoi{}
 	for _, poi := range pois {
-		if poi.Provider == types.ProviderWikipedia {
-			bySourceURL[poi.SourceURL] = poi
+		byName[poi.Name] = poi
+	}
+
+	check := func(name, wantWiki, wantWikidata string) {
+		t.Helper()
+		got := byName[name].ExtraSources
+		var gotWiki, gotWikidata string
+		for _, s := range got {
+			switch s.Provider {
+			case types.ProviderWikipedia:
+				gotWiki = s.URL
+			case types.ProviderWikidata:
+				gotWikidata = s.URL
+			}
+		}
+		if gotWiki != wantWiki {
+			t.Errorf("%s wikipedia ExtraSource = %q, want %q", name, gotWiki, wantWiki)
+		}
+		if gotWikidata != wantWikidata {
+			t.Errorf("%s wikidata ExtraSource = %q, want %q", name, gotWikidata, wantWikidata)
 		}
 	}
 
-	// langCode derives from baseURL host. NewWithURL uses srv.URL which is
-	// 127.0.0.1:port — the lang ends up as "127" which is fine for the test
-	// scaffolding; only the host-prefix cases need to match precisely.
-	wantURLs := []string{
-		"https://de.wikipedia.org/wiki/Eiffelturm",
-		"https://fr.wikipedia.org/wiki/Tour_Eiffel",
-	}
-	for _, want := range wantURLs {
-		if _, ok := bySourceURL[want]; !ok {
-			t.Errorf("expected synthetic Wikipedia POI with SourceURL %q, got: %v", want, bySourceURL)
-		}
-	}
-
-	// 4 main wikivoyage POIs + 3 synthetic wikipedia POIs (No Wiki has no field) = 7.
-	if len(pois) != 7 {
-		t.Errorf("expected 7 POIs (4 wikivoyage + 3 wikipedia), got %d", len(pois))
-	}
-	wikipediaCount := 0
-	for _, poi := range pois {
-		if poi.Provider == types.ProviderWikipedia {
-			wikipediaCount++
-		}
-	}
-	if wikipediaCount != 3 {
-		t.Errorf("expected 3 wikipedia POIs, got %d", wikipediaCount)
+	check("With Lang Prefix", "https://fr.wikipedia.org/wiki/Tour_Eiffel", "")
+	check("Full URL", "https://de.wikipedia.org/wiki/Eiffelturm", "")
+	check("Plain Name", byName["Plain Name"].ExtraSources[0].URL, "https://www.wikidata.org/wiki/Q243")
+	if got := byName["No Wiki"].ExtraSources; len(got) != 0 {
+		t.Errorf("No Wiki listing should have no ExtraSources, got %v", got)
 	}
 }
 
@@ -376,20 +378,14 @@ func TestSearch_NestedTemplateDoesNotTruncateListing(t *testing.T) {
 		t.Fatalf("Search: %v", err)
 	}
 
-	var wv, wp *types.RawPoi
+	var wv *types.RawPoi
 	for i := range pois {
-		switch pois[i].Provider {
-		case types.ProviderWikivoyage:
+		if pois[i].Provider == types.ProviderWikivoyage {
 			wv = &pois[i]
-		case types.ProviderWikipedia:
-			wp = &pois[i]
 		}
 	}
 	if wv == nil {
 		t.Fatal("missing wikivoyage POI")
-	}
-	if wp == nil {
-		t.Fatal("missing synthetic wikipedia POI — the nested template must not truncate the listing")
 	}
 	wantDesc := "Private collection of French, Italian, Dutch masterpieces in a typical XIXth century mansion."
 	if wv.Description != wantDesc {
@@ -398,8 +394,20 @@ func TestSearch_NestedTemplateDoesNotTruncateListing(t *testing.T) {
 	if len(wv.Images) != 1 {
 		t.Errorf("wikivoyage Images len = %d, want 1", len(wv.Images))
 	}
-	if !strings.Contains(wp.SourceURL, "Mus%C3%A9e_Jacquemart-Andr%C3%A9") {
-		t.Errorf("wikipedia SourceURL = %q, want it to point at the article", wp.SourceURL)
+	var wikiURL, wikidataURL string
+	for _, s := range wv.ExtraSources {
+		switch s.Provider {
+		case types.ProviderWikipedia:
+			wikiURL = s.URL
+		case types.ProviderWikidata:
+			wikidataURL = s.URL
+		}
+	}
+	if !strings.Contains(wikiURL, "Mus%C3%A9e_Jacquemart-Andr%C3%A9") {
+		t.Errorf("wikipedia ExtraSource URL = %q, want it to point at the article", wikiURL)
+	}
+	if wikidataURL != "https://www.wikidata.org/wiki/Q1165526" {
+		t.Errorf("wikidata ExtraSource URL = %q, want the canonical wikidata.org page", wikidataURL)
 	}
 }
 
