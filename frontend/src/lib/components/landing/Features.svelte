@@ -36,6 +36,15 @@
 				<p>{$t('feat_itin_desc')}</p>
 				<code class="feature-code">POST /itinerary/generate</code>
 			</article>
+			<article class="feature">
+				<header>
+					<span class="feature-tag">04 · routing</span>
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="feature-icon"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><path d="M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>
+				</header>
+				<h3>{$t('feat_routing_title')}</h3>
+				<p>{$t('feat_routing_desc')}</p>
+				<code class="feature-code">GET /pois/providers/recommend</code>
+			</article>
 		</div>
 	</div>
 </section>
@@ -44,7 +53,7 @@
 	.features-section { padding-block: 96px; }
 	.feature-grid {
 		display: grid;
-		grid-template-columns: repeat(3, 1fr);
+		grid-template-columns: repeat(4, 1fr);
 		gap: 1px;
 		background: var(--border);
 		border: 1px solid var(--border);
@@ -101,7 +110,10 @@
 		margin-top: 4px;
 	}
 
-	@media (max-width: 980px) {
+	@media (max-width: 1200px) {
+		.feature-grid { grid-template-columns: repeat(2, 1fr); }
+	}
+	@media (max-width: 640px) {
 		.feature-grid { grid-template-columns: 1fr; }
 	}
 </style>
