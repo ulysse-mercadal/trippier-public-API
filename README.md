@@ -122,7 +122,19 @@ DELETE /auth/keys/:id        Bearer <jwt>    → revoke API key
 
 ## Token model
 
-Every account starts with **1 000 tokens per month**, shared across all API keys. The bucket refills every 30 days. Quota is stored per-user in `users.tokens_limit` / `users.tokens_reset_interval_secs` and can be raised at any time via `POST /internal/admin/user-quota` (HMAC-signed `X-Internal-Auth` header).
+Every account starts with **1 000 tokens per month**, shared across all API keys. The bucket refills every 30 days. Quota is stored per-user in `users.tokens_limit` / `users.tokens_reset_interval_secs`.
+
+Two ways to raise a user's quota:
+
+```bash
+# 1) From the host, against the running container (operator-only):
+sudo docker exec <auth-api-container> /admin set-quota --email=user@example.com --limit=100000
+
+# 2) Service-to-service (e.g. Stripe webhook from the frontend), HMAC-signed:
+POST /internal/admin/user-quota
+X-Internal-Auth: <ts>.<hmac-sha256(secret, ts)>
+{ "email": "user@example.com", "tokens_limit": 100000 }
+```
 
 | Endpoint | Cost |
 |---|---|
