@@ -208,6 +208,12 @@ var (
 	multiSpaceRe = regexp.MustCompile(`\s+`)
 )
 
+// markerStripper removes leftover wiki-link bracket markers without deleting
+// the text inside them. Used after wikiLinkRe has consumed complete [[…]]
+// links — anything still bracketed at that point is a truncated fragment
+// whose readable text we want to keep.
+var markerStripper = strings.NewReplacer("[[", "", "]]", "")
+
 // @param s raw wikitext value from a listing's content field.
 // @return s with refs, templates, HTML tags, entities, wiki links and bold/italic markup resolved to readable text.
 func stripDescriptionMarkup(s string) string {
@@ -227,7 +233,7 @@ func stripDescriptionMarkup(s string) string {
 		}
 		return inner
 	})
-	s = wikiFragmentRe.ReplaceAllString(s, "")
+	s = markerStripper.Replace(s)
 	s = htmlTagRe.ReplaceAllString(s, " ")
 	s = boldRe.ReplaceAllString(s, "$1")
 	s = italicRe.ReplaceAllString(s, "$1")
@@ -303,13 +309,57 @@ func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 	return pois
 }
 
-// parseFields extracts key=value pairs from a listing template's parameter string.
+// pipePlaceholder masks "|" characters inside [[…]] wiki links so the
+// field-value regex below doesn't treat them as field separators. NUL is
+// safe because wikitext never contains literal NUL bytes.
+const pipePlaceholder = "\x00"
+
+// parseFields extracts key=value pairs from a listing template's parameter
+// string. "|" characters inside [[…]] wiki links are temporarily replaced
+// before splitting on "|", then restored in the captured values — without
+// this protection a content field like "[[Foo|Bar]] more text" would be
+// truncated to "[[Foo" by the field regex.
 func (p *Provider) parseFields(raw string) map[string]string {
+	masked := maskPipesInBrackets(raw)
 	fields := map[string]string{}
-	for _, m := range fieldRe.FindAllStringSubmatch(raw, -1) {
-		fields[strings.TrimSpace(m[1])] = strings.TrimSpace(m[2])
+	for _, m := range fieldRe.FindAllStringSubmatch(masked, -1) {
+		key := strings.TrimSpace(m[1])
+		val := strings.ReplaceAll(m[2], pipePlaceholder, "|")
+		fields[key] = strings.TrimSpace(val)
 	}
 	return fields
+}
+
+// @param s a listing template body (the bit between {{see| and }}).
+// @return s with every "|" that appears inside an [[…]] wiki link replaced by pipePlaceholder.
+func maskPipesInBrackets(s string) string {
+	if !strings.Contains(s, "[[") || !strings.Contains(s, "|") {
+		return s
+	}
+	out := make([]byte, 0, len(s))
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		if i+1 < len(s) && s[i] == '[' && s[i+1] == '[' {
+			depth++
+			out = append(out, '[', '[')
+			i++
+			continue
+		}
+		if i+1 < len(s) && s[i] == ']' && s[i+1] == ']' {
+			if depth > 0 {
+				depth--
+			}
+			out = append(out, ']', ']')
+			i++
+			continue
+		}
+		if s[i] == '|' && depth > 0 {
+			out = append(out, pipePlaceholder[0])
+			continue
+		}
+		out = append(out, s[i])
+	}
+	return string(out)
 }
 
 // parseCoords extracts lat/long from a listing's field map and returns ok=false if either is missing or invalid.
