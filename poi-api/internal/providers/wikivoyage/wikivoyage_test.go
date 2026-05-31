@@ -320,6 +320,22 @@ func TestSearch_DescriptionMarkupStripping(t *testing.T) {
 			content: `Musée du quai Branly &mdash; Jacques Chirac<ref name="b">b</ref>. Designed by [[Jean Nouvel]]. ''Open daily.''<br/>Entry: 12&euro;.`,
 			want:    "Musée du quai Branly — Jacques Chirac. Designed by Jean Nouvel. Open daily. Entry: 12€.",
 		},
+		{
+			// Regression: maskPipesInBrackets protects the | inside [[Quai
+			// Branly|Branly Museum]] from the field parser, then wikiLinkRe
+			// resolves the link to its display text. Before this fix the
+			// description was deleted entirely.
+			desc:    "piped link at start does not delete description",
+			content: `[[Quai Branly|Branly Museum]] features ethnography collections.<p>Open Tu-Su.</p><br/>Reservation recommended.`,
+			want:    "Branly Museum features ethnography collections. Open Tu-Su. Reservation recommended.",
+		},
+		{
+			// Defence in depth: even if a [[ is dangling because some other
+			// markup truncated it, the marker stripper keeps the text inside.
+			desc:    "dangling open bracket keeps inner text",
+			content: `Visit [[Notre-Dame.`,
+			want:    "Visit Notre-Dame.",
+		},
 	}
 
 	for _, tc := range cases {
@@ -355,11 +371,13 @@ func TestSearch_WikiMarkupStripping(t *testing.T) {
 		wantLen  int
 	}{
 		{
-			// fieldRe captures up to `|`, so [[Article|Display]] is truncated to [[Article —
-			// a broken fragment that stripWikiMarkup clears → empty name → POI dropped.
-			desc:     "piped link truncated by field delimiter is dropped",
+			// maskPipesInBrackets protects the | inside [[…]] so the field
+			// regex now captures the full link, and stripWikiMarkup resolves
+			// the piped link to its display text.
+			desc:     "piped link resolves to display text",
 			wikitext: `{{see|name=[[Article|Musée d'Orsay]]|lat=48.86|long=2.32}}`,
-			wantLen:  0,
+			wantName: "Musée d'Orsay",
+			wantLen:  1,
 		},
 		{
 			desc:     "plain link without display",
