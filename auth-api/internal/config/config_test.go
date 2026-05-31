@@ -77,4 +77,3 @@ func TestLoad_JWTSecretExactly32Chars(t *testing.T) {
 		t.Fatalf("32-char JWT secret should be accepted, got: %v", err)
 	}
 }
-
