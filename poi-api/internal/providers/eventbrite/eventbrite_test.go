@@ -43,7 +43,7 @@ const sampleResponse = `{
 }`
 
 func ctxWithEBToken(token string) context.Context {
-	return context.WithValue(context.Background(), byok.EventbriteKey, token)
+	return byok.WithProviderKey(context.Background(), types.ProviderEventbrite, token)
 }
 
 // ── No token → silently skipped ───────────────────────────────────────────────

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -22,6 +23,11 @@ import (
 	"github.com/trippier/poi-api/internal/providers"
 	"github.com/trippier/poi-api/pkg/types"
 )
+
+// wikidataIDRe matches the canonical Wikidata entity ID shape (Q followed by digits).
+// Any string failing this regex is rejected before being interpolated into the
+// SPARQL query, defending against a hypothetical mirror-injection attack.
+var wikidataIDRe = regexp.MustCompile(`^Q\d+$`)
 
 const (
 	defaultTimeout = 10 * time.Second
@@ -196,9 +202,15 @@ func (b *base) wikidataClassMembers(ctx context.Context, ids []string, wikidataC
 		return nil
 	}
 
-	values := make([]string, len(ids))
-	for i, id := range ids {
-		values[i] = "wd:" + id
+	values := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if !wikidataIDRe.MatchString(id) {
+			continue
+		}
+		values = append(values, "wd:"+id)
+	}
+	if len(values) == 0 || !wikidataIDRe.MatchString(wikidataClass) {
+		return nil
 	}
 	query := fmt.Sprintf(
 		"SELECT DISTINCT ?item WHERE { VALUES ?item { %s } ?item wdt:P31/wdt:P279* wd:%s . }",
@@ -313,6 +325,33 @@ func (p *Provider) SupportsMode(mode types.SearchMode) bool {
 	return mode == types.ModeRadius || mode == types.ModeDistrict
 }
 
+// enrichmentRadiusMeters is the maximum distance at which a Wikipedia article
+// is considered the same place as a POI returned by another provider. Tight
+// by design — Wikipedia geosearch coordinates can be a few dozen metres off
+// the real building, but past ~50 m we risk enriching with the wrong entity.
+const enrichmentRadiusMeters = 50.0
+
+// EnrichmentRadius implements providers.Enricher.
+func (p *Provider) EnrichmentRadius() float64 { return enrichmentRadiusMeters }
+
+// EnrichTarget implements providers.Enricher. It borrows the article's
+// WikidataID onto any target that lacks one, and for GeoNames targets it also
+// overwrites the placeholder geonames.org SourceURL with the Wikipedia article
+// URL and fills any empty Description with the article extract. The GeoNames
+// special case lives here, in the Wikipedia provider, because it encodes
+// Wikipedia's view of GeoNames data — the core never names either provider.
+func (p *Provider) EnrichTarget(target *types.RawPoi, source types.RawPoi) {
+	if target.WikidataID == "" && source.WikidataID != "" {
+		target.WikidataID = source.WikidataID
+	}
+	if target.Provider == types.ProviderGeoNames && source.SourceURL != "" {
+		target.SourceURL = source.SourceURL
+	}
+	if target.Provider == types.ProviderGeoNames && target.Description == "" && source.Description != "" {
+		target.Description = source.Description
+	}
+}
+
 // Search implements providers.Provider.
 // NOTE: this provider is not included in AllProviders and is therefore not
 // called during standard place searches. It is available for explicit use
@@ -404,4 +443,13 @@ func (p *EventProvider) Search(ctx context.Context, q types.SearchQuery) ([]type
 		pois = append(pois, poi)
 	}
 	return pois, nil
+}
+
+func init() {
+	providers.Register(types.ProviderWikipedia, func(cfg providers.BuildConfig) (providers.Provider, error) {
+		return New(cfg.Lang), nil
+	})
+	providers.Register(types.ProviderWikipediaEvents, func(cfg providers.BuildConfig) (providers.Provider, error) {
+		return NewEventProvider(cfg.Lang), nil
+	})
 }

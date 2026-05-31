@@ -18,6 +18,20 @@ type Meta struct {
 	Categories     []types.PoiType
 	CountryScores  map[string]float64        // ISO 3166-1 alpha-2 (uppercase) → [0,1]; "*" = global default
 	CategoryScores map[types.PoiType]float64 // category → [0,1]; empty = neutral (1.0)
+	// Priority drives dedup tie-breaks: when several providers contribute to the
+	// same merged POI, the one with the highest Priority is "primary" (canonical
+	// ID, name, image ordering, etc.). Higher = preferred. Zero is acceptable for
+	// providers that don't care which way the tie goes.
+	Priority int
+	// AccuracyMeters is the provider's typical coordinate precision. Used by the
+	// dedup proximity threshold and Wikipedia-enrichment radius — a coarse
+	// provider should not be discarded just because its coords are 80m off when
+	// it says so up front. Zero means "use the global default".
+	AccuracyMeters float64
+	// MinRadius caps how small the event radius can shrink before this provider
+	// returns useful results. Most event APIs return nothing under 50 km; map
+	// providers don't care (leave 0).
+	MinRadius int
 }
 
 // CountryScore returns the provider's confidence for a country code.
@@ -65,10 +79,12 @@ var All = map[types.Provider]Meta{
 	// ── Free / always-on providers ─────────────────────────────────────────────
 
 	types.ProviderOverpass: {
-		ID:         types.ProviderOverpass,
-		Label:      "OpenStreetMap / Overpass",
-		ForEvents:  false,
-		Categories: []types.PoiType{types.TypeSee, types.TypeEat, types.TypeDrink, types.TypeDo, types.TypeBuy, types.TypeSleep},
+		ID:             types.ProviderOverpass,
+		Label:          "OpenStreetMap / Overpass",
+		ForEvents:      false,
+		Priority:       4,
+		AccuracyMeters: 15,
+		Categories:     []types.PoiType{types.TypeSee, types.TypeEat, types.TypeDrink, types.TypeDo, types.TypeBuy, types.TypeSleep},
 		CountryScores: map[string]float64{
 			"*": 0.75,
 			// Europe — OSM is exceptional
@@ -100,10 +116,12 @@ var All = map[types.Provider]Meta{
 	},
 
 	types.ProviderWikivoyage: {
-		ID:         types.ProviderWikivoyage,
-		Label:      "Wikivoyage",
-		ForEvents:  false,
-		Categories: []types.PoiType{types.TypeSee, types.TypeDo, types.TypeEat, types.TypeDrink, types.TypeBuy, types.TypeSleep},
+		ID:             types.ProviderWikivoyage,
+		Label:          "Wikivoyage",
+		ForEvents:      false,
+		Priority:       3,
+		AccuracyMeters: 40,
+		Categories:     []types.PoiType{types.TypeSee, types.TypeDo, types.TypeEat, types.TypeDrink, types.TypeBuy, types.TypeSleep},
 		CountryScores: map[string]float64{
 			"*":  0.60,
 			"FR": 0.88, "DE": 0.87, "IT": 0.87, "ES": 0.85, "GB": 0.85,
@@ -118,10 +136,12 @@ var All = map[types.Provider]Meta{
 	},
 
 	types.ProviderGeoNames: {
-		ID:         types.ProviderGeoNames,
-		Label:      "GeoNames",
-		ForEvents:  false,
-		Categories: []types.PoiType{types.TypeSee, types.TypeDo},
+		ID:             types.ProviderGeoNames,
+		Label:          "GeoNames",
+		ForEvents:      false,
+		Priority:       1,
+		AccuracyMeters: 80,
+		Categories:     []types.PoiType{types.TypeSee, types.TypeDo},
 		CountryScores: map[string]float64{
 			"*": 0.60,
 		},
@@ -300,11 +320,29 @@ var All = map[types.Provider]Meta{
 
 	// ── Event providers ────────────────────────────────────────────────────────
 
+	types.ProviderWikipedia: {
+		ID:             types.ProviderWikipedia,
+		Label:          "Wikipedia",
+		ForEvents:      false,
+		Priority:       2,
+		AccuracyMeters: 35,
+		Categories:     []types.PoiType{types.TypeSee},
+		// Intentionally absent from default-providers selection: Wikipedia
+		// geosearch returns too many non-physical articles. It is used only
+		// for enrichment (filling WikidataID / SourceURL / Description on
+		// the POIs returned by other providers).
+		CountryScores: map[string]float64{
+			"*": 0.0,
+		},
+	},
+
 	types.ProviderWikipediaEvents: {
-		ID:         types.ProviderWikipediaEvents,
-		Label:      "Wikipedia Events",
-		ForEvents:  true,
-		Categories: []types.PoiType{types.TypeEvent},
+		ID:             types.ProviderWikipediaEvents,
+		Label:          "Wikipedia Events",
+		ForEvents:      true,
+		Priority:       2,
+		AccuracyMeters: 35,
+		Categories:     []types.PoiType{types.TypeEvent},
 		CountryScores: map[string]float64{
 			"*":  0.65,
 			"US": 0.85, "GB": 0.85, "FR": 0.82, "DE": 0.82, "JP": 0.78,
@@ -317,6 +355,8 @@ var All = map[types.Provider]Meta{
 		Byok:       true,
 		ByokHeader: "X-Ticketmaster-Key",
 		ForEvents:  true,
+		Priority:   3,
+		MinRadius:  50_000,
 		Categories: []types.PoiType{types.TypeEvent},
 		CountryScores: map[string]float64{
 			"*":  0.38,
@@ -332,6 +372,8 @@ var All = map[types.Provider]Meta{
 		Byok:       true,
 		ByokHeader: "X-Eventbrite-Token",
 		ForEvents:  true,
+		Priority:   3,
+		MinRadius:  50_000,
 		Categories: []types.PoiType{types.TypeEvent},
 		CountryScores: map[string]float64{
 			"*":  0.42,

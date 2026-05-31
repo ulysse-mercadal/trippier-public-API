@@ -9,13 +9,15 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/trippier/poi-api/internal/dedup"
 	"github.com/trippier/poi-api/internal/geo"
 	"github.com/trippier/poi-api/internal/providers"
 	"github.com/trippier/poi-api/internal/registry"
 	"github.com/trippier/poi-api/internal/scoring"
 	"github.com/trippier/poi-api/pkg/types"
-	"go.uber.org/zap"
 )
 
 // autoSelectThreshold is the minimum composite score for a provider to be auto-selected.
@@ -26,6 +28,12 @@ type Service struct {
 	providers       map[types.Provider]providers.Provider
 	providerTimeout time.Duration
 	log             *zap.Logger
+	// selectionCache memoises selectByCountry results for the common
+	// no-override path (no per-request weight overrides, no exclusions). Cache
+	// values are immutable []types.Provider slices keyed by the requested
+	// (country, types-set, forEvents) tuple. Sized by registry × type-subset
+	// cardinality, no eviction needed at realistic scale.
+	selectionCache sync.Map
 }
 
 // NewService returns a Service backed by the given providers.
@@ -37,12 +45,20 @@ func NewService(pp []providers.Provider, timeout time.Duration, log *zap.Logger)
 	return &Service{providers: m, providerTimeout: timeout, log: log}
 }
 
+// selectionCacheKey is the immutable key under which a selectByCountry result
+// is memoised. Types are joined sorted so request ordering doesn't matter.
+type selectionCacheKey struct {
+	cc        string
+	types     string
+	forEvents bool
+}
+
 // Search runs the full POI pipeline with geo-aware provider auto-selection.
 // When the caller supplies ?providers=…, that explicit list is used as-is.
 // Otherwise providers are chosen from the registry by country + category scores.
 func (s *Service) Search(ctx context.Context, q types.SearchQuery) (*types.SearchResult, error) {
 	userSpecified := len(q.Providers) > 0
-	applyDefaults(&q, types.AllProviders)
+	applyDefaults(&q, defaultProviders())
 	if !userSpecified {
 		if selected := s.autoSelectProviders(ctx, q, false); len(selected) > 0 {
 			q.Providers = selected
@@ -63,7 +79,7 @@ func (s *Service) Search(ctx context.Context, q types.SearchQuery) (*types.Searc
 // When omitted, geo-aware auto-selection runs using ProviderWeights overrides.
 func (s *Service) SearchCustom(ctx context.Context, q types.SearchQuery) (*types.SearchResult, error) {
 	userSpecified := len(q.Providers) > 0
-	applyDefaults(&q, types.AllProviders)
+	applyDefaults(&q, defaultProviders())
 	if !userSpecified {
 		if selected := s.autoSelectProviders(ctx, q, false); len(selected) > 0 {
 			q.Providers = selected
@@ -75,14 +91,14 @@ func (s *Service) SearchCustom(ctx context.Context, q types.SearchQuery) (*types
 	return paginate(filtered, q), nil
 }
 
-// SearchEvents runs the POI pipeline restricted to event providers.
-// The radius is forced to a minimum of 50 km because Ticketmaster and Eventbrite
-// return few or no results at smaller radii.
+// SearchEvents runs the POI pipeline restricted to event providers. The
+// radius is stretched to the maximum MinRadius declared by any selected
+// provider in the registry — providers that need a wide geo (Ticketmaster,
+// Eventbrite) opt in via meta.MinRadius without the orchestrator knowing
+// their names.
 func (s *Service) SearchEvents(ctx context.Context, q types.SearchQuery) (*types.SearchResult, error) {
-	applyDefaults(&q, types.AllEventProviders)
-	if q.Radius < 50_000 {
-		q.Radius = 50_000
-	}
+	applyDefaults(&q, defaultEventProviders())
+	clampRadiusToMin(&q)
 	merged := s.pipeline(ctx, &q)
 	return paginate(merged, q), nil
 }
@@ -90,10 +106,8 @@ func (s *Service) SearchEvents(ctx context.Context, q types.SearchQuery) (*types
 // SearchEventsCustom is the fully-controllable variant of SearchEvents.
 func (s *Service) SearchEventsCustom(ctx context.Context, q types.SearchQuery) (*types.SearchResult, error) {
 	userSpecified := len(q.Providers) > 0
-	applyDefaults(&q, types.AllEventProviders)
-	if q.Radius < 50_000 {
-		q.Radius = 50_000
-	}
+	applyDefaults(&q, defaultEventProviders())
+	clampRadiusToMin(&q)
 	if !userSpecified {
 		if selected := s.autoSelectProviders(ctx, q, true); len(selected) > 0 {
 			q.Providers = selected
@@ -104,39 +118,66 @@ func (s *Service) SearchEventsCustom(ctx context.Context, q types.SearchQuery) (
 	return paginate(merged, q), nil
 }
 
-// ProvidersStatus probes each registered provider and returns availability + latency.
-func (s *Service) ProvidersStatus(ctx context.Context) []types.ProviderStatus {
-	probe := types.SearchQuery{Mode: types.ModeRadius, Lat: 48.8566, Lng: 2.3522, Radius: 500, Limit: 1}
-
-	statuses := make([]types.ProviderStatus, 0, len(s.providers))
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-
-	for name, p := range s.providers {
-		wg.Add(1)
-		go func(name types.Provider, p providers.Provider) {
-			defer wg.Done()
-			start := time.Now()
-			tctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			defer cancel()
-			var err error
-			if pp, ok := p.(providers.Pingable); ok {
-				err = pp.Ping(tctx)
-			} else {
-				_, err = p.Search(tctx, probe)
-			}
-			_, isByok := p.(providers.ByokProvider)
-			st := types.ProviderStatus{Name: name, Available: err == nil, LatencyMs: time.Since(start).Milliseconds(), Byok: isByok}
-			if err != nil {
-				st.Error = err.Error()
-			}
-			mu.Lock()
-			statuses = append(statuses, st)
-			mu.Unlock()
-		}(name, p)
+// defaultProviders returns the list of non-BYOK, non-event providers from the
+// registry, with a non-zero country-wildcard score. Wikipedia is included via
+// CountryScore=0 to keep it usable as enricher-only.
+func defaultProviders() []types.Provider {
+	out := make([]types.Provider, 0, len(registry.All))
+	for id, meta := range registry.All {
+		if meta.Byok || meta.ForEvents {
+			continue
+		}
+		if meta.CountryScore("*") <= 0 {
+			continue
+		}
+		out = append(out, id)
 	}
+	sort.Slice(out, func(i, j int) bool { return string(out[i]) < string(out[j]) })
+	return out
+}
 
-	wg.Wait()
+// defaultEventProviders returns the list of event providers from the registry.
+// BYOK event providers (Ticketmaster, Eventbrite) ARE included by default
+// because the orchestrator can call them safely: each provider checks for its
+// own key and returns nil cleanly when absent.
+func defaultEventProviders() []types.Provider {
+	out := make([]types.Provider, 0, len(registry.All))
+	for id, meta := range registry.All {
+		if !meta.ForEvents {
+			continue
+		}
+		out = append(out, id)
+	}
+	sort.Slice(out, func(i, j int) bool { return string(out[i]) < string(out[j]) })
+	return out
+}
+
+// clampRadiusToMin stretches q.Radius up to the maximum MinRadius declared by
+// any currently selected provider — providers that don't need a wide geo can
+// leave MinRadius=0 and remain unaffected.
+func clampRadiusToMin(q *types.SearchQuery) {
+	maxMin := 0
+	for _, id := range q.Providers {
+		if m := registry.All[id].MinRadius; m > maxMin {
+			maxMin = m
+		}
+	}
+	if q.Radius < maxMin {
+		q.Radius = maxMin
+	}
+}
+
+// ProvidersStatus returns the list of registered providers with their static
+// metadata. We do not probe upstream — every probe historically consumed paid
+// quota (Ticketmaster, Eventbrite) without offering a reliable signal, and
+// callers who want true health information should rely on observability of
+// real Search calls.
+func (s *Service) ProvidersStatus(_ context.Context) []types.ProviderStatus {
+	statuses := make([]types.ProviderStatus, 0, len(s.providers))
+	for name, p := range s.providers {
+		_, isByok := p.(providers.ByokProvider)
+		statuses = append(statuses, types.ProviderStatus{Name: name, Byok: isByok})
+	}
 	return statuses
 }
 
@@ -234,7 +275,10 @@ func (s *Service) autoSelectProviders(ctx context.Context, q types.SearchQuery, 
 	return s.selectByCountry(cc, q.Types, q.ProviderWeights, q.ExcludeProviders, forEvents)
 }
 
-// selectByCountry scores and filters registered providers for a given country code.
+// selectByCountry scores and filters registered providers for a given country
+// code. Results for the no-override path (no weight overrides, no exclusions)
+// are memoised in selectionCache so we don't re-iterate registry.All + sort
+// on every standard /pois/search call.
 func (s *Service) selectByCountry(
 	cc string,
 	requestedTypes []types.PoiType,
@@ -242,6 +286,15 @@ func (s *Service) selectByCountry(
 	exclude []types.Provider,
 	forEvents bool,
 ) []types.Provider {
+	cacheable := len(weightOverrides) == 0 && len(exclude) == 0
+	var cacheK selectionCacheKey
+	if cacheable {
+		cacheK = makeSelectionKey(cc, requestedTypes, forEvents)
+		if v, ok := s.selectionCache.Load(cacheK); ok {
+			return v.([]types.Provider)
+		}
+	}
+
 	excludeSet := make(map[types.Provider]bool, len(exclude))
 	for _, e := range exclude {
 		excludeSet[e] = true
@@ -285,7 +338,21 @@ func (s *Service) selectByCountry(
 	for i, c := range list {
 		out[i] = c.id
 	}
+	if cacheable {
+		s.selectionCache.Store(cacheK, out)
+	}
 	return out
+}
+
+// makeSelectionKey builds the stable cache key for selectByCountry. Types are
+// sorted so caller order doesn't fragment the cache.
+func makeSelectionKey(cc string, requestedTypes []types.PoiType, forEvents bool) selectionCacheKey {
+	parts := make([]string, len(requestedTypes))
+	for i, t := range requestedTypes {
+		parts[i] = string(t)
+	}
+	sort.Strings(parts)
+	return selectionCacheKey{cc: cc, types: strings.Join(parts, ","), forEvents: forEvents}
 }
 
 // filterExcluded removes blacklisted providers from a list.
@@ -322,7 +389,7 @@ func (s *Service) pipeline(ctx context.Context, q *types.SearchQuery) []types.En
 	if q.Mode == types.ModeRadius {
 		raw = geo.FilterByRadius(raw, q.Lat, q.Lng, float64(q.Radius))
 	}
-	raw = s.enrichWithWikidata(ctx, raw, *q)
+	raw = s.enrichRaw(ctx, raw, *q)
 	merged := dedup.Merge(raw)
 	for i := range merged {
 		merged[i].Score = scoring.Score(merged[i], *q)
@@ -331,29 +398,43 @@ func (s *Service) pipeline(ctx context.Context, q *types.SearchQuery) []types.En
 	return merged
 }
 
-// fetchAll fans out the search query to all selected providers concurrently.
+// fanOutLimit caps how many provider Search calls run concurrently per
+// request. Bounds file-descriptor pressure (~N per concurrent request) and
+// keeps the load polite enough that upstream mirrors don't 429/IP-ban us.
+// Provider errors are logged inside the goroutine and never bubble up — a
+// single slow or broken provider must not fail the whole pipeline.
+const fanOutLimit = 16
+
+// fetchAll fans out the search query to all selected providers concurrently,
+// capped at fanOutLimit in-flight calls.
 func (s *Service) fetchAll(ctx context.Context, q types.SearchQuery) []types.RawPoi {
 	selected := s.selectProviders(q)
 	results := make([][]types.RawPoi, len(selected))
-	var wg sync.WaitGroup
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(fanOutLimit)
 
 	for i, p := range selected {
-		wg.Add(1)
-		go func(i int, p providers.Provider) {
-			defer wg.Done()
-			pctx, cancel := context.WithTimeout(ctx, s.providerTimeout)
+		i, p := i, p
+		g.Go(func() error {
+			pctx, cancel := context.WithTimeout(gctx, s.providerTimeout)
 			defer cancel()
 			pois, err := p.Search(pctx, q)
 			if err != nil {
 				s.log.Warn("provider error", zap.String("provider", string(p.Name())), zap.Error(err))
-				return
+				return nil //nolint:nilerr // we never want a single provider to fail the whole request
 			}
 			results[i] = pois
-		}(i, p)
+			return nil
+		})
 	}
+	_ = g.Wait()
 
-	wg.Wait()
-	var all []types.RawPoi
+	total := 0
+	for _, r := range results {
+		total += len(r)
+	}
+	all := make([]types.RawPoi, 0, total)
 	for _, r := range results {
 		all = append(all, r...)
 	}

@@ -5,10 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/trippier/poi-api/internal/registry"
 )
 
 // cacheWriter wraps gin.ResponseWriter to capture the response body.
@@ -70,21 +74,39 @@ func Cache(rdb *redis.Client, ttl time.Duration) gin.HandlerFunc {
 }
 
 // cacheKey returns a deterministic SHA-256 key for a request based on its path,
-// sorted query parameters, and which BYOK provider keys are present (not their values).
-// Two requests for the same location with different active providers get different keys.
+// sorted query parameters, and which BYOK provider keys are present (not their
+// values). Two requests for the same location with different active providers
+// get different keys.
+//
+// The presence suffix is built by iterating every registered BYOK provider and
+// stamping its ID when its declared header is set on the request. New BYOK
+// providers participate automatically — no code change to the cache layer is
+// required when one is added to the registry.
 func cacheKey(c *gin.Context) string {
 	encoded := c.Request.URL.Query().Encode()
-
-	// Append a provider-presence suffix so that BYOK combinations get distinct slots
-	// without ever including actual key material in the cache key.
-	suffix := ""
-	if c.GetHeader("X-Ticketmaster-Key") != "" {
-		suffix += ":tm"
-	}
-	if c.GetHeader("X-Eventbrite-Token") != "" {
-		suffix += ":eb"
-	}
+	suffix := byokPresenceSuffix(c)
 
 	h := sha256.Sum256([]byte(c.Request.URL.Path + "?" + encoded + suffix))
 	return "poi:cache:" + hex.EncodeToString(h[:])
+}
+
+// byokPresenceSuffix returns a stable, sorted ":id" list for every BYOK
+// provider whose declared header is set on the request. The values of those
+// headers are NEVER included — only the fact that they are present — so that
+// per-user keys cannot leak through the cache key.
+func byokPresenceSuffix(c *gin.Context) string {
+	var ids []string
+	for id, meta := range registry.All {
+		if !meta.Byok || meta.ByokHeader == "" {
+			continue
+		}
+		if c.GetHeader(meta.ByokHeader) != "" {
+			ids = append(ids, string(id))
+		}
+	}
+	if len(ids) == 0 {
+		return ""
+	}
+	sort.Strings(ids)
+	return ":" + strings.Join(ids, ":")
 }

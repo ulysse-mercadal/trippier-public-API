@@ -3,8 +3,9 @@
 //
 // This provider uses a BYOK (Bring Your Own Key) pattern: no private token is
 // stored server-side. Callers must inject their Eventbrite private token into the
-// request context via byok.EventbriteKey before invoking Search. If the token is
-// absent, Search returns nil, nil (the provider is silently skipped).
+// request context via byok.WithProviderKey(ctx, types.ProviderEventbrite, token)
+// before invoking Search. If the token is absent, Search returns nil, nil
+// (the provider is silently skipped).
 package eventbrite
 
 import (
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/trippier/poi-api/internal/byok"
+	"github.com/trippier/poi-api/internal/providers"
 	"github.com/trippier/poi-api/pkg/types"
 )
 
@@ -97,7 +99,7 @@ func (p *Provider) SupportsMode(mode types.SearchMode) bool {
 // Returns nil, nil when no Eventbrite private token is present in ctx (BYOK absent).
 // Radius is clamped to [minRadiusKm, maxRadiusKm] km to protect the daily API quota.
 func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {
-	token := byok.EventbriteToken(ctx)
+	token := byok.GetProviderKey(ctx, types.ProviderEventbrite)
 	if token == "" {
 		return nil, nil
 	}
@@ -195,4 +197,10 @@ func (p *Provider) venueCoords(ev ebEvent) (lat, lng float64, ok bool) {
 	lat, err1 := strconv.ParseFloat(strings.TrimSpace(ev.Venue.Latitude), 64)
 	lng, err2 := strconv.ParseFloat(strings.TrimSpace(ev.Venue.Longitude), 64)
 	return lat, lng, err1 == nil && err2 == nil
+}
+
+func init() {
+	providers.Register(types.ProviderEventbrite, func(_ providers.BuildConfig) (providers.Provider, error) {
+		return New(), nil
+	})
 }

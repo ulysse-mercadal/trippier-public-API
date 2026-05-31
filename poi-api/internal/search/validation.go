@@ -18,9 +18,11 @@ var polygonCoordRe = regexp.MustCompile(`^-?\d{1,3}(?:\.\d{1,10})?$`)
 
 // Validate checks that a SearchQuery is semantically valid for its mode.
 // It is called after query binding so all fields are already populated.
+// An empty mode defaults to ModeRadius — the request can omit the parameter
+// when calling /pois/search with lat/lng/radius.
 func Validate(q types.SearchQuery) error {
 	switch q.Mode {
-	case types.ModeRadius:
+	case "", types.ModeRadius:
 		return validateRadius(q)
 	case types.ModePolygon:
 		return validatePolygon(q)

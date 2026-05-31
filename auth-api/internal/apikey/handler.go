@@ -38,7 +38,6 @@ func (h *Handler) RegisterRoutes(keys gin.IRouter, internal gin.IRouter, jwtAuth
 	keys.DELETE("/:id", h.revoke)
 
 	internal.POST("/check-rate-limit", h.checkRateLimit)
-	internal.POST("/admin/user-quota", h.setUserQuota)
 }
 
 // create handles POST /keys: generates a new named API key and returns its plaintext value once.
@@ -152,49 +151,5 @@ func (h *Handler) checkRateLimit(c *gin.Context) {
 		"remaining":      remaining,
 		"limit":          info.TokensLimit,
 		"resets_in_secs": ttlSecs,
-	})
-}
-
-// setUserQuota handles POST /internal/admin/user-quota: updates a user's quota
-// (DB + Redis bucket) by email or id. Protected by InternalAuth.
-func (h *Handler) setUserQuota(c *gin.Context) {
-	var body struct {
-		Email                   string `json:"email"`
-		UserID                  string `json:"user_id"`
-		TokensLimit             int    `json:"tokens_limit"                 binding:"required,min=1"`
-		TokensResetIntervalSecs int    `json:"tokens_reset_interval_secs"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	if body.Email == "" && body.UserID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "email or user_id required"})
-		return
-	}
-
-	var (
-		userID string
-		err    error
-	)
-	if body.UserID != "" {
-		userID = body.UserID
-		err = h.svc.SetUserQuota(c.Request.Context(), userID, body.TokensLimit, body.TokensResetIntervalSecs)
-	} else {
-		userID, err = h.svc.SetUserQuotaByEmail(c.Request.Context(), body.Email, body.TokensLimit, body.TokensResetIntervalSecs)
-	}
-
-	if errors.Is(err, ErrUserNotFound) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
-		return
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "could not update quota"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"user_id":      userID,
-		"tokens_limit": body.TokensLimit,
 	})
 }

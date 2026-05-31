@@ -3,8 +3,9 @@
 //
 // This provider uses a BYOK (Bring Your Own Key) pattern: no API key is stored
 // server-side. Callers must inject their Ticketmaster API key into the request
-// context via byok.TicketmasterKey before invoking Search. If the key is absent,
-// Search returns nil, nil (the provider is silently skipped).
+// context via byok.WithProviderKey(ctx, types.ProviderTicketmaster, key) before
+// invoking Search. If the key is absent, Search returns nil, nil (the provider
+// is silently skipped).
 package ticketmaster
 
 import (
@@ -19,6 +20,7 @@ import (
 
 	"github.com/trippier/poi-api/internal/byok"
 	"github.com/trippier/poi-api/internal/geo"
+	"github.com/trippier/poi-api/internal/providers"
 	"github.com/trippier/poi-api/pkg/types"
 )
 
@@ -106,7 +108,7 @@ func (p *Provider) SupportsMode(mode types.SearchMode) bool {
 // Returns nil, nil when no Ticketmaster API key is present in ctx (BYOK absent).
 // Radius is clamped to [minRadiusKm, maxRadiusKm] km to protect the daily API quota.
 func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {
-	apiKey := byok.TicketmasterAPIKey(ctx)
+	apiKey := byok.GetProviderKey(ctx, types.ProviderTicketmaster)
 	if apiKey == "" {
 		return nil, nil
 	}
@@ -273,4 +275,10 @@ func (p *Provider) pickImages(images []tmImage) []string {
 		return nil
 	}
 	return out
+}
+
+func init() {
+	providers.Register(types.ProviderTicketmaster, func(_ providers.BuildConfig) (providers.Provider, error) {
+		return New(), nil
+	})
 }

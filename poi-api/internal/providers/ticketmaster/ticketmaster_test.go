@@ -54,7 +54,7 @@ func mockNominatim(t *testing.T, body string) func() {
 }
 
 func ctxWithTMKey(key string) context.Context {
-	return context.WithValue(context.Background(), byok.TicketmasterKey, key)
+	return byok.WithProviderKey(context.Background(), types.ProviderTicketmaster, key)
 }
 
 // ── No key → silently skipped ─────────────────────────────────────────────────

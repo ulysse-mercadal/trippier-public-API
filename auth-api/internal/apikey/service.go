@@ -28,14 +28,42 @@ var (
 // (tokens_limit / tokens_reset_interval_secs) lives on the users row — keys
 // belonging to the same user share a single bucket.
 type Service struct {
-	db  *pgxpool.Pool
-	rdb *redis.Client
-	log *zap.Logger
+	db       *pgxpool.Pool
+	rdb      *redis.Client
+	log      *zap.Logger
+	lastUsed chan string
 }
 
-// New creates a Service.
+// lastUsedBufferSize caps the bounded channel that feeds the last_used_at
+// background writer. Bursts beyond this size drop the oldest pending updates
+// rather than spawning unbounded goroutines when Postgres slows down.
+const lastUsedBufferSize = 1024
+
+// New creates a Service and launches a single background worker that flushes
+// last_used_at updates in batches, bounded by lastUsedBufferSize.
 func New(db *pgxpool.Pool, rdb *redis.Client, log *zap.Logger) *Service {
-	return &Service{db: db, rdb: rdb, log: log}
+	s := &Service{db: db, rdb: rdb, log: log, lastUsed: make(chan string, lastUsedBufferSize)}
+	go s.lastUsedWorker()
+	return s
+}
+
+// lastUsedWorker drains the lastUsed channel and writes last_used_at for each
+// key ID. Runs until the channel is closed (process exit).
+func (s *Service) lastUsedWorker() {
+	for keyID := range s.lastUsed {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		_, _ = s.db.Exec(ctx, `UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`, keyID)
+		cancel()
+	}
+}
+
+// markUsed enqueues a non-blocking last_used_at update. When the worker is
+// backed up the call drops silently — keeping the request-path fast.
+func (s *Service) markUsed(keyID string) {
+	select {
+	case s.lastUsed <- keyID:
+	default:
+	}
 }
 
 // CreateResult holds the one-time plaintext key and its metadata.
@@ -179,11 +207,7 @@ func (s *Service) ValidateBySHA256(ctx context.Context, sha256Hash string) (*mod
 		return nil, fmt.Errorf("query: %w", err)
 	}
 
-	go func() {
-		ctx2, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		s.db.Exec(ctx2, `UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`, info.KeyID) //nolint:errcheck
-	}()
+	s.markUsed(info.KeyID)
 
 	remaining, _, err := rl.GetUsage(ctx, s.rdb, info.UserID)
 	if err != nil || remaining == -1 {

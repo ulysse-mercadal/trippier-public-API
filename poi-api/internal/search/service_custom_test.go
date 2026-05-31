@@ -81,7 +81,7 @@ func TestSearchCustom_ExcludeProviders(t *testing.T) {
 	}
 	for _, poi := range result.Results {
 		for _, src := range poi.Sources {
-			if src == types.ProviderWikivoyage {
+			if src.Provider == types.ProviderWikivoyage {
 				t.Error("excluded provider wikivoyage still appears in results")
 			}
 		}
@@ -169,10 +169,15 @@ func TestSearchEventsCustom_ExplicitProviders(t *testing.T) {
 	}
 }
 
+// TestSearchEventsCustom_RadiusEnforced confirms the orchestrator stretches
+// q.Radius up to the maximum MinRadius declared by any selected provider.
+// Ticketmaster's registry entry declares MinRadius=50_000, so a 1 km query
+// is upgraded; if we ever ship an event provider with MinRadius=0 it would
+// not be touched.
 func TestSearchEventsCustom_RadiusEnforced(t *testing.T) {
 	var capturedRadius int
 	p := &extMockProvider{
-		name:  types.ProviderWikipediaEvents,
+		name:  types.ProviderTicketmaster,
 		modes: []types.SearchMode{types.ModeRadius},
 		searchFn: func(q types.SearchQuery) ([]types.RawPoi, error) {
 			capturedRadius = q.Radius
@@ -184,11 +189,11 @@ func TestSearchEventsCustom_RadiusEnforced(t *testing.T) {
 		Mode:      types.ModeRadius,
 		Lat:       48.86,
 		Lng:       2.35,
-		Radius:    1000, // below 50 km minimum
-		Providers: []types.Provider{types.ProviderWikipediaEvents},
+		Radius:    1000, // below the registry-declared 50 km minimum
+		Providers: []types.Provider{types.ProviderTicketmaster},
 	})
 	if capturedRadius < 50_000 {
-		t.Errorf("radius not enforced to min 50km, got %d", capturedRadius)
+		t.Errorf("radius not enforced to declared MinRadius, got %d", capturedRadius)
 	}
 }
 

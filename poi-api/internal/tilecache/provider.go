@@ -71,18 +71,6 @@ func (c *CachedProvider) IsByok() bool {
 	return false
 }
 
-// Ping forwards the inner provider's health probe when available.
-func (c *CachedProvider) Ping(ctx context.Context) error {
-	if pp, ok := c.inner.(providers.Pingable); ok {
-		return pp.Ping(ctx)
-	}
-	// No native ping — fall back to a tiny radius search.
-	_, err := c.inner.Search(ctx, types.SearchQuery{
-		Mode: types.ModeRadius, Lat: 48.8566, Lng: 2.3522, Radius: 500, Limit: 1,
-	})
-	return err
-}
-
 // Search implements providers.Provider with the tile-cache flow described on
 // the type doc. Non-radius queries bypass the cache entirely.
 func (c *CachedProvider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {

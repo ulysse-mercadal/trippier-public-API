@@ -384,7 +384,7 @@ func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 			Provider:    types.ProviderWikivoyage,
 			Description: stripDescriptionMarkup(fields["content"]),
 			Contact: types.Contact{
-				Website: strings.TrimSpace(fields["url"]),
+				Website: providers.SafeURL(fields["url"]),
 				Phone:   strings.TrimSpace(fields["phone"]),
 				Hours:   strings.TrimSpace(fields["hours"]),
 			},
@@ -480,4 +480,10 @@ func (p *Provider) parseCoords(fields map[string]string) (lat, lng float64, ok b
 	lat, err1 := strconv.ParseFloat(latStr, 64)
 	lng, err2 := strconv.ParseFloat(lngStr, 64)
 	return lat, lng, err1 == nil && err2 == nil
+}
+
+func init() {
+	providers.Register(types.ProviderWikivoyage, func(cfg providers.BuildConfig) (providers.Provider, error) {
+		return New(cfg.Lang), nil
+	})
 }

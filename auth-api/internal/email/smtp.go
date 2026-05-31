@@ -124,7 +124,7 @@ var otpTmpl = template.Must(template.New("otp").Parse(`<!DOCTYPE html>
         <tr>
           <td style="width:7px;padding:0;vertical-align:middle;"><div style="width:7px;height:7px;background:#4ee39a;border-radius:50%;"></div></td>
           <td style="width:6px;"></td>
-          <td style="font-family:'Courier New',ui-monospace,monospace;font-size:11.5px;color:#91a09b;vertical-align:middle;">expire dans 15 minutes</td>
+          <td style="font-family:'Courier New',ui-monospace,monospace;font-size:11.5px;color:#91a09b;vertical-align:middle;">expire à {{.ExpiresAt}}</td>
         </tr>
         </table>
       </td></tr>
@@ -179,9 +179,9 @@ var otpTmpl = template.Must(template.New("otp").Parse(`<!DOCTYPE html>
 </html>`))
 
 type otpData struct {
-	Code, Email, SentAt, ExpiresAt string
-	IP                             string
-	D1, D2, D3, D4, D5, D6         string
+	Email, SentAt, ExpiresAt string
+	IP                       string
+	D1, D2, D3, D4, D5, D6   string
 }
 
 // SendOTPCode sends a 6-digit verification code to addr.
@@ -195,7 +195,6 @@ func (s *Sender) SendOTPCode(to, code, clientIP, userAgent, appURL string) error
 		clientIP = "—"
 	}
 	data := otpData{
-		Code:      code,
 		Email:     to,
 		SentAt:    now.Format("2 Jan 2006 · 15:04 UTC"),
 		ExpiresAt: now.Add(15 * time.Minute).Format("15:04 UTC"),

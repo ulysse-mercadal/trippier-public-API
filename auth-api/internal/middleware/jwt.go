@@ -97,12 +97,3 @@ func validateInternalAuth(header, secret string) error {
 	}
 	return nil
 }
-
-// BuildInternalAuth builds a valid X-Internal-Auth header value for the given secret.
-// Use this in service-to-service calls instead of sending the raw secret.
-func BuildInternalAuth(secret string) string {
-	ts := strconv.FormatInt(time.Now().Unix(), 10)
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(ts))
-	return ts + "." + hex.EncodeToString(mac.Sum(nil))
-}
