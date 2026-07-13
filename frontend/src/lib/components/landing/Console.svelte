@@ -2,7 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { t } from '$lib/i18n';
 
-	const CURL_CMD = `curl https://api.poi.trippier.dev/itinerary/generate \\
+	const CURL_CMD = `curl https://api.poi.trippier.dev/v1/itinerary/generate \\
   -H "X-API-Key: tk_demo_a3f9…" \\
   -d '{"days":1,"poi_query":{"lat":40.7549,"lng":-73.9840,"radius":5000},"preferences":{"pace":"moderate","start_time":"09:00"}}'`;
 
@@ -31,6 +31,9 @@
 	let revealed = 0;
 	let timer: ReturnType<typeof setTimeout> | null = null;
 
+	/**
+	 * Advances the terminal animation state machine by one step (typing, pending, or response reveal) and schedules the next tick.
+	 */
 	function tick() {
 		if (phase === 'typing') {
 			if (typed.length < CURL_CMD.length) {
@@ -48,6 +51,9 @@
 		}
 	}
 
+	/**
+	 * Resets the terminal animation to its initial state and restarts it.
+	 */
 	function replay() {
 		if (timer) { clearTimeout(timer); timer = null; }
 		typed = ''; phase = 'typing'; revealed = 0;
@@ -77,7 +83,7 @@
 				{#if phase !== 'typing'}
 					<div class="t-status">
 						{#if phase === 'pending'}
-							<span class="status-pending">… POST /itinerary/generate</span>
+							<span class="status-pending">… POST /v1/itinerary/generate</span>
 						{:else}
 							<span class="status-ok">HTTP/2 200 · 87ms · application/json</span>
 						{/if}

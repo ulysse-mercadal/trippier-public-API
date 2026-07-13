@@ -2,15 +2,14 @@
 	import { browser } from '$app/environment';
 	import { env } from '$env/dynamic/public';
 	import type { DocPage } from '$lib/data/docs';
-	import { buildCurl, buildJs, buildPy, sampleValue } from '$lib/utils/docs';
+	import { buildCurl, buildJs, buildPy, sampleValue, initialValue, activeQueryParams, resolvePath } from '$lib/utils/docs';
 
 	export let page: DocPage | null;
 
 	type Lang = 'curl' | 'js' | 'py';
 	type RouteType = 'events' | 'pois' | 'itinerary' | 'other';
 
-	// ── BYOK provider registry ────────────────────────────────────────────────
-	// Add new providers here — the UI builds itself from this list.
+	// BYOK provider registry; add new providers here.
 	const BYOK_PROVIDERS = [
 		// Event providers
 		{ id: 'ticketmaster', label: 'Ticketmaster', header: 'X-Ticketmaster-Key',  storageKey: 'byok_tm', placeholder: 'API Key',              routeTypes: ['events'] as RouteType[] },
@@ -26,7 +25,6 @@
 		{ id: 'grabmaps',   label: 'GrabMaps (SEA)',header: 'X-Grabmaps-Key',  storageKey: 'byok_gm',  placeholder: 'API Key',    routeTypes: ['pois'] as RouteType[] },
 	];
 
-	// ── State ─────────────────────────────────────────────────────────────────
 	let lang: Lang = 'curl';
 	let running    = false;
 	let copied     = false;
@@ -52,7 +50,19 @@
 	let responseMs: number | null = null;
 	let responseError: string | null = null;
 
-	// ── Derived ───────────────────────────────────────────────────────────────
+	// One entry per route param, plus the JSON body for non-GET routes; reset on route change.
+	let paramValues: Record<string, string> = {};
+	let bodyValue = '';
+	/**
+	 * Resets param and body inputs for the currently selected doc page.
+	 * @param p - selected doc page, or null when none is selected
+	 */
+	function resetInputs(p: DocPage | null) {
+		paramValues = Object.fromEntries((p?.params ?? []).map(pr => [pr.name, initialValue(pr)]));
+		bodyValue = p?.body ?? '';
+	}
+	$: resetInputs(page);
+
 	$: routeType = ((): RouteType => {
 		const path = page?.path ?? '';
 		if (path.includes('/events'))    return 'events';
@@ -63,12 +73,14 @@
 
 	$: visibleProviders = BYOK_PROVIDERS.filter(p => p.routeTypes.includes(routeType));
 
-	$: snippets = page ? { curl: buildCurl(page, baseUrl), js: buildJs(page, baseUrl), py: buildPy(page, baseUrl) } : null;
+	$: snippets = page ? { curl: buildCurl(page, baseUrl, paramValues, bodyValue), js: buildJs(page, baseUrl, paramValues, bodyValue), py: buildPy(page, baseUrl, paramValues, bodyValue) } : null;
 	$: code     = snippets?.[lang] ?? '';
 
 	$: { page; responseBody = null; responseStatus = null; responseMs = null; responseError = null; running = false; }
 
-	// ── Helpers ───────────────────────────────────────────────────────────────
+	/**
+	 * Persists the API key, base URL, and BYOK provider settings to localStorage.
+	 */
 	function saveSettings() {
 		if (!browser) return;
 		localStorage.setItem('docs_api_key',  apiKey);
@@ -79,31 +91,44 @@
 		});
 	}
 
+	/**
+	 * Toggles a BYOK provider's selected state and saves the settings.
+	 * @param id - identifier of the provider to toggle
+	 */
 	function toggleProvider(id: string) {
 		byok[id] = { ...byok[id], selected: !byok[id].selected };
 		saveSettings();
 	}
 
+	/**
+	 * Copies the current code snippet to the clipboard and briefly flags success.
+	 */
 	function copySnippet() {
 		if (browser) navigator.clipboard?.writeText(code);
 		copied = true;
 		setTimeout(() => (copied = false), 1200);
 	}
 
+	/**
+	 * Builds the request URL for the current page from the base URL and param values.
+	 * @returns fully resolved request URL
+	 */
 	function buildUrl(): string {
-		const path = page?.path ?? '';
-		const base = (envItineraryBaseUrl && path.startsWith('/itinerary/'))
+		if (!page) return baseUrl;
+		const path = resolvePath(page, paramValues);
+		const base = (envItineraryBaseUrl && path.startsWith('/v1/itinerary/'))
 			? envItineraryBaseUrl
 			: baseUrl;
-		if (page?.method !== 'GET') return base + path;
-		const SNIPPET_KEYS = new Set(['lat', 'lng', 'radius', 'date']);
-		const params = (page?.params ?? [])
-			.filter(p => p.in !== 'path' && SNIPPET_KEYS.has(p.name))
-			.map(p => `${encodeURIComponent(p.name)}=${encodeURIComponent(sampleValue(p))}`)
+		if (page.method !== 'GET') return base + path;
+		const params = activeQueryParams(page, paramValues)
+			.map(p => `${encodeURIComponent(p.name)}=${encodeURIComponent(paramValues[p.name])}`)
 			.join('&');
 		return base + path + (params ? `?${params}` : '');
 	}
 
+	/**
+	 * Executes the current request against the API and records the response.
+	 */
 	async function tryIt() {
 		if (!page) return;
 		running = true;
@@ -114,7 +139,6 @@
 		if (apiKey) headers['X-API-Key'] = apiKey;
 		if (page.method !== 'GET') headers['Content-Type'] = 'application/json';
 
-		// Inject all active BYOK headers
 		for (const p of visibleProviders) {
 			const state = byok[p.id];
 			if (state.selected && state.key) headers[p.header] = state.key;
@@ -125,7 +149,7 @@
 			const res = await fetch(url, {
 				method:  page.method ?? 'GET',
 				headers,
-				body: page.method !== 'GET' && page.body ? page.body : undefined,
+				body: page.method !== 'GET' && bodyValue.trim() ? bodyValue : undefined,
 			});
 			responseMs     = Math.round(performance.now() - t0);
 			responseStatus = res.status;
@@ -142,7 +166,6 @@
 </script>
 
 <aside class="d-panel">
-	<!-- Settings block -->
 	<div class="d-panel-block d-settings">
 		<div class="d-panel-head">
 			<span class="d-resp-label">Configuration</span>
@@ -162,7 +185,6 @@
 			{#if visibleProviders.length > 0}
 				<div class="d-byok-sep">Providers (BYOK)</div>
 
-				<!-- Provider chip selector -->
 				<div class="d-chips">
 					{#each visibleProviders as p}
 						<button
@@ -173,7 +195,6 @@
 					{/each}
 				</div>
 
-				<!-- Key inputs for selected providers -->
 				{#each visibleProviders.filter(p => byok[p.id].selected) as p}
 					<label class="d-field">
 						<span>{p.header}</span>
@@ -196,6 +217,38 @@
 			<p>Sélectionnez une route pour voir le snippet et lancer un essai.</p>
 		</div>
 	{:else}
+		{#if (page.params && page.params.length) || page.method !== 'GET'}
+			<details class="d-panel-block d-acc">
+				<summary class="d-panel-head d-acc-summary">
+					<span class="d-resp-label">
+						Paramètres
+						{#if page.method === 'GET' && page.params?.length}
+							<span class="d-acc-count">{page.params.length}</span>
+						{:else if page.method !== 'GET'}
+							<span class="d-acc-count">body</span>
+						{/if}
+					</span>
+					<svg class="d-acc-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+				</summary>
+				<div class="d-settings-body">
+					{#if page.method === 'GET'}
+						{#each page.params ?? [] as p}
+							<label class="d-field">
+								<span>{p.name}{#if p.required}<em class="d-req">*</em>{/if}<em class="d-ptype">{p.type}{#if p.in === 'path'} · path{/if}</em></span>
+								<input type="text" bind:value={paramValues[p.name]}
+									placeholder={sampleValue(p)} spellcheck="false" />
+							</label>
+						{/each}
+					{:else}
+						<label class="d-field">
+							<span>body<em class="d-ptype">json</em></span>
+							<textarea class="d-body" bind:value={bodyValue} rows="10" spellcheck="false"></textarea>
+						</label>
+					{/if}
+				</div>
+			</details>
+		{/if}
+
 		<div class="d-panel-block">
 			<div class="d-panel-head">
 				<div class="d-tabs">
@@ -255,11 +308,33 @@
 		position: sticky;
 		top: 56px;
 		overflow-y: auto;
+		overscroll-behavior: contain;
+		min-height: 0;
 		padding: 24px;
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
 	}
+	/* Blocks must not be squeezed by the flex column — keep their natural height
+	   so the panel (not the blocks) is what scrolls. */
+	.d-panel > * { flex-shrink: 0; }
+
+	.d-acc { padding: 0; }
+	.d-acc-summary { cursor: pointer; list-style: none; user-select: none; }
+	.d-acc-summary::-webkit-details-marker { display: none; }
+	.d-acc-summary .d-resp-label { display: flex; align-items: center; gap: 8px; }
+	.d-acc-count {
+		font-family: var(--font-mono);
+		font-size: 10px;
+		padding: 1px 6px;
+		border-radius: 20px;
+		color: var(--code-text-3);
+		background: var(--code-bg);
+		text-transform: none;
+		letter-spacing: 0;
+	}
+	.d-acc-chevron { color: var(--code-text-3); transition: transform .15s ease; flex-shrink: 0; }
+	.d-acc[open] .d-acc-chevron { transform: rotate(180deg); }
 	.d-panel-empty {
 		display: flex;
 		flex-direction: column;
@@ -301,6 +376,29 @@
 	}
 	.d-field input:focus { border-color: var(--accent); }
 	.d-field input::placeholder { color: var(--text-3); }
+	.d-field span { display: flex; align-items: center; gap: 6px; }
+	.d-req { color: var(--accent); font-style: normal; }
+	.d-ptype {
+		font-style: normal;
+		text-transform: none;
+		letter-spacing: 0;
+		color: var(--text-3);
+		opacity: 0.7;
+	}
+	.d-body {
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: var(--r-md);
+		padding: 8px 10px;
+		font-family: var(--font-mono);
+		font-size: 12px;
+		line-height: 1.5;
+		color: var(--text);
+		outline: none;
+		resize: vertical;
+		transition: border-color .12s ease;
+	}
+	.d-body:focus { border-color: var(--accent); }
 
 	.d-byok-sep {
 		font-family: var(--font-mono);

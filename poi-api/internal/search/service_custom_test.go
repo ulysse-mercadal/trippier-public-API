@@ -2,6 +2,7 @@ package search_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -253,7 +254,7 @@ func TestProvidersRecommend_ReturnsResults(t *testing.T) {
 	// Use a cancelled context so CountryCode fails fast and uses global defaults.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	result := svc.ProvidersRecommend(ctx, 48.86, 2.35, false, nil, 5)
+	result := svc.ProvidersRecommend(ctx, 48.86, 2.35, types.KindPOI, nil, 5)
 	if len(result.Providers) == 0 {
 		t.Error("expected at least one provider recommendation")
 	}
@@ -263,7 +264,7 @@ func TestProvidersRecommend_LimitRespected(t *testing.T) {
 	svc := newSvc()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	result := svc.ProvidersRecommend(ctx, 48.86, 2.35, false, nil, 3)
+	result := svc.ProvidersRecommend(ctx, 48.86, 2.35, types.KindPOI, nil, 3)
 	if len(result.Providers) > 3 {
 		t.Errorf("expected at most 3 providers, got %d", len(result.Providers))
 	}
@@ -273,10 +274,10 @@ func TestProvidersRecommend_ForEvents(t *testing.T) {
 	svc := newSvc()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	result := svc.ProvidersRecommend(ctx, 48.86, 2.35, true, nil, 10)
+	result := svc.ProvidersRecommend(ctx, 48.86, 2.35, types.KindEvent, nil, 10)
 	for _, p := range result.Providers {
-		if !p.ForEvents {
-			t.Errorf("provider %q should be for_events=true", p.ID)
+		if !slices.Contains(p.Kinds, types.KindEvent) {
+			t.Errorf("provider %q should provide the event kind", p.ID)
 		}
 	}
 }
@@ -285,7 +286,7 @@ func TestProvidersRecommend_ScoresSorted(t *testing.T) {
 	svc := newSvc()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	result := svc.ProvidersRecommend(ctx, 48.86, 2.35, false, nil, 20)
+	result := svc.ProvidersRecommend(ctx, 48.86, 2.35, types.KindPOI, nil, 20)
 	for i := 1; i < len(result.Providers); i++ {
 		if result.Providers[i-1].Score < result.Providers[i].Score {
 			t.Errorf("providers not sorted by score: %.2f < %.2f at positions %d,%d",

@@ -1,11 +1,5 @@
 // Package ticketmaster implements the Provider interface for the Ticketmaster Discovery API v2.
-// Documentation: https://developer.ticketmaster.com/products-and-docs/apis/discovery-api/v2/
-//
-// This provider uses a BYOK (Bring Your Own Key) pattern: no API key is stored
-// server-side. Callers must inject their Ticketmaster API key into the request
-// context via byok.WithProviderKey(ctx, types.ProviderTicketmaster, key) before
-// invoking Search. If the key is absent, Search returns nil, nil (the provider
-// is silently skipped).
+// Uses a BYOK pattern: callers must inject the API key into ctx via byok.WithProviderKey; if absent, Search returns nil, nil.
 package ticketmaster
 
 import (
@@ -31,12 +25,14 @@ const (
 	maxRadiusKm    = 100
 )
 
+// tmResponse is the top-level shape of a Ticketmaster Discovery API events response.
 type tmResponse struct {
 	Embedded *struct {
 		Events []tmEvent `json:"events"`
 	} `json:"_embedded"`
 }
 
+// tmEvent is a single event as returned by the Ticketmaster Discovery API.
 type tmEvent struct {
 	ID     string    `json:"id"`
 	Name   string    `json:"name"`
@@ -56,6 +52,7 @@ type tmEvent struct {
 	} `json:"_embedded"`
 }
 
+// tmImage is an image asset associated with a Ticketmaster event.
 type tmImage struct {
 	URL    string `json:"url"`
 	Width  int    `json:"width"`
@@ -63,6 +60,7 @@ type tmImage struct {
 	Ratio  string `json:"ratio"`
 }
 
+// tmVenue is a venue location associated with a Ticketmaster event.
 type tmVenue struct {
 	Name     string `json:"name"`
 	Location struct {
@@ -71,15 +69,13 @@ type tmVenue struct {
 	} `json:"location"`
 }
 
-// Provider fetches events from the Ticketmaster Discovery API.
-// The API key is read per-request from the context (BYOK pattern).
+// Provider fetches events from the Ticketmaster Discovery API using a per-request BYOK API key.
 type Provider struct {
 	client  *http.Client
 	baseURL string
 }
 
-// New returns a Provider. No API key is stored — callers supply their own key
-// per request via the X-Ticketmaster-Key header (injected into context by the handler).
+// New creates a Provider using the default Ticketmaster API endpoint.
 func New() *Provider {
 	return &Provider{
 		client:  &http.Client{Timeout: defaultTimeout},
@@ -87,7 +83,8 @@ func New() *Provider {
 	}
 }
 
-// NewWithURL returns a Provider targeting a custom endpoint. Intended for tests.
+// NewWithURL creates a Provider targeting the given baseURL instead of the
+// default endpoint; intended for tests.
 func NewWithURL(baseURL string) *Provider {
 	return &Provider{
 		client:  &http.Client{Timeout: defaultTimeout},
@@ -95,18 +92,23 @@ func NewWithURL(baseURL string) *Provider {
 	}
 }
 
-// Name implements providers.Provider.
+// Name returns the provider identifier for Ticketmaster.
 func (p *Provider) Name() types.Provider { return types.ProviderTicketmaster }
-func (p *Provider) IsByok() bool         { return true }
 
-// SupportsMode implements providers.Provider.
+// IsByok reports that Ticketmaster always requires a caller-supplied API key,
+// returning true.
+func (p *Provider) IsByok() bool { return true }
+
+// SupportsMode reports whether mode is supported by this provider, returning
+// true if mode is radius or district.
 func (p *Provider) SupportsMode(mode types.SearchMode) bool {
 	return mode == types.ModeRadius || mode == types.ModeDistrict
 }
 
-// Search implements providers.Provider.
-// Returns nil, nil when no Ticketmaster API key is present in ctx (BYOK absent).
-// Radius is clamped to [minRadiusKm, maxRadiusKm] km to protect the daily API quota.
+// Search queries the Ticketmaster Discovery API for events matching q, using
+// ctx for the request and to carry the BYOK API key. It returns the matching
+// raw POIs, or nil if no API key is present, along with any error
+// encountered.
 func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {
 	apiKey := byok.GetProviderKey(ctx, types.ProviderTicketmaster)
 	if apiKey == "" {
@@ -138,8 +140,6 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 		"endDateTime":   {startOfDay.AddDate(1, 0, 0).Format("2006-01-02T15:04:05Z")},
 	}
 
-	// Ticketmaster latlong geo-search covers only the US market.
-	// Reverse-geocode to a city name so European results are found too.
 	if city, err := geo.ReverseGeocode(ctx, q.Lat, q.Lng); err == nil {
 		params.Set("city", city)
 	} else {
@@ -172,9 +172,9 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 	return p.toRawPois(result.Embedded.Events, q.Lat, q.Lng), nil
 }
 
-// toRawPois converts Ticketmaster events to RawPoi records.
-// centerLat/centerLng are used as approximate coordinates for events whose venue
-// has no location data (common for European Ticketmaster listings).
+// toRawPois converts events into RawPoi records, falling back to
+// (centerLat, centerLng) as an approximate location for venues lacking
+// coordinates. It returns the converted raw POIs.
 func (p *Provider) toRawPois(events []tmEvent, centerLat, centerLng float64) []types.RawPoi {
 	pois := make([]types.RawPoi, 0, len(events))
 	for _, ev := range events {
@@ -213,7 +213,9 @@ func (p *Provider) toRawPois(events []tmEvent, centerLat, centerLng float64) []t
 	return pois
 }
 
-// venueCoords extracts lat/lng from the first venue of an event.
+// venueCoords extracts the latitude and longitude from the first venue of
+// ev. It returns lat, lng, and ok indicating whether valid coordinates were
+// found.
 func (p *Provider) venueCoords(ev tmEvent) (lat, lng float64, ok bool) {
 	if ev.Embedded == nil || len(ev.Embedded.Venues) == 0 {
 		return 0, 0, false
@@ -230,7 +232,9 @@ func (p *Provider) venueCoords(ev tmEvent) (lat, lng float64, ok bool) {
 	return lat, lng, true
 }
 
-// pickThumbnail selects the best image: prefers 16:9 ratio at width ≥ 640, else first available.
+// pickThumbnail selects the best thumbnail from images, preferring 16:9
+// ratio at width >= 640. It returns the chosen thumbnail URL, or an empty
+// string if none are available.
 func (p *Provider) pickThumbnail(images []tmImage) string {
 	for _, img := range images {
 		if img.Ratio == "16_9" && img.Width >= 640 {
@@ -243,8 +247,9 @@ func (p *Provider) pickThumbnail(images []tmImage) string {
 	return ""
 }
 
-// @param images the raw Ticketmaster images array for an event.
-// @return up to 3 distinct image URLs, prioritising 16:9 at width ≥ 640 then filling with any remaining.
+// pickImages selects up to 3 distinct image URLs from images, prioritising
+// 16:9 ratio at width >= 640. It returns the selected image URLs, or nil if
+// none are available.
 func (p *Provider) pickImages(images []tmImage) []string {
 	const max = 3
 	out := make([]string, 0, max)
@@ -277,6 +282,7 @@ func (p *Provider) pickImages(images []tmImage) []string {
 	return out
 }
 
+// init registers the Ticketmaster provider factory.
 func init() {
 	providers.Register(types.ProviderTicketmaster, func(_ providers.BuildConfig) (providers.Provider, error) {
 		return New(), nil

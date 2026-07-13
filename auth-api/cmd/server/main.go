@@ -23,6 +23,8 @@ import (
 	mw "github.com/trippier/auth-api/internal/middleware"
 )
 
+// main wires up config, dependencies, and routes, then runs the auth-api
+// server until shutdown.
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -66,11 +68,13 @@ func main() {
 
 	r.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
 
+	v1 := r.Group("/v1")
+
 	loginLimiter := mw.IPRateLimit(rdb, 10, time.Minute)
 	registerLimiter := mw.IPRateLimit(rdb, 5, 15*time.Minute)
-	authHandler.RegisterRoutes(r.Group(""), jwtAuth, loginLimiter, registerLimiter)
+	authHandler.RegisterRoutes(v1.Group(""), jwtAuth, loginLimiter, registerLimiter)
 	keyHandler.RegisterRoutes(
-		r.Group("/api-keys"),
+		v1.Group("/api-keys"),
 		r.Group("/internal", internalAuth),
 		jwtAuth,
 	)
@@ -103,7 +107,9 @@ func main() {
 	log.Info("server stopped")
 }
 
-// buildLogger returns a production zap logger, or a development logger when level is "debug".
+// buildLogger creates a zap logger for the given level, using development
+// settings when level is "debug" and production settings otherwise. It
+// returns the configured zap logger.
 func buildLogger(level string) *zap.Logger {
 	var cfg zap.Config
 	if level == "debug" {

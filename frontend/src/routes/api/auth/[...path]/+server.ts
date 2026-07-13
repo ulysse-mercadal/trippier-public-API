@@ -1,9 +1,15 @@
 import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 
+/**
+ * Forwards an incoming request to the auth API and relays its response.
+ * @param request the incoming request to forward
+ * @param params route parameters, including the wildcard path
+ * @returns the proxied response from the auth API
+ */
 const proxy: RequestHandler = async ({ request, params }) => {
-	const upstream = new URL(`${env.AUTH_API_URL}/${params.path}`);
-	upstream.search = new URL(request.url).search; // forward query string (?token=… etc.)
+	const upstream = new URL(`${env.AUTH_API_URL}/v1/${params.path}`);
+	upstream.search = new URL(request.url).search;
 
 	const headers = new Headers();
 	for (const name of ['content-type', 'authorization', 'accept', 'accept-language']) {

@@ -26,7 +26,10 @@
 	$: prevPage    = PAGES[pageIdx - 1] ?? null;
 	$: nextPage    = PAGES[pageIdx + 1] ?? null;
 
-	// Updates URL hash and scrolls main column to top
+	/**
+	 * Sets active doc page, updates URL hash and scrolls main column to top.
+	 * @param id doc page id to activate
+	 */
 	function select(id: string) {
 		activeId = id;
 		sidebarOpen = false;
@@ -36,16 +39,19 @@
 		}
 	}
 
+	/** Closes both the sidebar and panel drawers. */
 	function closeDrawers() {
 		sidebarOpen = false;
 		panelOpen = false;
 	}
 
+	/** Toggles the mobile sidebar drawer, closing the panel drawer if opened. */
 	function toggleSidebar() {
 		sidebarOpen = !sidebarOpen;
 		if (sidebarOpen) panelOpen = false;
 	}
 
+	/** Toggles the mobile panel drawer, closing the sidebar drawer if opened. */
 	function togglePanel() {
 		panelOpen = !panelOpen;
 		if (panelOpen) sidebarOpen = false;
@@ -55,10 +61,15 @@
 		const hash = window.location.hash.slice(1);
 		if (hash && PAGES.some(p => p.id === hash)) activeId = hash;
 
+		/** Syncs activeId from the current URL hash. */
 		const handleHash = () => {
 			const h = window.location.hash.slice(1);
 			if (h && PAGES.some(p => p.id === h)) activeId = h;
 		};
+		/**
+		 * Closes the drawers when the Escape key is pressed.
+		 * @param e keyboard event from the window listener
+		 */
 		const handleKey = (e: KeyboardEvent) => {
 			if (e.key === 'Escape') closeDrawers();
 		};
@@ -158,7 +169,7 @@
 		scroll-behavior: smooth;
 	}
 	.d-main-inner {
-		max-width: 720px;
+		max-width: none;
 		padding: 56px 56px 80px;
 	}
 	.d-pager {

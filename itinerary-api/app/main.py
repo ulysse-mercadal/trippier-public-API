@@ -21,9 +21,14 @@ if not _s.auth_disabled:
         cost=50,
     )
 
-app.include_router(itinerary_router)
+app.include_router(itinerary_router, prefix="/v1")
 
 
 @app.get("/health", tags=["meta"])
 def health() -> dict[str, str]:
+    """Report service liveness for health checks.
+
+    Returns:
+        Status payload indicating the service is ok.
+    """
     return {"status": "ok"}

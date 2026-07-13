@@ -16,9 +16,15 @@
 	let votes  = item.votes  ?? '';
 	let column = colId;
 
-	// Generates a short random ID for new items
+	/**
+	 * Generates a short random identifier for a new item.
+	 * @returns Random 6-character id.
+	 */
 	function genId() { return Math.random().toString(36).slice(2, 8); }
 
+	/**
+	 * Validates the form and saves the current item.
+	 */
 	function submit() {
 		if (!title.trim() || !issue) return;
 		const result: RoadmapItem = {
@@ -32,6 +38,10 @@
 		onSave(column, result);
 	}
 
+	/**
+	 * Closes the modal when the Escape key is pressed.
+	 * @param e Keyboard event.
+	 */
 	function onKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') onClose();
 	}

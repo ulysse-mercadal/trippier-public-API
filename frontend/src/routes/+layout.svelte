@@ -16,6 +16,9 @@
 	$: isDocs      = $page.url.pathname.startsWith('/docs');
 	$: isDashboard = $page.url.pathname.startsWith('/dashboard');
 
+	/**
+	 * Restores the current locale/theme and rehydrates the auth session from a stored token.
+	 */
 	onMount(async () => {
 		initLocale();
 		initTheme();

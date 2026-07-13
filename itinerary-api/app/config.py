@@ -25,10 +25,20 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    """Build and cache the application settings instance.
+
+    Returns:
+        The cached Settings instance.
+    """
     return Settings()
 
 
 def get_poi_client() -> PoiClient:
+    """Create a POI client configured from the current settings.
+
+    Returns:
+        A configured PoiClient instance.
+    """
     s = get_settings()
     return PoiClient(
         base_url=s.poi_api_url,
@@ -38,4 +48,9 @@ def get_poi_client() -> PoiClient:
 
 
 def get_itinerary_service() -> ItineraryService:
+    """Create a new itinerary service instance.
+
+    Returns:
+        A new ItineraryService instance.
+    """
     return ItineraryService()

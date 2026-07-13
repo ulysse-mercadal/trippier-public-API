@@ -24,9 +24,8 @@ var (
 	ErrUserNotFound = errors.New("user not found")
 )
 
-// Service manages API keys and the per-user Redis token buckets. The quota
-// (tokens_limit / tokens_reset_interval_secs) lives on the users row — keys
-// belonging to the same user share a single bucket.
+// Service manages API keys and the per-user Redis token buckets; quota lives on
+// the users row and is shared by all of a user's keys.
 type Service struct {
 	db       *pgxpool.Pool
 	rdb      *redis.Client
@@ -34,21 +33,19 @@ type Service struct {
 	lastUsed chan string
 }
 
-// lastUsedBufferSize caps the bounded channel that feeds the last_used_at
-// background writer. Bursts beyond this size drop the oldest pending updates
-// rather than spawning unbounded goroutines when Postgres slows down.
+// lastUsedBufferSize bounds the last_used_at update channel.
 const lastUsedBufferSize = 1024
 
-// New creates a Service and launches a single background worker that flushes
-// last_used_at updates in batches, bounded by lastUsedBufferSize.
+// New creates a Service backed by db and rdb, using log for diagnostics, and
+// starts the background last_used_at writer. It returns the new Service.
 func New(db *pgxpool.Pool, rdb *redis.Client, log *zap.Logger) *Service {
 	s := &Service{db: db, rdb: rdb, log: log, lastUsed: make(chan string, lastUsedBufferSize)}
 	go s.lastUsedWorker()
 	return s
 }
 
-// lastUsedWorker drains the lastUsed channel and writes last_used_at for each
-// key ID. Runs until the channel is closed (process exit).
+// lastUsedWorker drains lastUsed and writes last_used_at per key ID until the
+// channel closes.
 func (s *Service) lastUsedWorker() {
 	for keyID := range s.lastUsed {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -57,8 +54,8 @@ func (s *Service) lastUsedWorker() {
 	}
 }
 
-// markUsed enqueues a non-blocking last_used_at update. When the worker is
-// backed up the call drops silently — keeping the request-path fast.
+// markUsed enqueues a non-blocking last_used_at update for keyID, dropping it
+// silently if the worker is backed up.
 func (s *Service) markUsed(keyID string) {
 	select {
 	case s.lastUsed <- keyID:
@@ -72,19 +69,21 @@ type CreateResult struct {
 	Key          models.APIKey
 }
 
-// Create generates a new API key for userID, reading the quota from the users row.
+// Create generates a new API key for userID with the given name, reading the
+// quota from the users row. It returns the created key with its one-time
+// plaintext value, or an error.
 func (s *Service) Create(ctx context.Context, userID, name string) (*CreateResult, error) {
 	limit, interval, err := s.getUserQuota(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	raw, err := randomBytes(20) // 40-char hex → "trp_" + 40 = 44 chars total
+	raw, err := randomBytes(20)
 	if err != nil {
 		return nil, err
 	}
 	plaintext := "trp_" + raw
-	prefix := plaintext[:12] // "trp_XXXXXXXX"
+	prefix := plaintext[:12]
 
 	h := sha256.Sum256([]byte(plaintext))
 	sha256Hash := hex.EncodeToString(h[:])
@@ -122,8 +121,8 @@ func (s *Service) Create(ctx context.Context, userID, name string) (*CreateResul
 	return &CreateResult{PlaintextKey: plaintext, Key: key}, nil
 }
 
-// List returns all non-revoked keys for a user, enriched with the user-level
-// quota (from users) and live Redis usage data (shared bucket).
+// List returns userID's non-revoked keys enriched with quota and live Redis
+// usage, or an error.
 func (s *Service) List(ctx context.Context, userID string) ([]models.APIKeyWithUsage, error) {
 	limit, interval, err := s.getUserQuota(ctx, userID)
 	if err != nil {
@@ -174,7 +173,8 @@ func (s *Service) List(ctx context.Context, userID string) ([]models.APIKeyWithU
 	return keys, nil
 }
 
-// Revoke marks a key as revoked.
+// Revoke marks keyID as revoked for userID. It returns ErrNotFound if the key
+// does not exist for that user, or another error if the update failed.
 func (s *Service) Revoke(ctx context.Context, userID, keyID string) error {
 	tag, err := s.db.Exec(ctx,
 		`UPDATE api_keys SET revoked = true WHERE id = $1 AND user_id = $2`,
@@ -189,9 +189,9 @@ func (s *Service) Revoke(ctx context.Context, userID, keyID string) error {
 	return nil
 }
 
-// ValidateBySHA256 is the fast path used by internal middleware validation. The
-// returned quota reflects the current users row, so admin updates take effect
-// on the next request without restart.
+// ValidateBySHA256 is the fast-path key lookup used by middleware, given the
+// SHA-256 hash of the plaintext key; quota always reflects the current users
+// row. It returns the key info with validity and quota, or an error.
 func (s *Service) ValidateBySHA256(ctx context.Context, sha256Hash string) (*models.InternalKeyInfo, error) {
 	var info models.InternalKeyInfo
 	err := s.db.QueryRow(ctx,
@@ -219,8 +219,10 @@ func (s *Service) ValidateBySHA256(ctx context.Context, sha256Hash string) (*mod
 	return &info, nil
 }
 
-// SetUserQuota updates the quota for a user and forces the Redis bucket to the
-// new limit immediately. intervalSecs == 0 keeps the existing interval.
+// SetUserQuota updates userID's quota to limit and intervalSecs (0 keeps the
+// existing interval), and forces the Redis bucket to the new limit. It
+// returns ErrUserNotFound if the user does not exist, or another error if the
+// update failed.
 func (s *Service) SetUserQuota(ctx context.Context, userID string, limit, intervalSecs int) error {
 	var newInterval int
 	err := s.db.QueryRow(ctx,
@@ -246,8 +248,9 @@ func (s *Service) SetUserQuota(ctx context.Context, userID string, limit, interv
 	return nil
 }
 
-// SetUserQuotaByEmail is a convenience for admin tooling: resolves the user by
-// email and delegates to SetUserQuota.
+// SetUserQuotaByEmail resolves the user by email and delegates to
+// SetUserQuota with limit and intervalSecs. It returns the resolved user ID,
+// or an error.
 func (s *Service) SetUserQuotaByEmail(ctx context.Context, email string, limit, intervalSecs int) (string, error) {
 	var userID string
 	err := s.db.QueryRow(ctx, `SELECT id FROM users WHERE email = $1`, email).Scan(&userID)
@@ -263,7 +266,8 @@ func (s *Service) SetUserQuotaByEmail(ctx context.Context, email string, limit, 
 	return userID, nil
 }
 
-// getUserQuota returns (tokens_limit, tokens_reset_interval_secs) for a user.
+// getUserQuota returns the token limit and reset interval in seconds for
+// userID, or an error.
 func (s *Service) getUserQuota(ctx context.Context, userID string) (int, int, error) {
 	var limit, interval int
 	err := s.db.QueryRow(ctx,
@@ -279,7 +283,7 @@ func (s *Service) getUserQuota(ctx context.Context, userID string) (int, int, er
 	return limit, interval, nil
 }
 
-// randomBytes returns n random bytes encoded as a hex string.
+// randomBytes returns n random bytes encoded as a hex string, or an error.
 func randomBytes(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {

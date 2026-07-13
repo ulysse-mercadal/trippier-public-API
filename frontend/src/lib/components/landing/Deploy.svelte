@@ -29,7 +29,7 @@ docker run -p 8080:8080 \\
   trippier/api
 
 # 3. go
-curl localhost:8080/v1/healthz`}</pre>
+curl localhost:8080/health`}</pre>
 				<ul class="deploy-list compact">
 					<li>
 						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12l5 5 9-11"/></svg>

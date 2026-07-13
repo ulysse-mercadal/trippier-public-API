@@ -7,6 +7,10 @@
 
 	let query = '';
 
+	/**
+	 * Filters PAGES by the current search query and groups the results by their `group` field.
+	 * @returns An array of `[group, items]` tuples, each pairing a group name with its matching pages.
+	 */
 	$: groups = (() => {
 		const q = query.trim().toLowerCase();
 		const filtered = q

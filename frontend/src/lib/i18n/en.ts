@@ -1,7 +1,6 @@
 import type { Dict } from './fr';
 
 export const en: Dict = {
-	// Nav
 	nav_features: 'Features',
 	nav_deploy: 'Deployment',
 	nav_docs: 'Docs',
@@ -10,7 +9,6 @@ export const en: Dict = {
 	nav_dashboard: 'Dashboard',
 	nav_logout: 'Sign out',
 
-	// Hero
 	hero_badge: 'Open source · v0.4.2 beta · MIT',
 	hero_title: 'The travel API',
 	hero_accent: 'that thinks like a local guide.',
@@ -23,7 +21,6 @@ export const en: Dict = {
 	hero_stat_license: 'license',
 	hero_stat_selfhosted: 'self-hosted',
 
-	// Features
 	feat_eyebrow: 'what the API does',
 	feat_title: 'Four building blocks to picture any journey.',
 	feat_poi_title: 'Multi-source POI aggregation',
@@ -39,12 +36,10 @@ export const en: Dict = {
 	feat_routing_desc:
 		'Each provider is scored country by country based on its reliability, such as Baidu for China, Kakao for Korea or Navitime for Japan. You can let auto-selection do the work, or take back control with your own weights and exclusion lists.',
 
-	// Console
 	console_eyebrow: 'in practice',
 	console_title: 'One call. One optimized itinerary.',
 	console_replay: '↻ replay',
 
-	// Routes
 	routes_eyebrow: 'interactive docs',
 	routes_title: 'All routes. Try them in one click.',
 	routes_sub: 'Select a route, run it, read the real response. No key required for free routes.',
@@ -70,7 +65,6 @@ export const en: Dict = {
 	routes_desc_providers: 'List of active providers and their status',
 	routes_desc_health: 'API health status',
 
-	// Deploy
 	deploy_eyebrow: 'two ways to run',
 	deploy_title: 'We gently suggest self-hosting it.',
 	deploy_sub: "If the API is open source, it's mostly so you can deploy it on your own servers, with no limits. The cloud version is here for those who just want to try it or skip the infra work. In that case, what you pay only covers the cost of running it on our machines.",
@@ -92,7 +86,6 @@ export const en: Dict = {
 	deploy_cloud_note: 'There is no margin on the API: tokens only cover the cloud bill (compute, bandwidth, cache).',
 	deploy_cloud_cta: 'See packs',
 
-	// Pricing
 	pricing_eyebrow: 'cloud tokens',
 	pricing_title: 'At cost, per unit, no tiers, no subscription.',
 	pricing_sub: "A single rate, whatever your volume. There's no margin on the API: tokens simply fund the compute, bandwidth and cache of our servers. The self-hosted version, in turn, stays free and unlimited.",
@@ -118,7 +111,6 @@ export const en: Dict = {
 	pricing_enterprise_desc: 'We switch to direct billing, at the actual infra cost.',
 	pricing_enterprise_link: 'get in touch',
 
-	// BYOK
 	byok_eyebrow: 'bring your own key',
 	byok_title: 'Plug in the providers that',
 	byok_accent: 'you',
@@ -130,7 +122,6 @@ export const en: Dict = {
 	byok_li4: 'Geo-aware auto-selection picks the right provider for each country.',
 	byok_detected: 'providers detected',
 
-	// Footer
 	footer_tagline: 'Open source · MIT',
 	footer_product: 'Product',
 	footer_features: 'Features',
@@ -148,7 +139,6 @@ export const en: Dict = {
 	footer_web: 'Web',
 	footer_status: 'Status',
 
-	// Login
 	login_title_login: 'Welcome back',
 	login_title_register: 'Get started for free',
 	login_sub_login: 'Sign in to manage your API keys.',
@@ -174,7 +164,6 @@ export const en: Dict = {
 	login_error_generic: 'Something went wrong',
 	login_invalid_code: 'Invalid code',
 
-	// Dashboard
 	db_title: 'Your API keys',
 	db_back: '← Home',
 	db_tokens_remaining: 'tokens remaining',
@@ -198,7 +187,6 @@ export const en: Dict = {
 	db_modal_cancel: 'cancel',
 	db_modal_confirm: 'Revoke',
 
-	// Roadmap
 	rm_eyebrow: 'public roadmap',
 	rm_title: "What we're building,",
 	rm_accent: 'and why',

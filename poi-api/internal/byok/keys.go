@@ -11,17 +11,14 @@ import (
 // genericKey is the context key type for the open-ended provider key store.
 type genericKey struct{ id types.Provider }
 
-// @param ctx parent context.
-// @param id provider identifier the key belongs to.
-// @param key the user-supplied BYOK credential.
-// @return a derived context carrying the key under a provider-specific slot.
+// WithProviderKey returns a copy of ctx that carries key as the BYOK
+// credential for provider id.
 func WithProviderKey(ctx context.Context, id types.Provider, key string) context.Context {
 	return context.WithValue(ctx, genericKey{id}, key)
 }
 
-// @param ctx the request context.
-// @param id provider identifier to look up.
-// @return the stored BYOK key, or "" when none was set.
+// GetProviderKey returns the BYOK credential stored in ctx for provider id,
+// or "" if none was set.
 func GetProviderKey(ctx context.Context, id types.Provider) string {
 	v, _ := ctx.Value(genericKey{id}).(string)
 	return v

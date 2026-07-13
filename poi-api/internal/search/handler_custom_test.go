@@ -3,6 +3,7 @@ package search_test
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/trippier/poi-api/pkg/types"
@@ -264,8 +265,8 @@ func TestHandlerProvidersRecommend_ForEvents(t *testing.T) {
 	var result types.RecommendResult
 	json.NewDecoder(w.Body).Decode(&result)
 	for _, p := range result.Providers {
-		if !p.ForEvents {
-			t.Errorf("provider %q should be for_events", p.ID)
+		if !slices.Contains(p.Kinds, types.KindEvent) {
+			t.Errorf("provider %q should provide the event kind", p.ID)
 		}
 	}
 }

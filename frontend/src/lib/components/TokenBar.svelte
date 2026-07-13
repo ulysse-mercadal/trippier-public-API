@@ -6,6 +6,10 @@
 	$: pct     = limit > 0 ? Math.max(0, Math.min(100, (remaining / limit) * 100)) : 0;
 	$: variant = pct > 25 ? 'ok' : pct > 10 ? 'warn' : 'empty';
 
+	/**
+	 * Formats the reset countdown into a short human-readable label.
+	 * @returns Reset label in minutes or hours.
+	 */
 	$: resetLabel = (() => {
 		const m = Math.ceil(resetsInSecs / 60);
 		return m > 60 ? `${Math.ceil(m / 60)}h` : `${m}m`;

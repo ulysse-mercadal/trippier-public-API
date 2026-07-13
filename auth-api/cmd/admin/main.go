@@ -1,6 +1,4 @@
-// Package main is the auth-api admin CLI: operator-only tasks that connect
-// directly to the same Postgres + Redis as the server. Ships in the same
-// container image so it can be invoked via `docker exec`.
+// Package main is the auth-api admin CLI for operator-only tasks, run via `docker exec`.
 package main
 
 import (
@@ -29,6 +27,7 @@ Examples:
   admin set-quota --email=user@example.com --limit=50000 --interval=2592000
 `
 
+// main dispatches the admin CLI subcommand.
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprint(os.Stderr, usage)
@@ -47,6 +46,8 @@ func main() {
 	}
 }
 
+// runSetQuota parses set-quota flags from args and applies the new token
+// quota, returning the process exit code.
 func runSetQuota(args []string) int {
 	fs := flag.NewFlagSet("set-quota", flag.ExitOnError)
 	email := fs.String("email", "", "user email")
@@ -92,8 +93,9 @@ func runSetQuota(args []string) int {
 	return 0
 }
 
-// buildService wires the apikey.Service against the same DB + Redis the server
-// uses (config is read from the same AUTH_* env vars).
+// buildService wires apikey.Service against the server's DB + Redis
+// (AUTH_* env vars), returning the service, a cleanup function to release
+// its connections, and any error encountered.
 func buildService() (*apikey.Service, func(), error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -115,7 +117,6 @@ func buildService() (*apikey.Service, func(), error) {
 	}
 	rdb := redis.NewClient(opt)
 
-	// Silent logger — CLI output is the result line, not log spam.
 	svc := apikey.New(pool, rdb, zap.NewNop())
 	cleanup := func() {
 		pool.Close()

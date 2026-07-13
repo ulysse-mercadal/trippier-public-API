@@ -60,7 +60,8 @@ type Provider struct {
 	baseURL  string
 }
 
-// New returns a Provider authenticated with the given GeoNames username.
+// New creates a Provider authenticated with the given GeoNames username and
+// returns the configured Provider.
 func New(username string) *Provider {
 	return &Provider{
 		client:   &http.Client{Timeout: defaultTimeout},
@@ -69,8 +70,9 @@ func New(username string) *Provider {
 	}
 }
 
-// NewWithURL returns a Provider targeting a custom API endpoint.
-// Intended for testing against a local httptest server.
+// NewWithURL returns a Provider targeting the custom API endpoint baseURL and
+// authenticated with the given GeoNames username. Intended for testing
+// against a local httptest server. It returns the configured Provider.
 func NewWithURL(baseURL, username string) *Provider {
 	return &Provider{
 		client:   &http.Client{Timeout: defaultTimeout},
@@ -79,15 +81,19 @@ func NewWithURL(baseURL, username string) *Provider {
 	}
 }
 
-// Name implements providers.Provider.
+// Name implements providers.Provider and returns the GeoNames provider
+// identifier.
 func (p *Provider) Name() types.Provider { return types.ProviderGeoNames }
 
-// SupportsMode implements providers.Provider.
+// SupportsMode implements providers.Provider. It reports whether the given
+// search mode is supported by the GeoNames provider.
 func (p *Provider) SupportsMode(mode types.SearchMode) bool {
 	return mode == types.ModeRadius || mode == types.ModeDistrict
 }
 
-// Search implements providers.Provider.
+// Search implements providers.Provider. It queries the GeoNames API for the
+// given search query q, using ctx for cancellation, and returns the matching
+// raw POIs, or an error if the request or response decoding fails.
 func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {
 	var endpoint string
 	var params url.Values
@@ -151,7 +157,9 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 	return p.toRawPois(result.Geonames), nil
 }
 
-// toRawPois converts GeoNames items to RawPoi records, skipping entries with unknown feature codes or invalid coordinates.
+// toRawPois converts the given raw GeoNames API items to RawPoi records,
+// skipping entries with unknown feature codes or invalid coordinates, and
+// returns the converted records.
 func (p *Provider) toRawPois(items []geonameItem) []types.RawPoi {
 	pois := make([]types.RawPoi, 0, len(items))
 	for _, item := range items {
@@ -176,6 +184,7 @@ func (p *Provider) toRawPois(items []geonameItem) []types.RawPoi {
 	return pois
 }
 
+// init registers the GeoNames provider factory.
 func init() {
 	providers.Register(types.ProviderGeoNames, func(cfg providers.BuildConfig) (providers.Provider, error) {
 		if cfg.GeoNamesUsername == "" {

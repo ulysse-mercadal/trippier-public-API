@@ -1,14 +1,13 @@
 export const fr = {
-	// Nav
 	nav_features: 'Fonctionnalités',
 	nav_deploy: 'Déploiement',
 	nav_docs: 'Docs',
 	nav_roadmap: 'Roadmap',
 	nav_login: 'Connexion',
+
 	nav_dashboard: 'Dashboard',
 	nav_logout: 'Déconnexion',
 
-	// Hero
 	hero_badge: 'Open source · v0.4.2 beta · MIT',
 	hero_title: "L'API de voyage",
 	hero_accent: 'qui pense comme un guide local.',
@@ -21,7 +20,6 @@ export const fr = {
 	hero_stat_license: 'licence',
 	hero_stat_selfhosted: 'self-hosted',
 
-	// Features
 	feat_eyebrow: "ce que l'API fait",
 	feat_title: 'Quatre briques pour imaginer tous vos voyages.',
 	feat_poi_title: 'Agrégation de POI multi-sources',
@@ -37,12 +35,10 @@ export const fr = {
 	feat_routing_desc:
 		"Chaque provider est évalué par pays selon sa fiabilité, comme Baidu en Chine, Kakao en Corée ou Navitime au Japon. Vous pouvez laisser l'auto-sélection faire le travail, ou reprendre la main avec vos propres pondérations et listes d'exclusion.",
 
-	// Console
 	console_eyebrow: 'en pratique',
 	console_title: 'Un appel. Un itinéraire optimisé.',
 	console_replay: '↻ rejouer',
 
-	// Routes
 	routes_eyebrow: 'doc interactive',
 	routes_title: 'Toutes les routes. Testables en un clic.',
 	routes_sub: "Sélectionnez une route, lancez-la, lisez la réponse réelle. Aucune clé requise pour les routes à 0 token.",
@@ -68,7 +64,6 @@ export const fr = {
 	routes_desc_providers: 'Liste des providers actifs et leur statut',
 	routes_desc_health: "Statut de santé de l'API",
 
-	// Deploy
 	deploy_eyebrow: 'deux façons de tourner',
 	deploy_title: "On vous suggère plutôt de l'héberger chez vous.",
 	deploy_sub: "Si l'API est open source, c'est avant tout pour que vous puissiez la déployer sur vos propres serveurs, sans aucune limite. La version cloud reste là pour ceux qui souhaitent simplement essayer ou éviter la gestion d'infrastructure. Dans ce cas, ce que vous payez couvre uniquement le coût d'exécution sur nos machines.",
@@ -90,7 +85,6 @@ export const fr = {
 	deploy_cloud_note: "Il n'y a aucune marge sur l'API : les tokens couvrent uniquement la facture cloud (compute, bande passante, cache).",
 	deploy_cloud_cta: 'Voir les packs',
 
-	// Pricing
 	pricing_eyebrow: 'tokens cloud',
 	pricing_title: "Au prix coûtant, à l'unité, sans paliers ni abonnement.",
 	pricing_sub: "Un seul tarif, quel que soit votre volume. Il n'y a aucune marge sur l'API : les tokens financent simplement le compute, la bande passante et le cache de nos serveurs. La version self-hosted, elle, reste gratuite et illimitée.",
@@ -116,7 +110,6 @@ export const fr = {
 	pricing_enterprise_desc: "Nous passons à une facturation directe, au coût réel de l'infra.",
 	pricing_enterprise_link: 'écrivez-nous',
 
-	// BYOK
 	byok_eyebrow: 'bring your own key',
 	byok_title: 'Branchez les providers qui',
 	byok_accent: 'vous',
@@ -128,7 +121,6 @@ export const fr = {
 	byok_li4: "L'auto-sélection géo-intelligente choisit le bon provider selon le pays.",
 	byok_detected: 'providers détectés',
 
-	// Footer
 	footer_tagline: 'Open source · MIT',
 	footer_product: 'Produit',
 	footer_features: 'Fonctionnalités',
@@ -146,7 +138,6 @@ export const fr = {
 	footer_web: 'Web',
 	footer_status: 'Statut',
 
-	// Login
 	login_title_login: 'Bon retour',
 	login_title_register: 'Commencer gratuitement',
 	login_sub_login: 'Connectez-vous pour gérer vos clés API.',
@@ -172,7 +163,6 @@ export const fr = {
 	login_error_generic: 'Une erreur est survenue',
 	login_invalid_code: 'Code invalide',
 
-	// Dashboard
 	db_title: 'Vos clés API',
 	db_back: '← Accueil',
 	db_tokens_remaining: 'tokens restants',
@@ -196,7 +186,6 @@ export const fr = {
 	db_modal_cancel: 'annuler',
 	db_modal_confirm: 'Révoquer',
 
-	// Roadmap
 	rm_eyebrow: 'roadmap publique',
 	rm_title: 'Ce qu\'on construit,',
 	rm_accent: 'et pourquoi',

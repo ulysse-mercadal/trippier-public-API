@@ -1,11 +1,5 @@
 // Package eventbrite implements the Provider interface for the Eventbrite API v3.
-// Documentation: https://www.eventbrite.com/platform/api
-//
-// This provider uses a BYOK (Bring Your Own Key) pattern: no private token is
-// stored server-side. Callers must inject their Eventbrite private token into the
-// request context via byok.WithProviderKey(ctx, types.ProviderEventbrite, token)
-// before invoking Search. If the token is absent, Search returns nil, nil
-// (the provider is silently skipped).
+// Uses BYOK: callers inject a private token via byok.WithProviderKey before calling Search; Search returns nil, nil if absent.
 package eventbrite
 
 import (
@@ -30,10 +24,12 @@ const (
 	maxRadiusKm    = 100
 )
 
+// ebResponse is the top-level Eventbrite search API response.
 type ebResponse struct {
 	Events []ebEvent `json:"events"`
 }
 
+// ebEvent is a single event returned by the Eventbrite search API.
 type ebEvent struct {
 	ID          string   `json:"id"`
 	URL         string   `json:"url"`
@@ -45,18 +41,22 @@ type ebEvent struct {
 	Venue       *ebVenue `json:"venue"`
 }
 
+// ebText holds a plain text field from the Eventbrite API.
 type ebText struct {
 	Text string `json:"text"`
 }
 
+// ebTime holds a UTC timestamp string from the Eventbrite API.
 type ebTime struct {
 	UTC string `json:"utc"`
 }
 
+// ebLogo holds an event's logo image URL.
 type ebLogo struct {
 	URL string `json:"url"`
 }
 
+// ebVenue holds a venue's coordinates as returned by the Eventbrite API.
 type ebVenue struct {
 	Latitude  string `json:"latitude"`
 	Longitude string `json:"longitude"`
@@ -69,8 +69,9 @@ type Provider struct {
 	baseURL string
 }
 
-// New returns a Provider. No private token is stored — callers supply their own
-// token per request via the X-Eventbrite-Token header (injected into context by the handler).
+// New creates a Provider using the default Eventbrite API URL. No token is stored;
+// callers supply their own token per request via context (BYOK). It returns the
+// new Provider.
 func New() *Provider {
 	return &Provider{
 		client:  &http.Client{Timeout: defaultTimeout},
@@ -78,7 +79,8 @@ func New() *Provider {
 	}
 }
 
-// NewWithURL returns a Provider targeting a custom endpoint. Intended for tests.
+// NewWithURL creates a Provider targeting the given custom Eventbrite API
+// endpoint baseURL, for tests. It returns the new Provider.
 func NewWithURL(baseURL string) *Provider {
 	return &Provider{
 		client:  &http.Client{Timeout: defaultTimeout},
@@ -86,18 +88,22 @@ func NewWithURL(baseURL string) *Provider {
 	}
 }
 
-// Name implements providers.Provider.
+// Name returns the provider identifier for Eventbrite.
 func (p *Provider) Name() types.Provider { return types.ProviderEventbrite }
-func (p *Provider) IsByok() bool         { return true }
 
-// SupportsMode implements providers.Provider.
+// IsByok reports that Eventbrite requires bring-your-own-key, always returning true.
+func (p *Provider) IsByok() bool { return true }
+
+// SupportsMode reports whether Eventbrite supports the given search mode,
+// returning true if mode is radius or district search.
 func (p *Provider) SupportsMode(mode types.SearchMode) bool {
 	return mode == types.ModeRadius || mode == types.ModeDistrict
 }
 
-// Search implements providers.Provider.
-// Returns nil, nil when no Eventbrite private token is present in ctx (BYOK absent).
-// Radius is clamped to [minRadiusKm, maxRadiusKm] km to protect the daily API quota.
+// Search queries Eventbrite for events near the location described by q, using
+// a BYOK token read from ctx. The requested radius is clamped to
+// [minRadiusKm, maxRadiusKm] km. It returns the matching raw POIs, or nil, nil
+// if no token is present in ctx.
 func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {
 	token := byok.GetProviderKey(ctx, types.ProviderEventbrite)
 	if token == "" {
@@ -144,7 +150,9 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 	return p.toRawPois(result.Events), nil
 }
 
-// toRawPois converts Eventbrite events to RawPoi records, skipping entries without a venue location.
+// toRawPois converts the given Eventbrite events to RawPoi records, skipping
+// entries with no name or without a venue location, and returns the converted
+// raw POIs.
 func (p *Provider) toRawPois(events []ebEvent) []types.RawPoi {
 	pois := make([]types.RawPoi, 0, len(events))
 	for _, ev := range events {
@@ -189,7 +197,8 @@ func (p *Provider) toRawPois(events []ebEvent) []types.RawPoi {
 	return pois
 }
 
-// venueCoords extracts lat/lng from the event venue.
+// venueCoords extracts the latitude and longitude from ev's venue, returning
+// the parsed coordinates and whether both values parsed successfully.
 func (p *Provider) venueCoords(ev ebEvent) (lat, lng float64, ok bool) {
 	if ev.Venue == nil || ev.Venue.Latitude == "" || ev.Venue.Longitude == "" {
 		return 0, 0, false
@@ -199,6 +208,7 @@ func (p *Provider) venueCoords(ev ebEvent) (lat, lng float64, ok bool) {
 	return lat, lng, err1 == nil && err2 == nil
 }
 
+// init registers the Eventbrite provider factory.
 func init() {
 	providers.Register(types.ProviderEventbrite, func(_ providers.BuildConfig) (providers.Provider, error) {
 		return New(), nil

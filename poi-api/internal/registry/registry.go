@@ -1,8 +1,6 @@
-// Package registry holds static metadata for every known provider: geographic confidence
-// scores per ISO 3166-1 alpha-2 country and per POI category. This data drives the
-// geo-aware auto-selection logic and powers the /pois/providers/catalog endpoint.
-//
-// Adding a new provider: append an entry to All. The backend implementation is independent;
+// Package registry holds static metadata for every known provider — geographic and
+// category confidence scores that drive geo-aware auto-selection and power the
+// /pois/providers/catalog endpoint. To add a provider, append an entry to All;
 // providers with Implemented=false appear in the catalog but are never auto-selected.
 package registry
 
@@ -14,7 +12,7 @@ type Meta struct {
 	Label          string
 	Byok           bool
 	ByokHeader     string // HTTP request header carrying the user key, e.g. "X-Foursquare-Key"
-	ForEvents      bool   // true = event provider, false = POI provider
+	Kinds          []types.PointKind
 	Categories     []types.PoiType
 	CountryScores  map[string]float64        // ISO 3166-1 alpha-2 (uppercase) → [0,1]; "*" = global default
 	CategoryScores map[types.PoiType]float64 // category → [0,1]; empty = neutral (1.0)
@@ -34,8 +32,20 @@ type Meta struct {
 	MinRadius int
 }
 
-// CountryScore returns the provider's confidence for a country code.
-// Falls back to "*" global default, then 0.5 if neither is defined.
+// Provides reports whether this provider yields points of the given kind k,
+// returning true if k is in the provider's declared Kinds.
+func (m Meta) Provides(k types.PointKind) bool {
+	for _, kk := range m.Kinds {
+		if kk == k {
+			return true
+		}
+	}
+	return false
+}
+
+// CountryScore reports the provider's confidence for the ISO 3166-1 alpha-2
+// country code cc, falling back to the "*" global default, then 0.5 if
+// neither is defined. The returned score is in [0,1].
 func (m Meta) CountryScore(cc string) float64 {
 	if s, ok := m.CountryScores[cc]; ok {
 		return s
@@ -46,8 +56,8 @@ func (m Meta) CountryScore(cc string) float64 {
 	return 0.5
 }
 
-// CategoryScore returns the average specialisation score for the requested types.
-// Returns 1.0 when no types are requested or no category scores are defined.
+// CategoryScore averages the provider's specialisation score across the
+// requested POI types, returning 1.0 when none are requested or defined.
 func (m Meta) CategoryScore(requested []types.PoiType) float64 {
 	if len(requested) == 0 || len(m.CategoryScores) == 0 {
 		return 1.0
@@ -66,7 +76,9 @@ func (m Meta) CategoryScore(requested []types.PoiType) float64 {
 	return total / float64(n)
 }
 
-// Score returns the composite confidence for a country + category combination.
+// Score computes the composite confidence for a country + category
+// combination, given the ISO 3166-1 alpha-2 country code cc and the
+// requested POI types, returning their combined confidence score.
 func (m Meta) Score(cc string, requested []types.PoiType) float64 {
 	return m.CountryScore(cc) * m.CategoryScore(requested)
 }
@@ -76,12 +88,10 @@ func (m Meta) Score(cc string, requested []types.PoiType) float64 {
 // (documented in the catalog, auto-selected when the backend is added).
 var All = map[types.Provider]Meta{
 
-	// ── Free / always-on providers ─────────────────────────────────────────────
-
 	types.ProviderOverpass: {
 		ID:             types.ProviderOverpass,
 		Label:          "OpenStreetMap / Overpass",
-		ForEvents:      false,
+		Kinds:          []types.PointKind{types.KindPOI},
 		Priority:       4,
 		AccuracyMeters: 15,
 		Categories:     []types.PoiType{types.TypeSee, types.TypeEat, types.TypeDrink, types.TypeDo, types.TypeBuy, types.TypeSleep},
@@ -118,7 +128,7 @@ var All = map[types.Provider]Meta{
 	types.ProviderWikivoyage: {
 		ID:             types.ProviderWikivoyage,
 		Label:          "Wikivoyage",
-		ForEvents:      false,
+		Kinds:          []types.PointKind{types.KindPOI},
 		Priority:       3,
 		AccuracyMeters: 40,
 		Categories:     []types.PoiType{types.TypeSee, types.TypeDo, types.TypeEat, types.TypeDrink, types.TypeBuy, types.TypeSleep},
@@ -138,7 +148,7 @@ var All = map[types.Provider]Meta{
 	types.ProviderGeoNames: {
 		ID:             types.ProviderGeoNames,
 		Label:          "GeoNames",
-		ForEvents:      false,
+		Kinds:          []types.PointKind{types.KindPOI},
 		Priority:       1,
 		AccuracyMeters: 80,
 		Categories:     []types.PoiType{types.TypeSee, types.TypeDo},
@@ -150,14 +160,12 @@ var All = map[types.Provider]Meta{
 		},
 	},
 
-	// ── Global BYOK providers ──────────────────────────────────────────────────
-
 	types.ProviderFoursquare: {
 		ID:         types.ProviderFoursquare,
 		Label:      "Foursquare FSQ",
 		Byok:       true,
 		ByokHeader: "X-Foursquare-Key",
-		ForEvents:  false,
+		Kinds:      []types.PointKind{types.KindPOI},
 		Categories: []types.PoiType{types.TypeSee, types.TypeEat, types.TypeDrink, types.TypeDo, types.TypeBuy, types.TypeSleep},
 		CountryScores: map[string]float64{
 			"*":  0.72,
@@ -185,7 +193,7 @@ var All = map[types.Provider]Meta{
 		Label:      "HERE Places",
 		Byok:       true,
 		ByokHeader: "X-Here-Key",
-		ForEvents:  false,
+		Kinds:      []types.PointKind{types.KindPOI},
 		Categories: []types.PoiType{types.TypeSee, types.TypeEat, types.TypeDrink, types.TypeDo, types.TypeBuy, types.TypeSleep},
 		CountryScores: map[string]float64{
 			"*":  0.70,
@@ -206,14 +214,12 @@ var All = map[types.Provider]Meta{
 		},
 	},
 
-	// ── China BYOK providers ───────────────────────────────────────────────────
-
 	types.ProviderBaidu: {
 		ID:         types.ProviderBaidu,
 		Label:      "Baidu Maps",
 		Byok:       true,
 		ByokHeader: "X-Baidu-Key",
-		ForEvents:  false,
+		Kinds:      []types.PointKind{types.KindPOI},
 		Categories: []types.PoiType{types.TypeSee, types.TypeEat, types.TypeDrink, types.TypeDo, types.TypeBuy},
 		CountryScores: map[string]float64{
 			"CN": 0.95,
@@ -230,7 +236,7 @@ var All = map[types.Provider]Meta{
 		Label:      "Amap / AutoNavi",
 		Byok:       true,
 		ByokHeader: "X-Amap-Key",
-		ForEvents:  false,
+		Kinds:      []types.PointKind{types.KindPOI},
 		Categories: []types.PoiType{types.TypeSee, types.TypeEat, types.TypeDrink, types.TypeDo, types.TypeBuy},
 		CountryScores: map[string]float64{
 			"CN": 0.97,
@@ -242,14 +248,12 @@ var All = map[types.Provider]Meta{
 		},
 	},
 
-	// ── Korea BYOK providers ───────────────────────────────────────────────────
-
 	types.ProviderKakao: {
 		ID:         types.ProviderKakao,
 		Label:      "Kakao Maps",
 		Byok:       true,
 		ByokHeader: "X-Kakao-Key",
-		ForEvents:  false,
+		Kinds:      []types.PointKind{types.KindPOI},
 		Categories: []types.PoiType{types.TypeSee, types.TypeEat, types.TypeDrink, types.TypeDo, types.TypeBuy},
 		CountryScores: map[string]float64{
 			"KR": 0.95,
@@ -261,14 +265,12 @@ var All = map[types.Provider]Meta{
 		},
 	},
 
-	// ── Japan BYOK providers ───────────────────────────────────────────────────
-
 	types.ProviderNavitime: {
 		ID:         types.ProviderNavitime,
 		Label:      "NAVITIME",
 		Byok:       true,
 		ByokHeader: "X-Navitime-Key",
-		ForEvents:  false,
+		Kinds:      []types.PointKind{types.KindPOI},
 		Categories: []types.PoiType{types.TypeSee, types.TypeDo, types.TypeEat},
 		CountryScores: map[string]float64{
 			"JP": 0.95,
@@ -279,14 +281,12 @@ var All = map[types.Provider]Meta{
 		},
 	},
 
-	// ── India BYOK providers ───────────────────────────────────────────────────
-
 	types.ProviderMappls: {
 		ID:         types.ProviderMappls,
 		Label:      "Mappls / MapmyIndia",
 		Byok:       true,
 		ByokHeader: "X-Mappls-Key",
-		ForEvents:  false,
+		Kinds:      []types.PointKind{types.KindPOI},
 		Categories: []types.PoiType{types.TypeSee, types.TypeEat, types.TypeDrink, types.TypeDo, types.TypeBuy, types.TypeSleep},
 		CountryScores: map[string]float64{
 			"IN": 0.97,
@@ -298,14 +298,12 @@ var All = map[types.Provider]Meta{
 		},
 	},
 
-	// ── Southeast Asia BYOK providers ─────────────────────────────────────────
-
 	types.ProviderGrabMaps: {
 		ID:         types.ProviderGrabMaps,
 		Label:      "GrabMaps",
 		Byok:       true,
 		ByokHeader: "X-Grabmaps-Key",
-		ForEvents:  false,
+		Kinds:      []types.PointKind{types.KindPOI},
 		Categories: []types.PoiType{types.TypeSee, types.TypeEat, types.TypeDrink, types.TypeDo, types.TypeBuy, types.TypeSleep},
 		CountryScores: map[string]float64{
 			"SG": 0.96, "ID": 0.93, "MY": 0.92, "TH": 0.91,
@@ -318,12 +316,10 @@ var All = map[types.Provider]Meta{
 		},
 	},
 
-	// ── Event providers ────────────────────────────────────────────────────────
-
 	types.ProviderWikipedia: {
 		ID:             types.ProviderWikipedia,
 		Label:          "Wikipedia",
-		ForEvents:      false,
+		Kinds:          []types.PointKind{types.KindPOI},
 		Priority:       2,
 		AccuracyMeters: 35,
 		Categories:     []types.PoiType{types.TypeSee},
@@ -339,7 +335,7 @@ var All = map[types.Provider]Meta{
 	types.ProviderWikipediaEvents: {
 		ID:             types.ProviderWikipediaEvents,
 		Label:          "Wikipedia Events",
-		ForEvents:      true,
+		Kinds:          []types.PointKind{types.KindEvent},
 		Priority:       2,
 		AccuracyMeters: 35,
 		Categories:     []types.PoiType{types.TypeEvent},
@@ -354,7 +350,7 @@ var All = map[types.Provider]Meta{
 		Label:      "Ticketmaster",
 		Byok:       true,
 		ByokHeader: "X-Ticketmaster-Key",
-		ForEvents:  true,
+		Kinds:      []types.PointKind{types.KindEvent},
 		Priority:   3,
 		MinRadius:  50_000,
 		Categories: []types.PoiType{types.TypeEvent},
@@ -371,7 +367,7 @@ var All = map[types.Provider]Meta{
 		Label:      "Eventbrite",
 		Byok:       true,
 		ByokHeader: "X-Eventbrite-Token",
-		ForEvents:  true,
+		Kinds:      []types.PointKind{types.KindEvent},
 		Priority:   3,
 		MinRadius:  50_000,
 		Categories: []types.PoiType{types.TypeEvent},
@@ -388,7 +384,7 @@ var All = map[types.Provider]Meta{
 		Label:      "Meetup",
 		Byok:       true,
 		ByokHeader: "X-Meetup-Token",
-		ForEvents:  true,
+		Kinds:      []types.PointKind{types.KindEvent},
 		Categories: []types.PoiType{types.TypeEvent},
 		CountryScores: map[string]float64{
 			"*":  0.48,
@@ -403,7 +399,7 @@ var All = map[types.Provider]Meta{
 		Label:      "OpenAgenda",
 		Byok:       true,
 		ByokHeader: "X-OpenAgenda-Key",
-		ForEvents:  true,
+		Kinds:      []types.PointKind{types.KindEvent},
 		Categories: []types.PoiType{types.TypeEvent},
 		CountryScores: map[string]float64{
 			"FR": 0.96, "BE": 0.77, "CH": 0.72, "LU": 0.72,

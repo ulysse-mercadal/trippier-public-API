@@ -24,8 +24,9 @@ type Config struct {
 	LogLevel       string
 }
 
-// Load reads configuration from environment variables (prefixed AUTH_)
-// and returns an error if required secrets do not meet minimum length requirements.
+// Load builds a Config from AUTH_-prefixed environment variables, applying
+// defaults where unset. It returns the populated Config, or an error if
+// JWTSecret or InternalSecret are shorter than their required minimum length.
 func Load() (*Config, error) {
 	v := viper.New()
 	v.SetEnvPrefix("AUTH")

@@ -91,19 +91,14 @@ type overpassCenter struct {
 	Lon float64 `json:"lon"`
 }
 
-// Provider fetches POIs from the OpenStreetMap Overpass API.
-//
-// `apiURLs` holds an ordered list of Overpass endpoints — the first reachable
-// one wins. On a transport error / 429 / 5xx the next URL is tried, so a
-// banned IP on one mirror or a transient outage doesn't surface as a hard
-// failure to callers.
+// Provider fetches POIs from the OpenStreetMap Overpass API, rotating across mirrors on transport errors, 429s, or 5xxs.
 type Provider struct {
 	client  *http.Client
 	apiURLs []string
 }
 
-// New returns a Provider rotating across the public Overpass mirrors listed
-// in {@link defaultAPIURLs}.
+// New creates a Provider rotating across the public Overpass mirrors,
+// returning a provider using the default mirror list.
 func New() *Provider {
 	urls := make([]string, len(defaultAPIURLs))
 	copy(urls, defaultAPIURLs)
@@ -113,8 +108,9 @@ func New() *Provider {
 	}
 }
 
-// NewWithURL returns a Provider targeting a single custom Overpass endpoint.
-// Intended for testing against a local httptest server.
+// NewWithURL creates a Provider targeting a single custom Overpass endpoint u,
+// intended for testing against a local httptest server. It returns a
+// provider bound to the given endpoint.
 func NewWithURL(u string) *Provider {
 	return &Provider{
 		client:  &http.Client{Timeout: defaultTimeout},
@@ -122,9 +118,8 @@ func NewWithURL(u string) *Provider {
 	}
 }
 
-// NewWithURLs returns a Provider rotating across an explicit list of
-// Overpass endpoints — used when a caller wants to override the public
-// mirror list (e.g. a self-hosted instance first, public mirrors as fallback).
+// NewWithURLs creates a Provider rotating across the given Overpass endpoint
+// urls, returning a provider using the given mirror list.
 func NewWithURLs(urls []string) *Provider {
 	cp := make([]string, len(urls))
 	copy(cp, urls)
@@ -134,16 +129,17 @@ func NewWithURLs(urls []string) *Provider {
 	}
 }
 
-// Name implements providers.Provider.
+// Name returns this provider's identifier.
 func (p *Provider) Name() types.Provider { return types.ProviderOverpass }
 
-// SupportsMode implements providers.Provider. Overpass supports all search modes.
+// SupportsMode reports whether Overpass supports the given search mode; it
+// always returns true, since Overpass supports every mode.
 func (p *Provider) SupportsMode(_ types.SearchMode) bool { return true }
 
-// Search implements providers.Provider. Walks the configured mirror list and
-// returns the first successful response. Only retries on transient failures
-// (transport errors, HTTP 429, HTTP 5xx) — a 4xx is the same query failing
-// everywhere, so we fail fast.
+// Search queries Overpass for POIs matching q, trying each mirror in order
+// (using ctx for cancellation and deadlines) and retrying only on transient
+// failures (transport errors, 429, 5xx). It returns the matching POIs, or an
+// error if all mirrors failed.
 func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {
 	body := url.Values{"data": {p.buildQuery(q)}}.Encode()
 
@@ -167,11 +163,9 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 	return nil, fmt.Errorf("overpass: all mirrors failed: %w", lastErr)
 }
 
-// searchOnce performs a single POST against `apiURL`. The boolean second
-// return indicates whether the caller should try the next mirror — true for
-// transport errors / 429 / 5xx, false for 4xx (bad query — won't work on
-// any mirror) or a decode failure (a successful 200 with malformed JSON
-// suggests we hit a wrong-route placeholder, not a typical overload).
+// searchOnce performs a single POST of body against apiURL, using ctx for
+// cancellation and deadlines. It returns the matching POIs, whether the
+// caller should retry another mirror, and an error.
 func (p *Provider) searchOnce(ctx context.Context, apiURL, body string) ([]types.RawPoi, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, strings.NewReader(body))
 	if err != nil {
@@ -182,8 +176,6 @@ func (p *Provider) searchOnce(ctx context.Context, apiURL, body string) ([]types
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		// Transport-level failure (connection refused, DNS, TLS, timeout).
-		// Always retry on the next mirror.
 		return nil, true, fmt.Errorf("overpass: do request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -200,13 +192,14 @@ func (p *Provider) searchOnce(ctx context.Context, apiURL, body string) ([]types
 	return p.toRawPois(result.Elements), false, nil
 }
 
-// escapeOQLString escapes a string for safe embedding in an Overpass QL double-quoted context.
+// escapeOQLString escapes the raw string s for safe embedding in an Overpass
+// QL double-quoted context, returning the escaped string.
 func escapeOQLString(s string) string {
 	return strings.ReplaceAll(s, `"`, `\"`)
 }
 
-// buildQuery assembles the full Overpass QL query string for the given search mode.
-// For district mode it constrains the area lookup using geocoded coordinates when available.
+// buildQuery assembles the full Overpass QL query string for the search mode
+// and parameters in q, returning the complete Overpass QL query string.
 func (p *Provider) buildQuery(q types.SearchQuery) string {
 	filters := p.buildFilters(q.Types)
 	nodeStmts, wayStmts := p.buildStatements(q, filters)
@@ -235,8 +228,8 @@ func (p *Provider) buildQuery(q types.SearchQuery) string {
 	)
 }
 
-// buildFilters returns the Overpass tag filters for the requested POI types.
-// When no types are requested it returns a broad default covering the most relevant categories.
+// buildFilters returns the Overpass tag filter expressions for the requested
+// poiTypes, or a broad default list when none are given.
 func (p *Provider) buildFilters(poiTypes []types.PoiType) []string {
 	if len(poiTypes) == 0 {
 		return []string{
@@ -257,8 +250,10 @@ func (p *Provider) buildFilters(poiTypes []types.PoiType) []string {
 	return filters
 }
 
-// buildStatements returns two slices: node statements and way statements.
-// They are kept separate so buildQuery can apply independent output limits.
+// buildStatements builds Overpass node and way statements for query q using
+// the given filters, keeping them separate so buildQuery can apply
+// independent output limits. It returns the node statements and way
+// statements.
 func (p *Provider) buildStatements(q types.SearchQuery, filters []string) (nodeStmts, wayStmts []string) {
 	for _, f := range filters {
 		switch q.Mode {
@@ -276,7 +271,8 @@ func (p *Provider) buildStatements(q types.SearchQuery, filters []string) (nodeS
 	return
 }
 
-// toRawPois converts Overpass elements to RawPoi records, deduplicating by element type+ID.
+// toRawPois converts the raw Overpass elements to RawPoi records,
+// deduplicating by element type+ID, and returns the resulting records.
 func (p *Provider) toRawPois(elements []overpassElement) []types.RawPoi {
 	seen := make(map[string]bool, len(elements))
 	pois := make([]types.RawPoi, 0, len(elements))
@@ -316,8 +312,8 @@ func (p *Provider) toRawPois(elements []overpassElement) []types.RawPoi {
 	return pois
 }
 
-// @param tags OSM key/value tag map for an element.
-// @return up to 3 image URLs gathered from the image, image:url and wikimedia_commons tags, in that order.
+// osmImages gathers up to 3 image URLs from the image, image:url, and
+// wikimedia_commons entries in tags, returning them or nil if none are found.
 func osmImages(tags map[string]string) []string {
 	out := make([]string, 0, 3)
 	seen := make(map[string]bool, 3)
@@ -347,9 +343,9 @@ func osmImages(tags map[string]string) []string {
 	return out
 }
 
-// osmURL returns the canonical openstreetmap.org browse URL for an element.
-// Overpass elements are one of "node", "way", or "relation"; anything else
-// (e.g. centred ways) is safe to skip — the empty string signals "no link".
+// osmURL returns the canonical openstreetmap.org browse URL for the element
+// of the given elementType ("node", "way", or "relation") and id, or ""
+// for unrecognized element types.
 func osmURL(elementType string, id int64) string {
 	switch elementType {
 	case "node", "way", "relation":
@@ -358,7 +354,9 @@ func osmURL(elementType string, id int64) string {
 	return ""
 }
 
-// resolveType maps OSM tags to a PoiType by checking tourism, amenity, leisure, and shop keys in order.
+// resolveType maps the given OSM element tags to a PoiType by checking the
+// tourism, amenity, leisure, and shop keys in order, returning the resolved
+// type or TypeGeneric if none match.
 func (p *Provider) resolveType(tags map[string]string) types.PoiType {
 	for _, key := range []string{"tourism", "amenity", "leisure", "shop"} {
 		if v, ok := tags[key]; ok {
@@ -373,6 +371,7 @@ func (p *Provider) resolveType(tags map[string]string) types.PoiType {
 	return types.TypeGeneric
 }
 
+// init registers this provider with the providers registry.
 func init() {
 	providers.Register(types.ProviderOverpass, func(cfg providers.BuildConfig) (providers.Provider, error) {
 		return tilecache.NewCachedProvider(New(), cfg.Redis, cfg.CacheTTL, cfg.Log), nil

@@ -21,7 +21,9 @@ var migration003 string
 //go:embed migrations/004_user_quota.sql
 var migration004 string
 
-// Connect creates a pgx connection pool and runs migrations.
+// Connect creates a pgx connection pool for databaseURL, verifies
+// connectivity with a ping, and runs all embedded migrations in order using
+// ctx. It returns the ready-to-use pool, or an error if any step fails.
 func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	poolCfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {

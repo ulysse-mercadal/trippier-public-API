@@ -1,3 +1,4 @@
+/** Represents an authenticated account. */
 export interface User {
 	id: string;
 	email: string;
@@ -5,6 +6,7 @@ export interface User {
 	created_at: string;
 }
 
+/** Metadata describing an issued API key. */
 export interface ApiKey {
 	id: string;
 	user_id: string;
@@ -17,11 +19,13 @@ export interface ApiKey {
 	last_used_at: string | null;
 }
 
+/** API key metadata augmented with current usage/quota state. */
 export interface ApiKeyWithUsage extends ApiKey {
 	tokens_remaining: number;
 	resets_in_secs: number;
 }
 
+/** Result returned when a new API key is created, including its secret value. */
 export interface CreateKeyResult {
 	key: string;
 	metadata: ApiKey;

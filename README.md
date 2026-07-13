@@ -60,26 +60,28 @@ make dev-stop     # tears down the stack and removes volumes
 
 All API calls require `Authorization: Bearer <api-key>` except health endpoints and standalone mode.
 
+All public routes are versioned under `/v1`. `/health` and service-to-service `/internal/*` endpoints stay unversioned.
+
 ### POI search
 
 ```
-GET /pois/search?lat=45.83&lng=6.87&radius=5000
+GET /v1/pois/search?lat=45.83&lng=6.87&radius=5000
 ```
 
-Aggregates geo-enriched POIs from multiple sources, deduplicates, scores by relevance [0–100]. Supports radius, polygon, and district modes. Results are Redis-cached.
+Aggregates geo-enriched POIs from multiple sources, deduplicates, scores by relevance [0–100]. Supports radius, polygon, and district modes. Results are Redis-cached. Every result carries a `kind` field (`poi` or `event`) so clients can display places and events separately.
 
 **Cost:** 1 token per request.
 
 ### Events
 
 ```
-GET /pois/events?lat=48.85&lng=2.35&radius=50000
+GET /v1/pois/events?lat=48.85&lng=2.35&radius=50000
 ```
 
 Returns cultural events and festivals. Always includes Wikipedia/Wikidata (recurring festivals). Optionally activates Ticketmaster and Eventbrite via BYOK headers — the server never stores those keys:
 
 ```bash
-curl http://localhost:8080/pois/events \
+curl http://localhost:8080/v1/pois/events \
   -H "X-Ticketmaster-Key: YOUR_TM_KEY" \
   -H "X-Eventbrite-Token: YOUR_EB_TOKEN" \
   -G -d lat=40.71 -d lng=-74.00 -d radius=50000
@@ -91,7 +93,7 @@ curl http://localhost:8080/pois/events \
 ### Itinerary generation
 
 ```
-POST /itinerary/generate
+POST /v1/itinerary/generate
 Content-Type: application/json
 
 {
@@ -109,13 +111,14 @@ Calls the POI API internally, then produces a day-by-day schedule with opening h
 ### Auth
 
 ```
-POST /auth/register          { email, password }
-GET  /auth/verify-email?token=…
-POST /auth/login             { email, password } → { token }
-GET  /auth/me                Bearer <jwt>
-POST /auth/keys              Bearer <jwt>    → create API key
-GET  /auth/keys              Bearer <jwt>    → list API keys
-DELETE /auth/keys/:id        Bearer <jwt>    → revoke API key
+POST   /v1/register          { email, password }
+POST   /v1/verify-code       { email, code }
+POST   /v1/resend-code       { email }
+POST   /v1/login             { email, password } → { token }
+GET    /v1/me                Bearer <jwt>
+POST   /v1/api-keys          Bearer <jwt>    → create API key
+GET    /v1/api-keys          Bearer <jwt>    → list API keys
+DELETE /v1/api-keys/:id      Bearer <jwt>    → revoke API key
 ```
 
 ---

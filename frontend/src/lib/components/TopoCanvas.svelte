@@ -16,6 +16,13 @@
 	let maxElev = 1;
 	let ro: ResizeObserver | null = null;
 
+	/**
+	 * Draws a smooth closed curve through a contour ring's points.
+	 * @param ctx canvas rendering context to draw with
+	 * @param ring ordered list of normalized [x, y] points
+	 * @param W target canvas width in pixels
+	 * @param H target canvas height in pixels
+	 */
 	function drawSmooth(ctx: CanvasRenderingContext2D, ring: [number, number][], W: number, H: number) {
 		const n = ring.length;
 		if (n < 2) return;
@@ -32,6 +39,9 @@
 		ctx.stroke();
 	}
 
+	/**
+	 * Clears and redraws all contour levels onto the canvas.
+	 */
 	function draw() {
 		const ctx = canvas.getContext('2d');
 		if (!ctx || canvas.width === 0 || canvas.height === 0) return;
@@ -58,12 +68,14 @@
 		}
 	}
 
+	/**
+	 * Resizes the canvas to fill its target area and redraws contours.
+	 */
 	function resize() {
 		if (fixed) {
 			canvas.width  = window.innerWidth;
 			canvas.height = window.innerHeight;
 		} else {
-			// read the PARENT dimensions — reliable regardless of canvas's own layout state
 			const p = canvas.parentElement;
 			if (!p) return;
 			canvas.width  = p.clientWidth;
@@ -72,6 +84,9 @@
 		draw();
 	}
 
+	/**
+	 * Loads contour data and starts resize handling once mounted.
+	 */
 	onMount(async () => {
 		const { MONT_BLANC_CONTOURS } = await import('$lib/topo-data');
 		contours = MONT_BLANC_CONTOURS;
@@ -92,6 +107,9 @@
 		}
 	});
 
+	/**
+	 * Removes the resize listener and disconnects the observer on teardown.
+	 */
 	onDestroy(() => {
 		window.removeEventListener('resize', resize);
 		ro?.disconnect();

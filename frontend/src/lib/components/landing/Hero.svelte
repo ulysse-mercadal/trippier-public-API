@@ -6,6 +6,9 @@
 
 	let copied = false;
 
+	/**
+	 * Copies the docker pull command to the clipboard and briefly flags it as copied.
+	 */
 	function copyCmd() {
 		if (browser) navigator.clipboard?.writeText(dockerCmd);
 		copied = true;

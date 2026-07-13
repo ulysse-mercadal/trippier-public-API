@@ -20,6 +20,9 @@ import (
 
 const defaultTimeout = 10 * time.Second
 
+// apiTemplate is the MediaWiki API endpoint pattern; %s is the language edition subdomain.
+const apiTemplate = "https://%s.wikivoyage.org/w/api.php"
+
 var listingTypeMap = map[string]types.PoiType{
 	"see":   types.TypeSee,
 	"do":    types.TypeDo,
@@ -33,18 +36,25 @@ var listingTypeMap = map[string]types.PoiType{
 type Provider struct {
 	client  *http.Client
 	baseURL string
+	// apiTemplate, when non-empty, lets Search retarget baseURL to the
+	// per-request language edition. It is empty for the test constructor,
+	// which pins a fixed baseURL.
+	apiTemplate string
 }
 
-// New returns a Provider targeting the given language edition (e.g. "en", "fr").
+// New creates a Provider for the given Wikivoyage language edition, using
+// lang (e.g. "en", "fr") to build the API endpoint. It returns the
+// configured Provider.
 func New(lang string) *Provider {
 	return &Provider{
-		client:  &http.Client{Timeout: defaultTimeout},
-		baseURL: fmt.Sprintf("https://%s.wikivoyage.org/w/api.php", lang),
+		client:      &http.Client{Timeout: defaultTimeout},
+		baseURL:     fmt.Sprintf(apiTemplate, lang),
+		apiTemplate: apiTemplate,
 	}
 }
 
-// NewWithURL returns a Provider targeting a custom API endpoint.
-// Intended for testing against a local httptest server.
+// NewWithURL creates a Provider targeting the custom MediaWiki API endpoint
+// baseURL, for tests. It returns the configured Provider.
 func NewWithURL(baseURL string) *Provider {
 	return &Provider{
 		client:  &http.Client{Timeout: defaultTimeout},
@@ -52,12 +62,28 @@ func NewWithURL(baseURL string) *Provider {
 	}
 }
 
-// Name implements providers.Provider.
+// forLang returns a copy of p whose baseURL targets the requested language
+// edition, or p unchanged when lang is empty/invalid or the endpoint is pinned
+// (tests). The shared http.Client is reused.
+//
+// @param lang the caller-supplied language code (e.g. from ?lang=fr).
+// @return the Provider to use for this request.
+func (p *Provider) forLang(lang string) *Provider {
+	code := providers.NormalizeLang(lang)
+	if code == "" || p.apiTemplate == "" {
+		return p
+	}
+	rp := *p
+	rp.baseURL = fmt.Sprintf(p.apiTemplate, code)
+	return &rp
+}
+
+// Name returns the Wikivoyage provider identifier.
 func (p *Provider) Name() types.Provider { return types.ProviderWikivoyage }
 
-// zoneURL returns the canonical Wikivoyage article URL for a zone title.
-// Derived from the configured MediaWiki endpoint so tests against a local
-// httptest server produce predictable URLs.
+// zoneURL builds the canonical Wikivoyage article URL for the given zone
+// title. It returns the canonical article URL, or an empty string if it
+// cannot be resolved.
 func (p *Provider) zoneURL(zone string) string {
 	i := strings.Index(p.baseURL, "/w/api.php")
 	if i <= 0 {
@@ -66,10 +92,9 @@ func (p *Provider) zoneURL(zone string) string {
 	return fmt.Sprintf("%s/wiki/%s", p.baseURL[:i], url.PathEscape(zone))
 }
 
-// listingURL returns the article URL with a fragment pointing at the listing
-// inside the page. Wikivoyage listing templates render each entry as a span
-// with id="<listing name>" (spaces become underscores, MediaWiki convention),
-// so the fragment scrolls the reader straight to the row.
+// listingURL builds an article URL for zone with a fragment anchored to the
+// listing named name. It returns the article URL with anchor, or the base
+// URL if name is empty.
 func (p *Provider) listingURL(zone, name string) string {
 	base := p.zoneURL(zone)
 	if base == "" || name == "" {
@@ -79,8 +104,9 @@ func (p *Provider) listingURL(zone, name string) string {
 	return base + "#" + url.PathEscape(anchor)
 }
 
-// @param v raw value of a listing's wikipedia= field (e.g. "Eiffel Tower", "fr:Tour Eiffel", or a full URL).
-// @return a Wikipedia article URL, defaulting to the Wikivoyage language edition when the value has no interwiki prefix, or empty when v is empty.
+// wikipediaURL converts v, a listing's raw wikipedia= field value
+// (optionally in "lang:Title" form), into a full Wikipedia article URL. It
+// returns the full article URL, or an empty string if v is empty.
 func (p *Provider) wikipediaURL(v string) string {
 	v = strings.TrimSpace(v)
 	if v == "" {
@@ -101,8 +127,8 @@ func (p *Provider) wikipediaURL(v string) string {
 	return fmt.Sprintf("https://%s.wikipedia.org/wiki/%s", lang, url.PathEscape(v))
 }
 
-// langCode extracts the language subdomain from the configured baseURL
-// (e.g. "https://fr.wikivoyage.org/w/api.php" → "fr"). Falls back to "en".
+// langCode extracts the language subdomain from the configured base URL. It
+// returns the language code, defaulting to "en".
 func (p *Provider) langCode() string {
 	if u, err := url.Parse(p.baseURL); err == nil {
 		if i := strings.Index(u.Host, "."); i > 0 {
@@ -112,13 +138,18 @@ func (p *Provider) langCode() string {
 	return "en"
 }
 
-// SupportsMode implements providers.Provider.
+// SupportsMode reports whether mode is a search mode supported by this
+// provider.
 func (p *Provider) SupportsMode(mode types.SearchMode) bool {
 	return mode == types.ModeDistrict || mode == types.ModeRadius
 }
 
-// Search implements providers.Provider.
+// Search fetches POIs for query q, resolved either by district or by
+// radius lookup, using ctx for cancellation. It returns the matching POIs,
+// or an error on failure.
 func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {
+	rp := p.forLang(q.Lang)
+
 	var pageTitle string
 	var err error
 
@@ -126,7 +157,7 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 	case types.ModeDistrict:
 		pageTitle = q.District
 	case types.ModeRadius:
-		pageTitle, err = p.resolveZone(ctx, q.Lat, q.Lng, q.Radius)
+		pageTitle, err = rp.resolveZone(ctx, q.Lat, q.Lng, q.Radius)
 		if err != nil {
 			return nil, fmt.Errorf("wikivoyage: resolve zone: %w", err)
 		}
@@ -134,18 +165,21 @@ func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.Raw
 		return nil, nil
 	}
 
-	wikitext, err := p.fetchWikitext(ctx, pageTitle)
+	wikitext, err := rp.fetchWikitext(ctx, pageTitle)
 	if err != nil {
 		return nil, fmt.Errorf("wikivoyage: fetch wikitext for %q: %w", pageTitle, err)
 	}
 
-	return p.parseListings(wikitext, pageTitle), nil
+	return rp.parseListings(wikitext, pageTitle), nil
 }
 
 // zoneSearchRadius is fixed at the MediaWiki geosearch maximum (10 000 m) to always find nearby articles.
 const zoneSearchRadius = 10_000
 
-// resolveZone finds the nearest Wikivoyage article title for the given coordinates via MediaWiki geosearch.
+// resolveZone finds the nearest Wikivoyage article title via MediaWiki
+// geosearch, searching near lat/lng using ctx for cancellation; the third
+// parameter is unused. It returns the nearest article title, or an error if
+// none is found.
 func (p *Provider) resolveZone(ctx context.Context, lat, lng float64, _ int) (string, error) {
 	params := url.Values{
 		"action":      {"query"},
@@ -185,7 +219,9 @@ func (p *Provider) resolveZone(ctx context.Context, lat, lng float64, _ int) (st
 	return result.Query.Geosearch[0].Title, nil
 }
 
-// fetchWikitext retrieves the raw wikitext of a Wikivoyage page by title.
+// fetchWikitext retrieves the raw wikitext of the Wikivoyage page named
+// title, using ctx for cancellation. It returns the raw wikitext content,
+// or an error on failure.
 func (p *Provider) fetchWikitext(ctx context.Context, title string) (string, error) {
 	params := url.Values{
 		"action": {"parse"},
@@ -231,8 +267,9 @@ type listingMatch struct {
 	body string
 }
 
-// @param wikitext the full article wikitext returned by MediaWiki.
-// @return every top-level {{see|…}} / {{do|…}} / … template as (kind, body) pairs, where body is the parameter portion between the opening "{{kind|" and the matching "}}" at brace depth 0 — inner templates like {{station|Miromesnil|9|13}} no longer truncate the listing body.
+// scanListings extracts top-level listing templates from wikitext as
+// (kind, body) pairs. It returns the matched listings with their kind and
+// body text.
 func scanListings(wikitext string) []listingMatch {
 	var out []listingMatch
 	for i := 0; i+1 < len(wikitext); i++ {
@@ -282,6 +319,7 @@ func scanListings(wikitext string) []listingMatch {
 	return out
 }
 
+// isAlpha reports whether c is an ASCII letter.
 func isAlpha(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
@@ -311,8 +349,8 @@ var (
 // whose readable text we want to keep.
 var markerStripper = strings.NewReplacer("[[", "", "]]", "")
 
-// @param s raw wikitext value from a listing's content field.
-// @return s with refs, templates, HTML tags, entities, wiki links and bold/italic markup resolved to readable text.
+// stripDescriptionMarkup converts s, a listing's raw content field, into
+// readable plain text. It returns the plain-text description.
 func stripDescriptionMarkup(s string) string {
 	s = refPairRe.ReplaceAllString(s, "")
 	s = refSelfRe.ReplaceAllString(s, "")
@@ -339,7 +377,9 @@ func stripDescriptionMarkup(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// stripWikiMarkup resolves [[Target|Display]] → Display, drops broken [[ fragments.
+// stripWikiMarkup resolves [[Target|Display]] links in s to their Display
+// text and drops broken fragments. It returns plain text with wiki-link
+// markup removed.
 func stripWikiMarkup(s string) string {
 	s = wikiLinkRe.ReplaceAllStringFunc(s, func(m string) string {
 		inner := m[2 : len(m)-2]
@@ -358,7 +398,9 @@ func stripWikiMarkup(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// parseListings extracts listing templates from wikitext and converts them to RawPoi records.
+// parseListings extracts listing templates from wikitext and converts them
+// to RawPoi records belonging to the given zone/article title zone. It
+// returns the parsed POIs, including any linked Wikipedia entries.
 func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 	matches := scanListings(wikitext)
 	pois := make([]types.RawPoi, 0, len(matches))
@@ -432,11 +474,8 @@ func extraSourcesFromListing(wikipediaURL, wikidataID string) []types.SourceLink
 // safe because wikitext never contains literal NUL bytes.
 const pipePlaceholder = "\x00"
 
-// parseFields extracts key=value pairs from a listing template's parameter
-// string. "|" characters inside [[…]] wiki links are temporarily replaced
-// before splitting on "|", then restored in the captured values — without
-// this protection a content field like "[[Foo|Bar]] more text" would be
-// truncated to "[[Foo" by the field regex.
+// parseFields extracts key=value pairs from raw, a listing template's
+// parameter string. It returns a map of field name to trimmed value.
 func (p *Provider) parseFields(raw string) map[string]string {
 	masked := maskPipesInBrackets(raw)
 	fields := map[string]string{}
@@ -448,8 +487,8 @@ func (p *Provider) parseFields(raw string) map[string]string {
 	return fields
 }
 
-// @param s a listing template body (the bit between {{see| and }}).
-// @return s with every "|" that appears inside an [[…]] wiki link replaced by pipePlaceholder.
+// maskPipesInBrackets replaces "|" characters inside [[…]] wiki links in s
+// with pipePlaceholder. It returns the string with in-link pipes masked.
 func maskPipesInBrackets(s string) string {
 	if !strings.Contains(s, "[[") || !strings.Contains(s, "|") {
 		return s
@@ -480,7 +519,9 @@ func maskPipesInBrackets(s string) string {
 	return string(out)
 }
 
-// parseCoords extracts lat/long from a listing's field map and returns ok=false if either is missing or invalid.
+// parseCoords extracts latitude/longitude from fields, a parsed listing
+// field map. It returns lat and lng, with ok false if either is missing or
+// invalid.
 func (p *Provider) parseCoords(fields map[string]string) (lat, lng float64, ok bool) {
 	latStr, lngStr := fields["lat"], fields["long"]
 	if latStr == "" || lngStr == "" {
@@ -491,6 +532,7 @@ func (p *Provider) parseCoords(fields map[string]string) (lat, lng float64, ok b
 	return lat, lng, err1 == nil && err2 == nil
 }
 
+// init registers the Wikivoyage provider factory.
 func init() {
 	providers.Register(types.ProviderWikivoyage, func(cfg providers.BuildConfig) (providers.Provider, error) {
 		return New(cfg.Lang), nil

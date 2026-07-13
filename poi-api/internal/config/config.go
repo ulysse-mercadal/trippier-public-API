@@ -21,8 +21,9 @@ type Config struct {
 	AuthDisabled     bool
 }
 
-// Load reads configuration from environment variables (prefixed POI_)
-// and falls back to sensible defaults.
+// Load reads configuration from environment variables (prefixed POI_) with
+// sensible defaults, and returns the populated Config, or an error if
+// loading fails.
 func Load() (*Config, error) {
 	v := viper.New()
 	v.SetEnvPrefix("POI")
@@ -31,9 +32,6 @@ func Load() (*Config, error) {
 
 	v.SetDefault("port", "8080")
 	v.SetDefault("redis_url", "redis://localhost:6379")
-	// 24 h: OSM-backed POI data barely changes day-to-day, so a long TTL
-	// massively cuts Overpass / Wikivoyage calls and keeps us under each
-	// public mirror's per-IP quota.
 	v.SetDefault("cache_ttl_seconds", 86400)
 	v.SetDefault("provider_timeout", 8)
 	v.SetDefault("log_level", "info")

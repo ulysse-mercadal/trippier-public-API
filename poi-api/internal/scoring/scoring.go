@@ -16,7 +16,9 @@ var defaultTypeWeights = map[types.PoiType]float64{
 	types.TypeBuy:   0.4,
 }
 
-// Score returns a relevance score in [0, 100]; weights: sources 50%, type 30%, distance 10%, coords 10%.
+// Score computes an overall relevance score for poi given the search query
+// q, combining source count, type weight, distance, and coordinate
+// precision. It returns a value in [0, 100].
 func Score(poi types.EnrichedPoi, q types.SearchQuery) float64 {
 	s := sourceScore(len(poi.Sources))*50 +
 		typeScore(poi.Type, q.Weights)*30 +
@@ -25,7 +27,8 @@ func Score(poi types.EnrichedPoi, q types.SearchQuery) float64 {
 	return math.Min(s, 100)
 }
 
-// sourceScore uses a stepped function: multi-provider POIs always outrank single-provider ones regardless of other bonuses.
+// sourceScore ranks POIs by count, the number of sources reporting the POI,
+// favoring multi-provider results. It returns a score in [0, 1].
 func sourceScore(count int) float64 {
 	switch {
 	case count >= 3:
@@ -37,6 +40,9 @@ func sourceScore(count int) float64 {
 	}
 }
 
+// typeScore rates POI type t against the caller-supplied weights map, or the
+// package defaults when weights is empty. It returns a normalized score in
+// [0, 1].
 func typeScore(t types.PoiType, weights map[types.PoiType]float64) float64 {
 	if len(weights) == 0 {
 		if w := defaultTypeWeights[t]; w != 0 {
@@ -54,6 +60,9 @@ func typeScore(t types.PoiType, weights map[types.PoiType]float64) float64 {
 	return 0.5
 }
 
+// distanceScore linearly rewards proximity, scoring dist, the POI's
+// distance from the search center, against radius, the search radius. It
+// returns a score in [0, 1], or 0 if the POI is outside the radius.
 func distanceScore(dist, radius float64) float64 {
 	if radius <= 0 || dist >= radius {
 		return 0
@@ -61,6 +70,8 @@ func distanceScore(dist, radius float64) float64 {
 	return 1 - (dist / radius)
 }
 
+// coordScore rates the coordinate precision of poi, favoring exact over
+// approximate locations. It returns a score in [0, 1].
 func coordScore(poi types.EnrichedPoi) float64 {
 	if poi.Coords == nil {
 		return 0
@@ -71,6 +82,8 @@ func coordScore(poi types.EnrichedPoi) float64 {
 	return 1.0
 }
 
+// maxWeight finds the largest weight value in weights, a map of POI type
+// weights. It returns the maximum weight, or 0 if the map is empty.
 func maxWeight(weights map[types.PoiType]float64) float64 {
 	var m float64
 	for _, v := range weights {

@@ -7,8 +7,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// Logger returns a Gin middleware that logs each request with zap.
-// It records method, path, status, latency, client IP, and request ID.
+// Logger builds a Gin middleware that logs each request via zap, using log
+// to emit the entries. It returns a gin.HandlerFunc that records the
+// request's method, path, status, latency, client IP, request ID, query
+// string, and any errors before invoking the next handler in the chain.
 func Logger(log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
