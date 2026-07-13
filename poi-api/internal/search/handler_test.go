@@ -195,17 +195,17 @@ func TestHandlerProviders_OK(t *testing.T) {
 
 func TestServiceSearchEvents(t *testing.T) {
 	p := &mockProvider{
-		name:  types.ProviderWikipedia,
+		name:  types.ProviderWikipediaEvents,
 		modes: []types.SearchMode{types.ModeRadius},
 		pois: []types.RawPoi{
-			{ID: "wp:1", Name: "Festival", Type: types.TypeDo,
-				Provider: types.ProviderWikipedia, Coords: newCoords(48.86, 2.35)},
+			{ID: "wpe:1", Name: "Festival", Type: types.TypeEvent,
+				Provider: types.ProviderWikipediaEvents, Coords: newCoords(48.86, 2.35)},
 		},
 	}
 	svc := search.NewService([]providers.Provider{p}, 5*time.Second, zap.NewNop())
 	result, err := svc.SearchEvents(context.Background(), types.SearchQuery{
 		Mode: types.ModeRadius, Lat: 48.8566, Lng: 2.3522, Radius: 5000,
-		Providers: []types.Provider{types.ProviderWikipedia},
+		Providers: []types.Provider{types.ProviderWikipediaEvents},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

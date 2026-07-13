@@ -1,3 +1,4 @@
+// Package search implements HTTP handlers for POI and event search endpoints.
 package search
 
 import (
@@ -17,12 +18,14 @@ type Handler struct {
 	service *Service
 }
 
-// NewHandler returns a Handler backed by the given Service.
+// NewHandler creates a Handler backed by the given search service svc and
+// returns it ready to register routes.
 func NewHandler(svc *Service) *Handler {
 	return &Handler{service: svc}
 }
 
-// RegisterRoutes attaches the core POI search and provider routes to the given group.
+// RegisterRoutes attaches the core POI search and provider routes to the
+// given router group rg.
 func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/search", h.search)
 	rg.GET("/search/slim", h.searchSlim)
@@ -33,7 +36,8 @@ func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.GET("/providers/recommend", h.providersRecommend)
 }
 
-// RegisterEventRoutes attaches the event search routes to a separate router group.
+// RegisterEventRoutes attaches the event search routes to the separate
+// router group rg.
 func (h *Handler) RegisterEventRoutes(rg *gin.RouterGroup) {
 	rg.GET("", h.events)
 	rg.GET("/slim", h.eventsSlim)
@@ -41,9 +45,8 @@ func (h *Handler) RegisterEventRoutes(rg *gin.RouterGroup) {
 	rg.GET("/custom/slim", h.eventsCustomSlim)
 }
 
-// ── Standard search routes ─────────────────────────────────────────────────────
-
-// search returns merged, scored, paginated POIs with geo-aware provider auto-selection.
+// search handles GET requests for merged, scored, paginated POIs with
+// geo-aware provider auto-selection, writing the result to c.
 func (h *Handler) search(c *gin.Context) {
 	q, ok := parseQuery(c)
 	if !ok {
@@ -57,7 +60,8 @@ func (h *Handler) search(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-// searchSlim returns a lightweight projection (name, type, coords) suitable for map rendering.
+// searchSlim handles GET requests and writes a lightweight projection
+// (name, type, coords) suitable for map rendering to c.
 func (h *Handler) searchSlim(c *gin.Context) {
 	q, ok := parseQuery(c)
 	if !ok {
@@ -75,10 +79,9 @@ func (h *Handler) searchSlim(c *gin.Context) {
 	c.JSON(http.StatusOK, types.SlimResult{Total: result.Total, Results: slim})
 }
 
-// ── Custom search routes ───────────────────────────────────────────────────────
-
-// searchCustom gives full control over provider selection.
-// Additional params: country_hint, provider_weights (JSON), exclude_providers.
+// searchCustom handles GET requests giving full control over provider
+// selection (country_hint, provider_weights, exclude_providers), writing
+// the result to c.
 func (h *Handler) searchCustom(c *gin.Context) {
 	q, ok := parseCustomQuery(c)
 	if !ok {
@@ -92,7 +95,8 @@ func (h *Handler) searchCustom(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-// searchCustomSlim is the slim projection variant of searchCustom.
+// searchCustomSlim is the slim projection variant of searchCustom, writing
+// its result to c.
 func (h *Handler) searchCustomSlim(c *gin.Context) {
 	q, ok := parseCustomQuery(c)
 	if !ok {
@@ -110,9 +114,8 @@ func (h *Handler) searchCustomSlim(c *gin.Context) {
 	c.JSON(http.StatusOK, types.SlimResult{Total: result.Total, Results: slim})
 }
 
-// ── Standard event routes ──────────────────────────────────────────────────────
-
-// events returns events powered by Wikipedia/SPARQL and optional BYOK providers.
+// events handles GET requests for events powered by Wikipedia/SPARQL and
+// optional BYOK providers, writing the result to c.
 func (h *Handler) events(c *gin.Context) {
 	q, ok := parseQuery(c)
 	if !ok {
@@ -126,7 +129,8 @@ func (h *Handler) events(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-// eventsSlim returns a lightweight projection of events.
+// eventsSlim handles GET requests and writes a lightweight projection of
+// events to c.
 func (h *Handler) eventsSlim(c *gin.Context) {
 	q, ok := parseQuery(c)
 	if !ok {
@@ -150,9 +154,8 @@ func (h *Handler) eventsSlim(c *gin.Context) {
 	c.JSON(http.StatusOK, types.SlimEventResult{Total: result.Total, Results: slim})
 }
 
-// ── Custom event routes ────────────────────────────────────────────────────────
-
-// eventsCustom gives full control over event provider selection.
+// eventsCustom handles GET requests giving full control over event
+// provider selection, writing the result to c.
 func (h *Handler) eventsCustom(c *gin.Context) {
 	q, ok := parseCustomQuery(c)
 	if !ok {
@@ -166,7 +169,8 @@ func (h *Handler) eventsCustom(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
-// eventsCustomSlim is the slim projection variant of eventsCustom.
+// eventsCustomSlim is the slim projection variant of eventsCustom, writing
+// its result to c.
 func (h *Handler) eventsCustomSlim(c *gin.Context) {
 	q, ok := parseCustomQuery(c)
 	if !ok {
@@ -190,23 +194,22 @@ func (h *Handler) eventsCustomSlim(c *gin.Context) {
 	c.JSON(http.StatusOK, types.SlimEventResult{Total: result.Total, Results: slim})
 }
 
-// ── Provider info routes ───────────────────────────────────────────────────────
-
-// providers probes each registered provider and returns availability and latency.
+// providers probes each registered provider and writes availability and
+// latency for each to c.
 func (h *Handler) providers(c *gin.Context) {
 	statuses := h.service.ProvidersStatus(c.Request.Context())
 	c.JSON(http.StatusOK, statuses)
 }
 
-// providersCatalog returns the full registry with country/category scores and implementation status.
+// providersCatalog writes the full registry, with country/category scores
+// and implementation status, to c.
 func (h *Handler) providersCatalog(c *gin.Context) {
 	c.JSON(http.StatusOK, h.service.ProvidersCatalog())
 }
 
-// providersRecommend returns scored provider recommendations for a location.
-// Query params: lat, lng (required), types (comma-separated, optional),
-//
-//	for_events (bool, default false), limit (int, default 10).
+// providersRecommend reads lat, lng, types, for_events, and limit from c's
+// query params and writes scored provider recommendations for that location
+// to c.
 func (h *Handler) providersRecommend(c *gin.Context) {
 	lat, err1 := strconv.ParseFloat(c.Query("lat"), 64)
 	lng, err2 := strconv.ParseFloat(c.Query("lng"), 64)
@@ -222,7 +225,10 @@ func (h *Handler) providersRecommend(c *gin.Context) {
 		}
 	}
 
-	forEvents := c.Query("for_events") == "true" || c.Query("for_events") == "1"
+	kind := types.KindPOI
+	if c.Query("for_events") == "true" || c.Query("for_events") == "1" {
+		kind = types.KindEvent
+	}
 
 	limit := 10
 	if raw := c.Query("limit"); raw != "" {
@@ -231,13 +237,14 @@ func (h *Handler) providersRecommend(c *gin.Context) {
 		}
 	}
 
-	result := h.service.ProvidersRecommend(c.Request.Context(), lat, lng, forEvents, requestedTypes, limit)
+	result := h.service.ProvidersRecommend(c.Request.Context(), lat, lng, kind, requestedTypes, limit)
 	c.JSON(http.StatusOK, result)
 }
 
-// ── Query parsing helpers ──────────────────────────────────────────────────────
-
-// parseQuery binds standard query params, parses weights, applies defaults, and validates.
+// parseQuery binds standard query params from c, parses weights, applies
+// defaults, and validates the result. It returns the parsed search query and
+// whether parsing succeeded; on failure it has already written an error
+// response to c.
 func parseQuery(c *gin.Context) (types.SearchQuery, bool) {
 	var q types.SearchQuery
 	if err := c.ShouldBindQuery(&q); err != nil {
@@ -263,15 +270,14 @@ func parseQuery(c *gin.Context) (types.SearchQuery, bool) {
 	return q, true
 }
 
-// parseCustomQuery extends parseQuery with the custom-route params:
-// country_hint, provider_weights (JSON), exclude_providers.
+// parseCustomQuery extends parseQuery with the custom-route params from c:
+// country_hint, provider_weights (JSON), and exclude_providers. It returns
+// the parsed search query and whether parsing succeeded.
 func parseCustomQuery(c *gin.Context) (types.SearchQuery, bool) {
 	q, ok := parseQuery(c)
 	if !ok {
 		return q, false
 	}
-
-	// country_hint is already bound via ShouldBindQuery (form:"country_hint")
 
 	providerWeights, err := ParseProviderWeights(c.Query("provider_weights"))
 	if err != nil {
@@ -283,10 +289,9 @@ func parseCustomQuery(c *gin.Context) (types.SearchQuery, bool) {
 	return q, true
 }
 
-// ── BYOK context helper ────────────────────────────────────────────────────────
-
-// @param c the gin request, carrying any inbound BYOK headers.
-// @return a context with every BYOK key declared in the registry injected under its provider ID. New providers participate automatically the moment their meta.ByokHeader is registered.
+// allByokContext scans c's inbound headers for any registered BYOK provider
+// keys and returns a context carrying the discovered keys, derived from
+// c.Request.Context().
 func allByokContext(c *gin.Context) context.Context {
 	ctx := c.Request.Context()
 	for id, meta := range registry.All {
@@ -300,6 +305,7 @@ func allByokContext(c *gin.Context) context.Context {
 	return ctx
 }
 
+// errorResponse is the JSON body returned for failed requests.
 type errorResponse struct {
 	Error string `json:"error"`
 }

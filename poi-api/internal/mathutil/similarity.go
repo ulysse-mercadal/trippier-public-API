@@ -1,7 +1,8 @@
+// Package mathutil provides string similarity helpers.
 package mathutil
 
-// JaroWinkler returns a string similarity score in [0, 1] using the Jaro-Winkler metric.
-// A score of 1.0 means identical strings; 0.0 means completely dissimilar.
+// JaroWinkler computes the Jaro-Winkler similarity between s1 and s2,
+// returning a score in [0, 1] where 1 means identical.
 func JaroWinkler(s1, s2 string) float64 {
 	jaro := jaroSimilarity(s1, s2)
 	prefixLen := 0
@@ -16,7 +17,8 @@ func JaroWinkler(s1, s2 string) float64 {
 	return jaro + float64(prefixLen)*0.1*(1-jaro)
 }
 
-// jaroSimilarity computes the base Jaro similarity score in [0, 1] before the Winkler prefix bonus is applied.
+// jaroSimilarity computes the base Jaro score between s1 and s2, before the
+// Winkler prefix bonus is applied, returning a value in [0, 1].
 func jaroSimilarity(s1, s2 string) float64 {
 	if len(s1) == 0 && len(s2) == 0 {
 		return 1.0

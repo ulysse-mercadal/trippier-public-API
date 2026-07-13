@@ -17,6 +17,14 @@ const (
 	TypeEvent   PoiType = "event"
 )
 
+// PointKind classifies whether a result is a place or a time-bound event, orthogonal to PoiType.
+type PointKind string
+
+const (
+	KindPOI   PointKind = "poi"
+	KindEvent PointKind = "event"
+)
+
 // Contact groups reachability information for a POI.
 type Contact struct {
 	Website string `json:"website,omitempty"`
@@ -30,6 +38,7 @@ type Contact struct {
 type RawPoi struct {
 	ID          string       `json:"id"`
 	Name        string       `json:"name"`
+	Kind        PointKind    `json:"kind"`
 	Type        PoiType      `json:"type"`
 	Coords      *Coordinates `json:"coords,omitempty"`
 	Zone        *Zone        `json:"zone,omitempty"`
@@ -85,12 +94,12 @@ type SourceLink struct {
 	URL      string   `json:"url,omitempty"`
 }
 
-// EnrichedPoi is the final merged and scored result returned to the caller.
-// All per-provider data (description, contact, images) is folded into the
-// top-level fields. Clients that want more detail follow Sources[i].URL.
+// EnrichedPoi is the final merged, scored result returned to the caller;
+// per-provider detail is folded into the top-level fields — follow Sources[i].URL for more.
 type EnrichedPoi struct {
 	ID          string       `json:"id"`
 	Name        string       `json:"name"`
+	Kind        PointKind    `json:"kind"`
 	Type        PoiType      `json:"type"`
 	Score       float64      `json:"score"`
 	Coords      *Coordinates `json:"coords,omitempty"`

@@ -1,3 +1,4 @@
+// Package middleware provides Gin HTTP middleware for the POI API.
 package middleware
 
 import (
@@ -22,23 +23,23 @@ type cacheWriter struct {
 	status int
 }
 
-// Write tees the response body into the internal buffer so it can be cached.
+// Write buffers b into the response body for caching and forwards it to the
+// underlying writer, returning the number of bytes written and any error.
 func (w *cacheWriter) Write(b []byte) (int, error) {
 	w.buf.Write(b)
 	return w.ResponseWriter.Write(b)
 }
 
-// WriteHeader captures the status code before forwarding to the underlying writer.
+// WriteHeader records status and forwards it to the underlying writer.
 func (w *cacheWriter) WriteHeader(status int) {
 	w.status = status
 	w.ResponseWriter.WriteHeader(status)
 }
 
-// Cache returns a Gin middleware that caches GET responses in Redis.
-// Only 200-OK responses are stored. The cache key is derived from the
-// sorted query-string parameters, so parameter order does not matter.
-//
-// Requests with a non-empty X-No-Cache header bypass the cache.
+// Cache returns Gin middleware that caches 200-OK GET responses in Redis,
+// keyed by sorted query parameters; a non-empty X-No-Cache header bypasses
+// it. rdb is the Redis client used to store cached responses, and ttl is
+// the time-to-live for cache entries.
 func Cache(rdb *redis.Client, ttl time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.Method != http.MethodGet {
@@ -73,15 +74,9 @@ func Cache(rdb *redis.Client, ttl time.Duration) gin.HandlerFunc {
 	}
 }
 
-// cacheKey returns a deterministic SHA-256 key for a request based on its path,
-// sorted query parameters, and which BYOK provider keys are present (not their
-// values). Two requests for the same location with different active providers
-// get different keys.
-//
-// The presence suffix is built by iterating every registered BYOK provider and
-// stamping its ID when its declared header is set on the request. New BYOK
-// providers participate automatically — no code change to the cache layer is
-// required when one is added to the registry.
+// cacheKey derives a deterministic SHA-256 cache key from the request path
+// in c, its sorted query parameters, and which BYOK provider keys are
+// present, returning the resulting cache key string.
 func cacheKey(c *gin.Context) string {
 	encoded := c.Request.URL.Query().Encode()
 	suffix := byokPresenceSuffix(c)
@@ -90,10 +85,9 @@ func cacheKey(c *gin.Context) string {
 	return "poi:cache:" + hex.EncodeToString(h[:])
 }
 
-// byokPresenceSuffix returns a stable, sorted ":id" list for every BYOK
-// provider whose declared header is set on the request. The values of those
-// headers are NEVER included — only the fact that they are present — so that
-// per-user keys cannot leak through the cache key.
+// byokPresenceSuffix returns a sorted ":id" list of BYOK providers whose
+// header is present on the request in c (never the header values), as a
+// string suffix.
 func byokPresenceSuffix(c *gin.Context) string {
 	var ids []string
 	for id, meta := range registry.All {

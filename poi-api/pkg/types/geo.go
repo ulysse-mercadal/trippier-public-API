@@ -1,3 +1,4 @@
+// Package types defines shared domain types for the POI API.
 package types
 
 // Coordinates holds a geographic position.

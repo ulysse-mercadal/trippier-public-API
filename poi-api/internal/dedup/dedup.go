@@ -11,18 +11,13 @@ import (
 	"github.com/trippier/poi-api/pkg/types"
 )
 
-// dedupCellSizeDeg is the side of the spatial bucket the dedup algorithm uses
-// to skip pairs of POIs that are obviously too far apart. ~330m at the
-// equator, narrower at higher latitudes — comfortably larger than the
-// proximityThresholdMeters (150 m) + provider accuracy slack so the 9-cell
-// neighbourhood search never misses a real pair.
+// dedupCellSizeDeg is the side of the spatial bucket used to skip POI pairs that are obviously too far apart.
 const dedupCellSizeDeg = 0.003
 
 // cellKey identifies a bucket in the dedup spatial index.
 type cellKey struct{ lat, lng int32 }
 
-// cellOf maps coordinates to their bucket. nil-safe — callers should check
-// for usable coords before deriving the cell.
+// cellOf maps coordinates c (which must be non-nil) to their bucket key.
 func cellOf(c *types.Coordinates) cellKey {
 	return cellKey{
 		lat: int32(math.Floor(c.Lat / dedupCellSizeDeg)),
@@ -31,30 +26,25 @@ func cellOf(c *types.Coordinates) cellKey {
 }
 
 const (
-	// proximityThresholdMeters is the default distance below which two POIs
-	// can be considered for merging when their names are similar enough. The
-	// effective threshold is scaled per-pair by providerAccuracy() so
-	// low-precision sources don't disqualify themselves by reporting
-	// coordinates a few dozen metres off.
+	// proximityThresholdMeters is the base distance in metres below which two POIs may merge, scaled per pair by providerAccuracy.
 	proximityThresholdMeters = 150.0
 	nameSimilarityThreshold  = 0.80
 )
 
-// providerPriority reads Priority off the static registry. Providers not in
-// the registry fall back to 0 — they still merge, but never win tie-breaks.
+// providerPriority reads provider p's priority from the static registry,
+// returning 0 if p is unknown.
 func providerPriority(p types.Provider) int {
 	return registry.All[p].Priority
 }
 
-// providerAccuracy returns the provider's declared coordinate accuracy in
-// metres, or 0 when none is declared. The dedup proximity threshold is
-// stretched by the max of both participants' accuracies — coarse providers
-// no longer fall on the wrong side of a hard 150 m line.
+// providerAccuracy returns provider p's declared coordinate accuracy in
+// metres, or 0 if undeclared.
 func providerAccuracy(p types.Provider) float64 {
 	return registry.All[p].AccuracyMeters
 }
 
-// Merge groups raw POIs from all providers into deduplicated EnrichedPoi records.
+// Merge groups raw POIs from all providers into deduplicated EnrichedPoi
+// records, returning the resulting slice of merged POIs.
 func Merge(pois []types.RawPoi) []types.EnrichedPoi {
 	groups := group(pois)
 	result := make([]types.EnrichedPoi, 0, len(groups))
@@ -64,17 +54,13 @@ func Merge(pois []types.RawPoi) []types.EnrichedPoi {
 	return result
 }
 
-// group clusters raw POIs into duplicate groups using a greedy pairwise match.
-// A spatial bucket index restricts the per-leader scan to the 9-cell
-// neighbourhood, turning the algorithm from O(n²) into amortised O(n) for
-// realistic POI densities while preserving the exact merge results.
+// group clusters pois into duplicate groups using a greedy pairwise match,
+// restricted to a 9-cell spatial neighbourhood for near-O(n) performance. It
+// returns the resulting groups of duplicate POIs.
 func group(pois []types.RawPoi) [][]types.RawPoi {
 	used := make([]bool, len(pois))
 	groups := make([][]types.RawPoi, 0, len(pois))
 
-	// Build the spatial index. POIs without usable coordinates can still
-	// merge via the WikidataID path of areDuplicates, so they go into a
-	// dedicated bucket that every leader also scans.
 	buckets := make(map[cellKey][]int, len(pois))
 	var spatialless []int
 	for i, p := range pois {
@@ -113,11 +99,10 @@ func group(pois []types.RawPoi) [][]types.RawPoi {
 	return groups
 }
 
-// candidatesFor returns the indices of POIs that could conceivably merge with
-// a POI at c. The leader's own bucket plus its 8 neighbours covers every
-// position within proximityThresholdMeters + AccuracyMeters of c. Spatialless
-// POIs are always candidates — areDuplicates short-circuits on nil coords
-// unless WikidataIDs match.
+// candidatesFor returns the indices of POIs that could plausibly merge with
+// a POI at coordinates c, using the 9-cell neighbourhood of buckets plus the
+// spatialless indices (POIs without usable coordinates). It returns the
+// resulting candidate POI indices to check for duplication.
 func candidatesFor(c *types.Coordinates, buckets map[cellKey][]int, spatialless []int) []int {
 	out := append([]int(nil), spatialless...)
 	if c == nil || c.Approximate {
@@ -132,9 +117,8 @@ func candidatesFor(c *types.Coordinates, buckets map[cellKey][]int, spatialless 
 	return out
 }
 
-// areDuplicates returns true when two POIs refer to the same place or event.
-// For events (those with a DateStart), two POIs are only duplicates when they
-// also share the same start date — different dates mean different occurrences.
+// areDuplicates reports whether POIs a and b are the same place, matching
+// WikidataID, proximity, name similarity, and (for events) start date.
 func areDuplicates(a, b types.RawPoi) bool {
 	if a.WikidataID != "" && a.WikidataID == b.WikidataID {
 		return true
@@ -153,7 +137,6 @@ func areDuplicates(a, b types.RawPoi) bool {
 		return false
 	}
 
-	// Events at the same venue are only duplicates if they start on the same day.
 	if a.DateStart != nil && b.DateStart != nil {
 		ay, am, ad := a.DateStart.Date()
 		by, bm, bd := b.DateStart.Date()
@@ -175,9 +158,10 @@ func areDuplicates(a, b types.RawPoi) bool {
 	return len(short) >= 8 && strings.Contains(long, short)
 }
 
-// tokenOverlapOK guards against JW prefix-bonus false positives (e.g. "Hotel A"
-// vs "Hotel B"). Requires shared_words/min(|a|,|b|) > 0.5 when both names
-// have ≥ 2 words; single-word names rely on JW alone.
+// tokenOverlapOK guards against Jaro-Winkler prefix-bonus false positives by
+// requiring >50% shared-word overlap between the normalized names a and b
+// for multi-word names. It returns true if the names share enough words, or
+// if either isn't multi-word.
 func tokenOverlapOK(a, b string) bool {
 	wa, wb := strings.Fields(a), strings.Fields(b)
 	if len(wa) < 2 || len(wb) < 2 {
@@ -206,17 +190,20 @@ var diacriticReplacer = strings.NewReplacer(
 	"-", " ",
 )
 
-// normalizeName lowercases, trims, and replaces diacritics and hyphens for comparison.
+// normalizeName lowercases, trims, and replaces diacritics and hyphens in s
+// for comparison, returning the normalized name.
 func normalizeName(s string) string {
 	return diacriticReplacer.Replace(strings.ToLower(strings.TrimSpace(s)))
 }
 
-// toEnriched builds an EnrichedPoi from a group by picking the highest-priority provider as primary.
+// toEnriched builds an EnrichedPoi from group by picking the
+// highest-priority provider as primary, returning the merged enriched POI.
 func toEnriched(group []types.RawPoi) types.EnrichedPoi {
 	primary := primaryPoi(group)
 	return types.EnrichedPoi{
 		ID:          primary.ID,
 		Name:        primary.Name,
+		Kind:        primary.Kind,
 		Type:        primary.Type,
 		Coords:      bestCoords(group),
 		Zone:        primary.Zone,
@@ -232,10 +219,8 @@ func toEnriched(group []types.RawPoi) types.EnrichedPoi {
 	}
 }
 
-// mergeSources returns one SourceLink per distinct contributing provider,
-// keyed by the first occurrence of each provider in the input group. The
-// URL is the RawPoi.SourceURL from that first occurrence — empty when the
-// provider does not expose a stable browse URL.
+// mergeSources returns one SourceLink per distinct provider in group, keyed
+// by each provider's first occurrence.
 func mergeSources(group []types.RawPoi) []types.SourceLink {
 	out := make([]types.SourceLink, 0, len(group))
 	seen := make(map[types.Provider]bool, len(group))
@@ -249,7 +234,7 @@ func mergeSources(group []types.RawPoi) []types.SourceLink {
 	return out
 }
 
-// primaryPoi returns the group member from the highest-priority provider.
+// primaryPoi returns the member of group from the highest-priority provider.
 func primaryPoi(group []types.RawPoi) types.RawPoi {
 	best := group[0]
 	for _, p := range group[1:] {
@@ -260,7 +245,8 @@ func primaryPoi(group []types.RawPoi) types.RawPoi {
 	return best
 }
 
-// bestCoords returns the coordinates from the highest-priority provider that has them.
+// bestCoords returns the coordinates from group's highest-priority provider
+// that has them, or nil if none do.
 func bestCoords(group []types.RawPoi) *types.Coordinates {
 	var best *types.Coordinates
 	bestPrio := -1
@@ -273,13 +259,11 @@ func bestCoords(group []types.RawPoi) *types.Coordinates {
 	return best
 }
 
-// maxImagesPerPoi caps the merged Images slice. Three is enough to display a
-// small gallery and keeps the response payload bounded when many providers
-// each contribute a few URLs.
+// maxImagesPerPoi caps the number of image URLs returned per merged POI.
 const maxImagesPerPoi = 3
 
-// @param group raw POIs sharing a single deduplicated place.
-// @return up to maxImagesPerPoi distinct image URLs, taken in provider iteration order with the highest-priority provider first.
+// mergeImages returns up to maxImagesPerPoi distinct image URLs from group,
+// highest-priority provider first.
 func mergeImages(group []types.RawPoi) []string {
 	ordered := make([]types.RawPoi, len(group))
 	copy(ordered, group)
@@ -306,7 +290,8 @@ func mergeImages(group []types.RawPoi) []string {
 	return out
 }
 
-// mergeContact fills each Contact field with the first non-empty value across the group.
+// mergeContact fills each Contact field with the first non-empty value
+// across group, returning the merged contact info.
 func mergeContact(group []types.RawPoi) types.Contact {
 	var c types.Contact
 	for _, p := range group {
@@ -326,7 +311,8 @@ func mergeContact(group []types.RawPoi) types.Contact {
 	return c
 }
 
-// firstNonEmpty returns the first non-empty string extracted from the group by fn.
+// firstNonEmpty returns the first non-empty string extracted from group by
+// the field extractor fn, or "" if none is found.
 func firstNonEmpty(group []types.RawPoi, fn func(types.RawPoi) string) string {
 	for _, p := range group {
 		if v := fn(p); v != "" {

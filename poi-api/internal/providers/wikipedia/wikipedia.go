@@ -1,12 +1,6 @@
-// Package wikipedia implements two Provider adapters for the Wikipedia MediaWiki API:
-//   - Provider: geo-located Wikipedia articles filtered to physical places.
-//   - EventProvider: geo-located Wikipedia articles filtered to cultural festivals.
-//
-// Both use the Wikipedia Geosearch API to find articles near a location, enrich
-// them with extract and thumbnail, and apply a Wikidata SPARQL classification
-// filter to keep only the relevant entity class.
-//
-// Documentation: https://www.mediawiki.org/wiki/API:Geosearch
+// Package wikipedia implements Provider (physical places) and EventProvider
+// (cultural festivals) adapters over the Wikipedia Geosearch API, classified
+// via Wikidata SPARQL.
 package wikipedia
 
 import (
@@ -24,9 +18,7 @@ import (
 	"github.com/trippier/poi-api/pkg/types"
 )
 
-// wikidataIDRe matches the canonical Wikidata entity ID shape (Q followed by digits).
-// Any string failing this regex is rejected before being interpolated into the
-// SPARQL query, defending against a hypothetical mirror-injection attack.
+// wikidataIDRe matches the canonical Wikidata entity ID shape (Q followed by digits); used to sanitize values before SPARQL interpolation.
 var wikidataIDRe = regexp.MustCompile(`^Q\d+$`)
 
 const (
@@ -36,18 +28,37 @@ const (
 	// wikidataSPARQL is the Wikidata Query Service SPARQL endpoint.
 	wikidataSPARQL = "https://query.wikidata.org/sparql"
 
-	// festivalClass is the root Wikidata class for festivals (music, cultural,
-	// film, food, etc.). The events provider keeps only articles whose P31 chain
-	// reaches this class.
+	// festivalClass is the root Wikidata class for festivals; events provider keeps only articles under it.
 	festivalClass = "Q132241"
+
+	// apiTemplate is the MediaWiki API endpoint pattern; %s is the language edition subdomain.
+	apiTemplate = "https://%s.wikipedia.org/w/api.php"
 )
 
-// ── Shared infrastructure ─────────────────────────────────────────────────────
-
 type base struct {
-	client    *http.Client
-	baseURL   string
-	sparqlURL string
+	client  *http.Client
+	baseURL string
+	// apiTemplate, when non-empty, lets Search retarget baseURL to the
+	// per-request language edition. It is empty for test constructors, which
+	// pin a fixed baseURL.
+	apiTemplate string
+	sparqlURL   string
+}
+
+// forLang returns a copy of b whose baseURL targets the requested language
+// edition, or b unchanged when lang is empty/invalid or the endpoint is pinned
+// (tests). The shared http.Client is reused.
+//
+// @param lang the caller-supplied language code (e.g. from ?lang=fr).
+// @return the base to use for this request.
+func (b *base) forLang(lang string) *base {
+	code := providers.NormalizeLang(lang)
+	if code == "" || b.apiTemplate == "" {
+		return b
+	}
+	nb := *b
+	nb.baseURL = fmt.Sprintf(b.apiTemplate, code)
+	return &nb
 }
 
 type geosearchPage struct {
@@ -59,7 +70,9 @@ type geosearchPage struct {
 	Type   string  `json:"type"`
 }
 
-// geosearch calls the Wikipedia Geosearch API and returns pages near the query coordinates.
+// geosearch calls the Wikipedia Geosearch API for pages near the query
+// coordinates and radius given in q, using ctx for cancellation. It returns
+// the matching geosearch pages, or an error.
 func (b *base) geosearch(ctx context.Context, q types.SearchQuery) ([]geosearchPage, error) {
 	params := url.Values{
 		"action":      {"query"},
@@ -104,8 +117,9 @@ type enrichedPage struct {
 	Geo        geosearchPage
 }
 
-// enrich fetches extracts, thumbnails, and Wikidata IDs for a batch of geosearch pages.
-// Falls back to enrichWithoutAPI if the batch request fails.
+// enrich fetches extracts, thumbnails, and Wikidata IDs for the given batch
+// of geosearch pages, using ctx for cancellation, falling back to
+// enrichWithoutAPI on failure. It returns the enriched pages.
 func (b *base) enrich(ctx context.Context, pages []geosearchPage) []enrichedPage {
 	if len(pages) == 0 {
 		return nil
@@ -179,7 +193,9 @@ func (b *base) enrich(ctx context.Context, pages []geosearchPage) []enrichedPage
 	return out
 }
 
-// enrichWithoutAPI builds minimal enrichedPage records (title + geo only) when the batch API call is unavailable.
+// enrichWithoutAPI builds minimal enrichedPage records (title + geo only)
+// from pages when the batch API call is unavailable. It returns the
+// minimally enriched pages.
 func (b *base) enrichWithoutAPI(pages []geosearchPage) []enrichedPage {
 	out := make([]enrichedPage, len(pages))
 	for i, pg := range pages {
@@ -192,11 +208,9 @@ func (b *base) enrichWithoutAPI(pages []geosearchPage) []enrichedPage {
 	return out
 }
 
-// wikidataClassMembers queries the Wikidata SPARQL service and returns the
-// subset of the given Wikidata IDs that are instances of wikidataClass (or any
-// subclass thereof, via P31/P279*).
-//
-// On error it returns nil so callers can fail open or closed depending on context.
+// wikidataClassMembers checks, using ctx for cancellation, which of ids are
+// instances of wikidataClass (or a subclass thereof, via P31/P279*). It
+// returns the set of ids that belong to wikidataClass, or nil on error.
 func (b *base) wikidataClassMembers(ctx context.Context, ids []string, wikidataClass string) map[string]bool {
 	if len(ids) == 0 {
 		return nil
@@ -257,10 +271,8 @@ func (b *base) wikidataClassMembers(ctx context.Context, ids []string, wikidataC
 	return members
 }
 
-// toRawPoi converts an enriched Wikipedia page to a RawPoi of the given type.
-// The base is used to derive the canonical article URL from the configured
-// MediaWiki endpoint (e.g. "https://en.wikipedia.org/w/api.php" →
-// "https://en.wikipedia.org/?curid=<id>").
+// toRawPoi converts the enriched Wikipedia page ep to a RawPoi, tagging it
+// with poiType. It returns the converted RawPoi.
 func (b *base) toRawPoi(ep enrichedPage, poiType types.PoiType) types.RawPoi {
 	var images []string
 	if ep.Thumbnail != "" {
@@ -281,8 +293,9 @@ func (b *base) toRawPoi(ep enrichedPage, poiType types.PoiType) types.RawPoi {
 	}
 }
 
-// articleURL derives the canonical Wikipedia article URL from the configured
-// MediaWiki API endpoint. Returns "" if the host cannot be extracted.
+// articleURL derives the canonical article URL for pageID from the
+// MediaWiki API endpoint mediawikiURL. It returns the canonical article
+// URL, or "" if the host cannot be extracted.
 func articleURL(mediawikiURL string, pageID int) string {
 	if i := strings.Index(mediawikiURL, "/w/api.php"); i > 0 {
 		return fmt.Sprintf("%s/?curid=%d", mediawikiURL[:i], pageID)
@@ -290,25 +303,22 @@ func articleURL(mediawikiURL string, pageID int) string {
 	return ""
 }
 
-// ── Provider (physical places) ────────────────────────────────────────────────
-
-// Provider fetches geo-located Wikipedia articles and keeps only those that
-// represent physical places (by excluding articles whose Wikidata entity is an
-// instance of eventClass, Q1190554). The geosearch type=event articles are
-// pre-filtered before the Wikidata check.
+// Provider fetches geo-located Wikipedia articles and keeps only those representing physical places.
 type Provider struct{ base }
 
-// New returns a Provider targeting the given Wikipedia language edition.
+// New returns a Provider targeting the Wikipedia language edition lang.
 func New(lang string) *Provider {
 	return &Provider{base{
-		client:    &http.Client{Timeout: defaultTimeout},
-		baseURL:   fmt.Sprintf("https://%s.wikipedia.org/w/api.php", lang),
-		sparqlURL: wikidataSPARQL,
+		client:      &http.Client{Timeout: defaultTimeout},
+		baseURL:     fmt.Sprintf(apiTemplate, lang),
+		apiTemplate: apiTemplate,
+		sparqlURL:   wikidataSPARQL,
 	}}
 }
 
-// NewWithURLs returns a Provider using custom Wikipedia and SPARQL URLs.
-// Intended for testing both endpoints against local httptest servers.
+// NewWithURLs returns a Provider using the given Wikipedia API base URL
+// baseURL and SPARQL query endpoint sparqlURL, for testing against local
+// httptest servers.
 func NewWithURLs(baseURL, sparqlURL string) *Provider {
 	return &Provider{base{
 		client:    &http.Client{Timeout: defaultTimeout},
@@ -317,29 +327,25 @@ func NewWithURLs(baseURL, sparqlURL string) *Provider {
 	}}
 }
 
-// Name implements providers.Provider.
+// Name implements providers.Provider. It returns the provider identifier.
 func (p *Provider) Name() types.Provider { return types.ProviderWikipedia }
 
-// SupportsMode implements providers.Provider.
+// SupportsMode implements providers.Provider. It reports whether mode is
+// supported.
 func (p *Provider) SupportsMode(mode types.SearchMode) bool {
 	return mode == types.ModeRadius || mode == types.ModeDistrict
 }
 
-// enrichmentRadiusMeters is the maximum distance at which a Wikipedia article
-// is considered the same place as a POI returned by another provider. Tight
-// by design — Wikipedia geosearch coordinates can be a few dozen metres off
-// the real building, but past ~50 m we risk enriching with the wrong entity.
+// enrichmentRadiusMeters is the max distance to consider a Wikipedia article the same place as a POI from another provider.
 const enrichmentRadiusMeters = 50.0
 
-// EnrichmentRadius implements providers.Enricher.
+// EnrichmentRadius implements providers.Enricher. It returns the
+// enrichment radius in meters.
 func (p *Provider) EnrichmentRadius() float64 { return enrichmentRadiusMeters }
 
-// EnrichTarget implements providers.Enricher. It borrows the article's
-// WikidataID onto any target that lacks one, and for GeoNames targets it also
-// overwrites the placeholder geonames.org SourceURL with the Wikipedia article
-// URL and fills any empty Description with the article extract. The GeoNames
-// special case lives here, in the Wikipedia provider, because it encodes
-// Wikipedia's view of GeoNames data — the core never names either provider.
+// EnrichTarget implements providers.Enricher. It fills a missing WikidataID
+// on target and, for GeoNames targets, backfills SourceURL and Description
+// on target from source, the Wikipedia POI providing enrichment data.
 func (p *Provider) EnrichTarget(target *types.RawPoi, source types.RawPoi) {
 	if target.WikidataID == "" && source.WikidataID != "" {
 		target.WikidataID = source.WikidataID
@@ -352,44 +358,44 @@ func (p *Provider) EnrichTarget(target *types.RawPoi, source types.RawPoi) {
 	}
 }
 
-// Search implements providers.Provider.
-// NOTE: this provider is not included in AllProviders and is therefore not
-// called during standard place searches. It is available for explicit use
-// (e.g. enrichment pipelines) and for testing.
+// Search implements providers.Provider. It is not included in
+// AllProviders; it is used explicitly (e.g. enrichment pipelines) and in
+// tests. It searches near the coordinates and radius in q, using ctx for
+// cancellation, and returns matching POIs, or an error.
 func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {
-	pages, err := p.base.geosearch(ctx, q)
+	b := p.base.forLang(q.Lang)
+	pages, err := b.geosearch(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("wikipedia: geosearch: %w", err)
 	}
 	if len(pages) == 0 {
 		return nil, nil
 	}
-	enriched := p.base.enrich(ctx, pages)
+	enriched := b.enrich(ctx, pages)
 	pois := make([]types.RawPoi, 0, len(enriched))
 	for _, ep := range enriched {
-		pois = append(pois, p.base.toRawPoi(ep, types.TypeSee))
+		pois = append(pois, b.toRawPoi(ep, types.TypeSee))
 	}
 	return pois, nil
 }
 
-// ── EventProvider (cultural festivals) ───────────────────────────────────────
-
-// EventProvider fetches geo-located Wikipedia articles and keeps only those
-// that represent cultural festivals (Wikidata class Q132241 and subclasses:
-// music festivals, film festivals, food festivals, carnivals, etc.).
+// EventProvider fetches geo-located Wikipedia articles and keeps only those representing cultural festivals.
 type EventProvider struct{ base }
 
-// NewEventProvider returns an EventProvider targeting the given Wikipedia language edition.
+// NewEventProvider returns an EventProvider targeting the Wikipedia
+// language edition lang.
 func NewEventProvider(lang string) *EventProvider {
 	return &EventProvider{base{
-		client:    &http.Client{Timeout: defaultTimeout},
-		baseURL:   fmt.Sprintf("https://%s.wikipedia.org/w/api.php", lang),
-		sparqlURL: wikidataSPARQL,
+		client:      &http.Client{Timeout: defaultTimeout},
+		baseURL:     fmt.Sprintf(apiTemplate, lang),
+		apiTemplate: apiTemplate,
+		sparqlURL:   wikidataSPARQL,
 	}}
 }
 
-// NewEventProviderWithURLs returns an EventProvider using custom Wikipedia and SPARQL URLs.
-// Intended for testing both endpoints against local httptest servers.
+// NewEventProviderWithURLs returns an EventProvider using the given
+// Wikipedia API base URL baseURL and SPARQL query endpoint sparqlURL, for
+// testing against local httptest servers.
 func NewEventProviderWithURLs(baseURL, sparqlURL string) *EventProvider {
 	return &EventProvider{base{
 		client:    &http.Client{Timeout: defaultTimeout},
@@ -398,19 +404,22 @@ func NewEventProviderWithURLs(baseURL, sparqlURL string) *EventProvider {
 	}}
 }
 
-// Name implements providers.Provider.
+// Name implements providers.Provider. It returns the provider identifier.
 func (p *EventProvider) Name() types.Provider { return types.ProviderWikipediaEvents }
 
-// SupportsMode implements providers.Provider.
+// SupportsMode implements providers.Provider. It reports whether mode is
+// supported.
 func (p *EventProvider) SupportsMode(mode types.SearchMode) bool {
 	return mode == types.ModeRadius || mode == types.ModeDistrict
 }
 
-// Search implements providers.Provider.
-// Returns only articles classified as cultural festivals in Wikidata.
-// Articles without a Wikidata ID are dropped (cannot be classified).
+// Search implements providers.Provider. It searches near the coordinates
+// and radius in q, using ctx for cancellation, and returns only articles
+// classified as cultural festivals in Wikidata (articles without a
+// Wikidata ID are dropped), or an error.
 func (p *EventProvider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {
-	pages, err := p.base.geosearch(ctx, q)
+	b := p.base.forLang(q.Lang)
+	pages, err := b.geosearch(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("wikipedia_events: geosearch: %w", err)
 	}
@@ -418,7 +427,7 @@ func (p *EventProvider) Search(ctx context.Context, q types.SearchQuery) ([]type
 		return nil, nil
 	}
 
-	enriched := p.base.enrich(ctx, pages)
+	enriched := b.enrich(ctx, pages)
 
 	wikidataIDs := make([]string, 0, len(enriched))
 	for _, ep := range enriched {
@@ -427,7 +436,7 @@ func (p *EventProvider) Search(ctx context.Context, q types.SearchQuery) ([]type
 		}
 	}
 
-	festivalIDs := p.base.wikidataClassMembers(ctx, wikidataIDs, festivalClass)
+	festivalIDs := b.wikidataClassMembers(ctx, wikidataIDs, festivalClass)
 	if festivalIDs == nil {
 		return nil, nil
 	}
@@ -437,7 +446,7 @@ func (p *EventProvider) Search(ctx context.Context, q types.SearchQuery) ([]type
 		if ep.WikidataID == "" || !festivalIDs[ep.WikidataID] {
 			continue
 		}
-		poi := p.base.toRawPoi(ep, types.TypeEvent)
+		poi := b.toRawPoi(ep, types.TypeEvent)
 		poi.Provider = types.ProviderWikipediaEvents
 		poi.Recurring = true
 		pois = append(pois, poi)
@@ -445,6 +454,8 @@ func (p *EventProvider) Search(ctx context.Context, q types.SearchQuery) ([]type
 	return pois, nil
 }
 
+// init registers the Wikipedia and Wikipedia-events providers with the
+// global registry.
 func init() {
 	providers.Register(types.ProviderWikipedia, func(cfg providers.BuildConfig) (providers.Provider, error) {
 		return New(cfg.Lang), nil

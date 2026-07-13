@@ -1,3 +1,4 @@
+// Package search provides POI search and enrichment logic.
 package search
 
 import (
@@ -10,19 +11,10 @@ import (
 	"github.com/trippier/poi-api/pkg/types"
 )
 
-// enrichRaw runs every registered providers.Enricher over the raw POI list.
-// For each enricher we fetch its POIs once and let it apply itself to every
-// non-self target within its declared EnrichmentRadius. The core stays
-// provider-agnostic: provider-specific borrowing rules live inside each
-// enricher's implementation.
-//
-// Enrichers are skipped silently when they fail or return nothing — partial
-// enrichment is always preferable to a hard error on a non-essential step.
-//
-// @param ctx parent request context.
-// @param raw POIs returned by the request's selected providers.
-// @param q the search query, forwarded to each enricher's Search.
-// @return raw with each enricher's contributions applied in place.
+// enrichRaw runs every registered enricher over the raw POI list, skipping
+// failures silently. ctx is the request context, raw is the POI slice
+// enriched in place, and q is the original search query. It returns the
+// enriched POI slice.
 func (s *Service) enrichRaw(ctx context.Context, raw []types.RawPoi, q types.SearchQuery) []types.RawPoi {
 	if len(raw) == 0 {
 		return raw
@@ -40,10 +32,11 @@ func (s *Service) enrichRaw(ctx context.Context, raw []types.RawPoi, q types.Sea
 	return raw
 }
 
-// applyEnricher fetches one enricher's data and lets it modify each target
-// POI that has a viable nearest source within its radius. Targets belonging
-// to the enricher's own provider are skipped — an enricher cannot enrich
-// itself.
+// applyEnricher enriches each in-radius target POI, skipping targets from
+// the enricher's own provider. ctx is the request context, raw holds the
+// target POIs enriched in place, q is the original search query, p is the
+// provider supplying enrichment sources, and e is the enricher applying
+// data to targets.
 func (s *Service) applyEnricher(ctx context.Context, raw []types.RawPoi, q types.SearchQuery, p providers.Provider, e providers.Enricher) {
 	pctx, cancel := context.WithTimeout(ctx, s.providerTimeout)
 	defer cancel()
@@ -71,8 +64,10 @@ func (s *Service) applyEnricher(ctx context.Context, raw []types.RawPoi, q types
 	}
 }
 
-// closestNeighbour returns the POI in sources closest to target, or nil when
-// none falls within radius. Sources without usable coordinates are skipped.
+// closestNeighbour returns the nearest source POI to target within radius,
+// or nil if none qualifies. target is the POI to find a neighbour for,
+// sources are the candidate POIs to search, and radius is the maximum
+// allowed distance. It returns the nearest qualifying source POI, or nil.
 func closestNeighbour(target types.RawPoi, sources []types.RawPoi, radius float64) *types.RawPoi {
 	bestDist := radius + 1
 	var best *types.RawPoi

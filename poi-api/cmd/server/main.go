@@ -1,5 +1,4 @@
-// Package main is the entry point of the poi-api server.
-// It wires configuration, providers, and the HTTP router together.
+// Package main is the entry point of the poi-api server, wiring configuration, providers, and the HTTP router together.
 package main
 
 import (
@@ -32,6 +31,7 @@ import (
 	_ "github.com/trippier/poi-api/internal/providers/wikivoyage"
 )
 
+// main wires configuration, providers, and the HTTP server, then runs until a shutdown signal.
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -83,7 +83,9 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	pois := r.Group("/pois")
+	v1 := r.Group("/v1")
+
+	pois := v1.Group("/pois")
 	pois.Use(middleware.Cache(rdb, cacheTTL))
 	handler.RegisterRoutes(pois)
 
@@ -119,19 +121,23 @@ func main() {
 	log.Info("server stopped")
 }
 
-// buildAuthMiddlewares returns the global and events-specific rate-limit middlewares.
-// When AUTH_DISABLED=true both are no-ops so the API runs without an auth-api dependency.
+// buildAuthMiddlewares builds the rate-limit middlewares for global and event
+// routes from cfg (no-ops if AUTH_DISABLED=true). It returns global, the
+// rate-limit middleware applied to all routes, and events, the rate-limit
+// middleware applied to event routes.
 func buildAuthMiddlewares(cfg *config.Config) (global, events gin.HandlerFunc) {
 	if cfg.AuthDisabled {
 		return middleware.Passthrough(), middleware.Passthrough()
 	}
 	global = middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 1,
-		"/health", "/pois/events", "/pois/events/slim", "/pois/events/custom", "/pois/events/custom/slim")
+		"/health", "/v1/pois/events", "/v1/pois/events/slim", "/v1/pois/events/custom", "/v1/pois/events/custom/slim")
 	events = middleware.RateLimit(cfg.AuthAPIURL, cfg.InternalSecret, 10)
 	return global, events
 }
 
-// buildLogger returns a production zap logger, or a development logger when level is "debug".
+// buildLogger creates a zap logger, production-configured unless level is
+// "debug", in which case the development logger is used. It returns the
+// configured logger.
 func buildLogger(level string) *zap.Logger {
 	var cfg zap.Config
 	if level == "debug" {
@@ -146,7 +152,8 @@ func buildLogger(level string) *zap.Logger {
 	return log
 }
 
-// buildRedis parses a Redis URL and returns a connected client.
+// buildRedis parses redisURL and creates a client for it. It returns the
+// connected Redis client, or an error if the URL cannot be parsed.
 func buildRedis(redisURL string) (*redis.Client, error) {
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {

@@ -1,3 +1,4 @@
+// Package geo provides geocoding helpers backed by the Nominatim OSM API.
 package geo
 
 import (
@@ -25,7 +26,9 @@ type Place struct {
 	Lng float64
 }
 
-// GeocodeDistrict resolves a place name to coordinates via the Nominatim OSM API.
+// GeocodeDistrict resolves a place name to coordinates via the Nominatim OSM
+// API, using ctx for the request. It returns the matching place coordinates,
+// or an error if the request fails or no result is found.
 func GeocodeDistrict(ctx context.Context, name string) (Place, error) {
 	params := url.Values{
 		"q":      {name},
@@ -64,8 +67,10 @@ func GeocodeDistrict(ctx context.Context, name string) (Place, error) {
 	return Place{Lat: lat, Lng: lng}, nil
 }
 
-// CountryCode resolves coordinates to an ISO 3166-1 alpha-2 country code (uppercase)
-// via Nominatim /reverse at zoom=3 (country granularity).
+// CountryCode resolves the coordinates (lat, lng) to an ISO 3166-1 alpha-2
+// country code (uppercase) via Nominatim /reverse at zoom=3 (country
+// granularity), using ctx for the request. It returns the country code, or
+// an error if the request fails or no result is found.
 func CountryCode(ctx context.Context, lat, lng float64) (string, error) {
 	params := url.Values{
 		"lat":    {strconv.FormatFloat(lat, 'f', 6, 64)},
@@ -100,8 +105,10 @@ func CountryCode(ctx context.Context, lat, lng float64) (string, error) {
 	return strings.ToUpper(result.Address.CountryCode), nil
 }
 
-// ReverseGeocode resolves coordinates to a city name via the Nominatim OSM API.
-// Returns the most specific populated place name available (city > town > village > county).
+// ReverseGeocode resolves the coordinates (lat, lng) to a city name via the
+// Nominatim OSM API, using ctx for the request. It returns the most specific
+// populated place name available (city > town > village > county), or an
+// error if the request fails or no name is found.
 func ReverseGeocode(ctx context.Context, lat, lng float64) (string, error) {
 	params := url.Values{
 		"lat":    {strconv.FormatFloat(lat, 'f', 6, 64)},

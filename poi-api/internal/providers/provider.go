@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -14,9 +15,25 @@ import (
 	"github.com/trippier/poi-api/pkg/types"
 )
 
-// BuildConfig carries every input a provider's Factory may need. New
-// providers can declare new dependencies by adding fields — existing
-// factories ignore what they don't use.
+// langCodeRe matches a syntactically valid Wikimedia language code such as
+// "en", "fr", "zh-yue" or "bat-smg": a lowercase letter followed by up to
+// eleven more lowercase alphanumerics or hyphens.
+var langCodeRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,11}$`)
+
+// NormalizeLang lowercases and validates a user-supplied language code so it
+// is safe to interpolate into a Wikimedia subdomain (guarding against SSRF via
+// dots, slashes, or an over-long value). It returns the normalized code, or ""
+// when lang is empty or malformed, in which case callers fall back to their
+// default edition.
+func NormalizeLang(lang string) string {
+	lang = strings.ToLower(strings.TrimSpace(lang))
+	if !langCodeRe.MatchString(lang) {
+		return ""
+	}
+	return lang
+}
+
+// BuildConfig carries every input a provider's Factory may need.
 type BuildConfig struct {
 	Lang             string
 	GeoNamesUsername string
@@ -25,23 +42,21 @@ type BuildConfig struct {
 	Log              *zap.Logger
 }
 
-// Factory builds a concrete Provider from BuildConfig. Returning (nil, nil)
-// is a clean opt-out — used when a required env var is absent (e.g. GeoNames
-// with no username) so the rest of the boot is unaffected.
+// Factory builds a concrete Provider from BuildConfig; returning (nil, nil) is a clean opt-out (e.g. a missing env var).
 type Factory func(BuildConfig) (Provider, error)
 
 var factories = map[types.Provider]Factory{}
 
-// Register associates a Factory with a provider id. Called from each provider
-// package's init() so the binary only needs `_ "…/providers/<name>"` blank
-// imports to enrol every backend — no central switch statement to maintain.
+// Register associates the Factory f with the provider identifier id. It is
+// called from each provider package's init().
 func Register(id types.Provider, f Factory) {
 	factories[id] = f
 }
 
-// BuildAll instantiates every registered Factory with cfg. Providers that
-// opted out (returned nil) are dropped silently; the first hard error stops
-// the boot.
+// BuildAll instantiates every registered Factory with cfg, dropping opt-outs
+// (nil) silently and stopping on the first error. It returns the
+// successfully built providers, or an error from the first factory that
+// failed.
 func BuildAll(cfg BuildConfig) ([]Provider, error) {
 	out := make([]Provider, 0, len(factories))
 	for _, f := range factories {
@@ -59,8 +74,11 @@ func BuildAll(cfg BuildConfig) ([]Provider, error) {
 
 const userAgent = "Trippier/1.0 (+https://github.com/trippier)"
 
-// @param ref a Wikimedia file reference such as "File:Eiffel_Tower.jpg", "Eiffel_Tower.jpg" or "Category:Eiffel".
-// @return the canonical Special:FilePath URL for the file, or empty string when ref is empty, a category, or otherwise unusable.
+// CommonsFileURL builds the direct file URL for a Wikimedia Commons
+// reference, such as "File:Eiffel_Tower.jpg", "Eiffel_Tower.jpg" or
+// "Category:Eiffel". It returns the canonical Special:FilePath URL for the
+// file, or an empty string when ref is empty, a category, or otherwise
+// unusable.
 func CommonsFileURL(ref string) string {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
@@ -78,8 +96,11 @@ func CommonsFileURL(ref string) string {
 	return "https://commons.wikimedia.org/wiki/Special:FilePath/" + url.PathEscape(ref)
 }
 
-// @param s a URL string drawn from untrusted upstream data (OSM tags, MediaWiki listings).
-// @return s if it starts with http:// / https:// / mailto:, otherwise the empty string — defangs javascript: and other XSS-prone schemes before they reach API consumers.
+// SafeURL filters s, a URL string drawn from untrusted upstream data (OSM
+// tags, MediaWiki listings), down to allow-listed schemes before it is
+// exposed to API consumers. It returns s if it starts with http://,
+// https://, or mailto:, otherwise the empty string — defanging javascript:
+// and other XSS-prone schemes before they reach API consumers.
 func SafeURL(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -92,9 +113,8 @@ func SafeURL(s string) string {
 	return ""
 }
 
-// SetUserAgent stamps the shared User-Agent on an outgoing request.
-// All provider HTTP calls must use this so external APIs (Overpass, Wikimedia)
-// can identify the application.
+// SetUserAgent stamps the shared User-Agent on req, the outgoing HTTP
+// request.
 func SetUserAgent(req *http.Request) {
 	req.Header.Set("User-Agent", userAgent)
 }
@@ -104,33 +124,29 @@ type Provider interface {
 	// Name returns the unique identifier of this provider.
 	Name() types.Provider
 
-	// SupportsMode reports whether this provider can handle the given search mode.
+	// SupportsMode reports whether this provider can handle the given search
+	// mode.
 	SupportsMode(mode types.SearchMode) bool
 
-	// Search fetches raw POIs matching the given query.
-	// Providers must respect context cancellation and deadline.
+	// Search fetches raw POIs matching q, the search query to fulfil.
+	// Providers must respect context cancellation and deadline via ctx. It
+	// returns the matching raw POIs, or an error.
 	Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error)
 }
 
 // ByokProvider is an optional interface for providers that require a user-supplied key.
 type ByokProvider interface {
+	// IsByok reports whether this provider requires a user-supplied key.
 	IsByok() bool
 }
 
-// Enricher is an optional interface for providers that lend attributes
-// (WikidataID, SourceURL, Description, …) to nearby POIs returned by other
-// providers. The core enrichment loop is provider-agnostic: it runs every
-// registered Enricher and lets each one decide what to copy onto target
-// POIs found within its declared EnrichmentRadius. Provider-specific
-// borrowing rules live inside the implementing package, never in the core.
+// Enricher lets a provider lend attributes (WikidataID, SourceURL, Description, …) to nearby POIs found by other providers within its EnrichmentRadius.
 type Enricher interface {
-	// EnrichmentRadius returns the maximum distance, in metres, at which one
-	// of this provider's POIs is considered "the same place" as a target POI
-	// for the purpose of borrowing attributes.
+	// EnrichmentRadius returns the max distance in metres for treating one of
+	// this provider's POIs as the same place as a target.
 	EnrichmentRadius() float64
 
-	// EnrichTarget applies this provider's contribution to target, given that
-	// source is the nearest matching POI returned by this provider during the
-	// current request. Implementations decide which fields to fill or replace.
+	// EnrichTarget applies this provider's contribution to target (mutated in
+	// place) using source, the nearest matching POI from this provider.
 	EnrichTarget(target *types.RawPoi, source types.RawPoi)
 }

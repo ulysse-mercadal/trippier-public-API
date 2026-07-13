@@ -1,3 +1,4 @@
+// Package middleware provides Gin HTTP middleware for security headers and CORS.
 package middleware
 
 import (
@@ -10,7 +11,8 @@ import (
 	"github.com/trippier/poi-api/internal/registry"
 )
 
-// SecureHeaders adds defensive HTTP response headers to every response.
+// SecureHeaders returns a Gin handler that adds defensive HTTP response
+// headers to every response.
 func SecureHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("X-Content-Type-Options", "nosniff")
@@ -20,11 +22,11 @@ func SecureHeaders() gin.HandlerFunc {
 	}
 }
 
-// allowedHeaders is computed once at startup from the registry plus the
-// always-on auth headers. Adding a new BYOK provider only requires editing
-// the registry — the CORS preflight picks the new header automatically.
+// allowedHeaders is computed once at startup from the registry plus the always-on auth headers.
 var allowedHeaders = buildAllowedHeaders()
 
+// buildAllowedHeaders builds the sorted, comma-joined list of headers allowed
+// via CORS, and returns that comma-separated string.
 func buildAllowedHeaders() string {
 	base := []string{"Authorization", "X-API-Key", "X-Internal-Auth", "Content-Type"}
 	seen := make(map[string]bool, len(base))
@@ -42,7 +44,8 @@ func buildAllowedHeaders() string {
 	return strings.Join(base, ", ")
 }
 
-// CORS allows all origins — this is a public API.
+// CORS returns a Gin handler that sets permissive CORS headers, allowing all
+// origins since this is a public API, and handles preflight OPTIONS requests.
 func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")

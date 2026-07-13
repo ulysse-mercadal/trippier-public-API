@@ -1,3 +1,4 @@
+// Package search orchestrates POI search across providers: selection, fetching, dedup, scoring, and pagination.
 package search
 
 import (
@@ -36,7 +37,9 @@ type Service struct {
 	selectionCache sync.Map
 }
 
-// NewService returns a Service backed by the given providers.
+// NewService builds a Service backed by the given providers pp, keyed
+// internally by name, using timeout as the per-provider search timeout and
+// log for pipeline diagnostics. It returns the constructed Service.
 func NewService(pp []providers.Provider, timeout time.Duration, log *zap.Logger) *Service {
 	m := make(map[types.Provider]providers.Provider, len(pp))
 	for _, p := range pp {
@@ -45,86 +48,83 @@ func NewService(pp []providers.Provider, timeout time.Duration, log *zap.Logger)
 	return &Service{providers: m, providerTimeout: timeout, log: log}
 }
 
-// selectionCacheKey is the immutable key under which a selectByCountry result
-// is memoised. Types are joined sorted so request ordering doesn't matter.
+// selectionCacheKey is the immutable key selectByCountry results are memoised under.
 type selectionCacheKey struct {
-	cc        string
-	types     string
-	forEvents bool
+	cc    string
+	types string
+	kind  types.PointKind
 }
 
-// Search runs the full POI pipeline with geo-aware provider auto-selection.
-// When the caller supplies ?providers=…, that explicit list is used as-is.
-// Otherwise providers are chosen from the registry by country + category scores.
+// Search runs the full POI pipeline with geo-aware provider auto-selection,
+// using ctx as the request context and q as the search query. When the
+// caller supplies ?providers=…, that explicit list is used as-is. Otherwise
+// providers are chosen from the registry by country + category scores. It
+// returns the paginated POI search result.
 func (s *Service) Search(ctx context.Context, q types.SearchQuery) (*types.SearchResult, error) {
 	userSpecified := len(q.Providers) > 0
 	applyDefaults(&q, defaultProviders())
 	if !userSpecified {
-		if selected := s.autoSelectProviders(ctx, q, false); len(selected) > 0 {
+		if selected := s.autoSelectProviders(ctx, q, types.KindPOI); len(selected) > 0 {
 			q.Providers = selected
 		}
 	}
-	merged := s.pipeline(ctx, &q)
+	merged := filterByKind(s.pipeline(ctx, &q), types.KindPOI)
 	filtered := applyFilters(merged, q)
 	return paginate(filtered, q), nil
 }
 
-// SearchCustom is the fully-controllable variant of Search.
-// In addition to the standard parameters it respects:
-//   - q.CountryHint     — override geo-detected country code
-//   - q.ExcludeProviders — blacklist applied after auto-selection or explicit list
-//   - q.ProviderWeights  — per-provider score overrides for auto-selection
-//
-// When ?providers=… is supplied the explicit list is used (after exclusions).
-// When omitted, geo-aware auto-selection runs using ProviderWeights overrides.
+// SearchCustom is the fully-controllable variant of Search, running with ctx
+// as the request context and q as the search query, respecting
+// q.CountryHint, q.ExcludeProviders and q.ProviderWeights overrides. It
+// returns the paginated POI search result.
 func (s *Service) SearchCustom(ctx context.Context, q types.SearchQuery) (*types.SearchResult, error) {
 	userSpecified := len(q.Providers) > 0
 	applyDefaults(&q, defaultProviders())
 	if !userSpecified {
-		if selected := s.autoSelectProviders(ctx, q, false); len(selected) > 0 {
+		if selected := s.autoSelectProviders(ctx, q, types.KindPOI); len(selected) > 0 {
 			q.Providers = selected
 		}
 	}
 	q.Providers = filterExcluded(q.Providers, q.ExcludeProviders)
-	merged := s.pipeline(ctx, &q)
+	merged := filterByKind(s.pipeline(ctx, &q), types.KindPOI)
 	filtered := applyFilters(merged, q)
 	return paginate(filtered, q), nil
 }
 
-// SearchEvents runs the POI pipeline restricted to event providers. The
-// radius is stretched to the maximum MinRadius declared by any selected
-// provider in the registry — providers that need a wide geo (Ticketmaster,
-// Eventbrite) opt in via meta.MinRadius without the orchestrator knowing
-// their names.
+// SearchEvents runs the POI pipeline restricted to event providers, using
+// ctx as the request context and q as the search query, stretching the
+// radius to the maximum MinRadius declared by any selected provider. It
+// returns the paginated event search result.
 func (s *Service) SearchEvents(ctx context.Context, q types.SearchQuery) (*types.SearchResult, error) {
 	applyDefaults(&q, defaultEventProviders())
 	clampRadiusToMin(&q)
-	merged := s.pipeline(ctx, &q)
+	merged := filterByKind(s.pipeline(ctx, &q), types.KindEvent)
 	return paginate(merged, q), nil
 }
 
-// SearchEventsCustom is the fully-controllable variant of SearchEvents.
+// SearchEventsCustom is the fully-controllable variant of SearchEvents,
+// running with ctx as the request context and q as the search query with
+// optional overrides. It returns the paginated event search result.
 func (s *Service) SearchEventsCustom(ctx context.Context, q types.SearchQuery) (*types.SearchResult, error) {
 	userSpecified := len(q.Providers) > 0
 	applyDefaults(&q, defaultEventProviders())
 	clampRadiusToMin(&q)
 	if !userSpecified {
-		if selected := s.autoSelectProviders(ctx, q, true); len(selected) > 0 {
+		if selected := s.autoSelectProviders(ctx, q, types.KindEvent); len(selected) > 0 {
 			q.Providers = selected
 		}
 	}
 	q.Providers = filterExcluded(q.Providers, q.ExcludeProviders)
-	merged := s.pipeline(ctx, &q)
+	merged := filterByKind(s.pipeline(ctx, &q), types.KindEvent)
 	return paginate(merged, q), nil
 }
 
-// defaultProviders returns the list of non-BYOK, non-event providers from the
-// registry, with a non-zero country-wildcard score. Wikipedia is included via
-// CountryScore=0 to keep it usable as enricher-only.
+// defaultProviders lists non-BYOK, non-event registry providers with a
+// non-zero country-wildcard score. It returns sorted default provider IDs.
 func defaultProviders() []types.Provider {
 	out := make([]types.Provider, 0, len(registry.All))
 	for id, meta := range registry.All {
-		if meta.Byok || meta.ForEvents {
+		if meta.Byok || !meta.Provides(types.KindPOI) {
 			continue
 		}
 		if meta.CountryScore("*") <= 0 {
@@ -136,14 +136,13 @@ func defaultProviders() []types.Provider {
 	return out
 }
 
-// defaultEventProviders returns the list of event providers from the registry.
-// BYOK event providers (Ticketmaster, Eventbrite) ARE included by default
-// because the orchestrator can call them safely: each provider checks for its
-// own key and returns nil cleanly when absent.
+// defaultEventProviders lists all registry event providers, including BYOK
+// ones (each checks its own key). It returns sorted default event provider
+// IDs.
 func defaultEventProviders() []types.Provider {
 	out := make([]types.Provider, 0, len(registry.All))
 	for id, meta := range registry.All {
-		if !meta.ForEvents {
+		if !meta.Provides(types.KindEvent) {
 			continue
 		}
 		out = append(out, id)
@@ -152,9 +151,8 @@ func defaultEventProviders() []types.Provider {
 	return out
 }
 
-// clampRadiusToMin stretches q.Radius up to the maximum MinRadius declared by
-// any currently selected provider — providers that don't need a wide geo can
-// leave MinRadius=0 and remain unaffected.
+// clampRadiusToMin stretches q.Radius up to the maximum MinRadius declared
+// by any provider in q.Providers, mutating q in place.
 func clampRadiusToMin(q *types.SearchQuery) {
 	maxMin := 0
 	for _, id := range q.Providers {
@@ -167,11 +165,9 @@ func clampRadiusToMin(q *types.SearchQuery) {
 	}
 }
 
-// ProvidersStatus returns the list of registered providers with their static
-// metadata. We do not probe upstream — every probe historically consumed paid
-// quota (Ticketmaster, Eventbrite) without offering a reliable signal, and
-// callers who want true health information should rely on observability of
-// real Search calls.
+// ProvidersStatus lists registered providers with their static metadata;
+// upstreams are never probed (avoids burning paid quota). The context
+// argument is unused. It returns the provider statuses.
 func (s *Service) ProvidersStatus(_ context.Context) []types.ProviderStatus {
 	statuses := make([]types.ProviderStatus, 0, len(s.providers))
 	for name, p := range s.providers {
@@ -181,7 +177,8 @@ func (s *Service) ProvidersStatus(_ context.Context) []types.ProviderStatus {
 	return statuses
 }
 
-// ProvidersCatalog returns the full registry merged with runtime implementation status.
+// ProvidersCatalog returns the full registry merged with runtime
+// implementation status, as sorted provider catalog entries.
 func (s *Service) ProvidersCatalog() []types.ProviderCatalogEntry {
 	entries := make([]types.ProviderCatalogEntry, 0, len(registry.All))
 	for id, meta := range registry.All {
@@ -191,7 +188,7 @@ func (s *Service) ProvidersCatalog() []types.ProviderCatalogEntry {
 			Label:          meta.Label,
 			Byok:           meta.Byok,
 			ByokHeader:     meta.ByokHeader,
-			ForEvents:      meta.ForEvents,
+			Kinds:          meta.Kinds,
 			Categories:     meta.Categories,
 			CountryScores:  meta.CountryScores,
 			CategoryScores: meta.CategoryScores,
@@ -204,9 +201,12 @@ func (s *Service) ProvidersCatalog() []types.ProviderCatalogEntry {
 	return entries
 }
 
-// ProvidersRecommend scores all registry providers for the given location and types,
-// returning the top-n entries sorted by composite score (descending).
-func (s *Service) ProvidersRecommend(ctx context.Context, lat, lng float64, forEvents bool, requestedTypes []types.PoiType, limit int) types.RecommendResult {
+// ProvidersRecommend scores registry providers for the location (lat, lng)
+// and requestedTypes, using ctx for country detection, restricting
+// candidates to those yielding kind, and keeping at most limit entries (0
+// means unlimited). It returns the ranked recommendation result for the
+// detected country, sorted by composite score descending.
+func (s *Service) ProvidersRecommend(ctx context.Context, lat, lng float64, kind types.PointKind, requestedTypes []types.PoiType, limit int) types.RecommendResult {
 	cc, _ := geo.CountryCode(ctx, lat, lng)
 
 	type scored struct {
@@ -216,7 +216,7 @@ func (s *Service) ProvidersRecommend(ctx context.Context, lat, lng float64, forE
 	candidates := make([]scored, 0, len(registry.All))
 
 	for id, meta := range registry.All {
-		if meta.ForEvents != forEvents {
+		if !meta.Provides(kind) {
 			continue
 		}
 		score := meta.Score(cc, requestedTypes)
@@ -228,7 +228,7 @@ func (s *Service) ProvidersRecommend(ctx context.Context, lat, lng float64, forE
 				Score:       score,
 				Byok:        meta.Byok,
 				ByokHeader:  meta.ByokHeader,
-				ForEvents:   meta.ForEvents,
+				Kinds:       meta.Kinds,
 				Implemented: implemented,
 			},
 			score: score,
@@ -249,12 +249,11 @@ func (s *Service) ProvidersRecommend(ctx context.Context, lat, lng float64, forE
 	return types.RecommendResult{CountryCode: cc, Providers: result}
 }
 
-// autoSelectProviders picks providers from the registry for the query's location and types.
-// Only implemented, non-BYOK providers are auto-selected (BYOK = explicit opt-in by user).
-// forEvents=true restricts to event providers.
-// q.CountryHint and q.ProviderWeights are respected when present.
-func (s *Service) autoSelectProviders(ctx context.Context, q types.SearchQuery, forEvents bool) []types.Provider {
-	// Resolve coordinates for district mode so we can detect the country.
+// autoSelectProviders picks non-BYOK registry providers for q's location and
+// types, using ctx for geocoding/country detection, respecting
+// q.CountryHint and q.ProviderWeights, and restricting candidates to those
+// yielding kind. It returns the selected provider IDs, best score first.
+func (s *Service) autoSelectProviders(ctx context.Context, q types.SearchQuery, kind types.PointKind) []types.Provider {
 	lat, lng := q.Lat, q.Lng
 	if q.Mode == types.ModeDistrict && lat == 0 && lng == 0 {
 		if place, err := geo.GeocodeDistrict(ctx, q.District); err == nil {
@@ -262,7 +261,6 @@ func (s *Service) autoSelectProviders(ctx context.Context, q types.SearchQuery, 
 		}
 	}
 
-	// Determine country code (hint takes precedence over geo-detection).
 	cc := strings.ToUpper(q.CountryHint)
 	if cc == "" && (lat != 0 || lng != 0) {
 		if detected, err := geo.CountryCode(ctx, lat, lng); err == nil {
@@ -272,24 +270,26 @@ func (s *Service) autoSelectProviders(ctx context.Context, q types.SearchQuery, 
 		}
 	}
 
-	return s.selectByCountry(cc, q.Types, q.ProviderWeights, q.ExcludeProviders, forEvents)
+	return s.selectByCountry(cc, q.Types, q.ProviderWeights, q.ExcludeProviders, kind)
 }
 
-// selectByCountry scores and filters registered providers for a given country
-// code. Results for the no-override path (no weight overrides, no exclusions)
-// are memoised in selectionCache so we don't re-iterate registry.All + sort
-// on every standard /pois/search call.
+// selectByCountry scores and filters registry providers for the detected or
+// hinted country cc, using requestedTypes for category scoring,
+// weightOverrides as per-provider score overrides, exclude as provider IDs
+// to drop from the result, and kind to restrict candidates to those
+// yielding that point kind. The no-override result path is memoised. It
+// returns the selected provider IDs, best score first.
 func (s *Service) selectByCountry(
 	cc string,
 	requestedTypes []types.PoiType,
 	weightOverrides map[types.Provider]float64,
 	exclude []types.Provider,
-	forEvents bool,
+	kind types.PointKind,
 ) []types.Provider {
 	cacheable := len(weightOverrides) == 0 && len(exclude) == 0
 	var cacheK selectionCacheKey
 	if cacheable {
-		cacheK = makeSelectionKey(cc, requestedTypes, forEvents)
+		cacheK = makeSelectionKey(cc, requestedTypes, kind)
 		if v, ok := s.selectionCache.Load(cacheK); ok {
 			return v.([]types.Provider)
 		}
@@ -307,20 +307,19 @@ func (s *Service) selectByCountry(
 	list := make([]candidate, 0, len(registry.All))
 
 	for id, meta := range registry.All {
-		if meta.ForEvents != forEvents {
+		if !meta.Provides(kind) {
 			continue
 		}
 		if meta.Byok {
-			continue // BYOK providers require explicit user opt-in
+			continue
 		}
 		if _, ok := s.providers[id]; !ok {
-			continue // backend not implemented
+			continue
 		}
 		if excludeSet[id] {
 			continue
 		}
 
-		// Country score — allow per-request override via ProviderWeights.
 		countryScore := meta.CountryScore(cc)
 		if ow, ok := weightOverrides[id]; ok {
 			countryScore = ow
@@ -344,18 +343,21 @@ func (s *Service) selectByCountry(
 	return out
 }
 
-// makeSelectionKey builds the stable cache key for selectByCountry. Types are
-// sorted so caller order doesn't fragment the cache.
-func makeSelectionKey(cc string, requestedTypes []types.PoiType, forEvents bool) selectionCacheKey {
+// makeSelectionKey builds the stable cache key for selectByCountry from cc
+// as the country code component, requestedTypes sorted before joining into
+// the key (so caller order doesn't fragment the cache), and kind as the
+// point kind component. It returns the resulting cache key.
+func makeSelectionKey(cc string, requestedTypes []types.PoiType, kind types.PointKind) selectionCacheKey {
 	parts := make([]string, len(requestedTypes))
 	for i, t := range requestedTypes {
 		parts[i] = string(t)
 	}
 	sort.Strings(parts)
-	return selectionCacheKey{cc: cc, types: strings.Join(parts, ","), forEvents: forEvents}
+	return selectionCacheKey{cc: cc, types: strings.Join(parts, ","), kind: kind}
 }
 
-// filterExcluded removes blacklisted providers from a list.
+// filterExcluded removes the providers in exclude from pp, returning pp
+// with excluded providers removed.
 func filterExcluded(pp []types.Provider, exclude []types.Provider) []types.Provider {
 	if len(exclude) == 0 {
 		return pp
@@ -373,7 +375,10 @@ func filterExcluded(pp []types.Provider, exclude []types.Provider) []types.Provi
 	return out
 }
 
-// pipeline fetches from all providers, geocodes district queries, deduplicates, scores, sorts.
+// pipeline fetches from all providers, geocoding district queries with ctx
+// and possibly mutating q with the resulting coordinates, then
+// deduplicates, scores, and sorts the results. It returns the enriched,
+// deduplicated, scored, and sorted POIs.
 func (s *Service) pipeline(ctx context.Context, q *types.SearchQuery) []types.EnrichedPoi {
 	if q.Mode == types.ModeDistrict {
 		if place, err := geo.GeocodeDistrict(ctx, q.District); err == nil {
@@ -398,15 +403,12 @@ func (s *Service) pipeline(ctx context.Context, q *types.SearchQuery) []types.En
 	return merged
 }
 
-// fanOutLimit caps how many provider Search calls run concurrently per
-// request. Bounds file-descriptor pressure (~N per concurrent request) and
-// keeps the load polite enough that upstream mirrors don't 429/IP-ban us.
-// Provider errors are logged inside the goroutine and never bubble up — a
-// single slow or broken provider must not fail the whole pipeline.
+// fanOutLimit caps concurrent provider Search calls per request.
 const fanOutLimit = 16
 
-// fetchAll fans out the search query to all selected providers concurrently,
-// capped at fanOutLimit in-flight calls.
+// fetchAll fans out the search query q to all selected providers
+// concurrently under ctx, capped at fanOutLimit in-flight calls. It returns
+// the raw POIs from the selected providers.
 func (s *Service) fetchAll(ctx context.Context, q types.SearchQuery) []types.RawPoi {
 	selected := s.selectProviders(q)
 	results := make([][]types.RawPoi, len(selected))
@@ -424,7 +426,7 @@ func (s *Service) fetchAll(ctx context.Context, q types.SearchQuery) []types.Raw
 				s.log.Warn("provider error", zap.String("provider", string(p.Name())), zap.Error(err))
 				return nil //nolint:nilerr // we never want a single provider to fail the whole request
 			}
-			results[i] = pois
+			results[i] = tagKinds(pois, p.Name())
 			return nil
 		})
 	}
@@ -441,9 +443,8 @@ func (s *Service) fetchAll(ctx context.Context, q types.SearchQuery) []types.Raw
 	return filterToSelectedProviders(all, q.Providers)
 }
 
-// @param raw POIs as returned by every selected provider's Search.
-// @param selected the provider IDs the user actually asked for.
-// @return raw with any RawPoi whose Provider isn't in selected dropped — protects against cross-provider hints (e.g. a Wikivoyage listing referencing a Wikipedia article) leaking into a response when the user did not ask for that provider.
+// filterToSelectedProviders drops entries from raw whose Provider isn't in
+// selected. It returns raw restricted to the selected providers.
 func filterToSelectedProviders(raw []types.RawPoi, selected []types.Provider) []types.RawPoi {
 	if len(raw) == 0 {
 		return raw
@@ -461,7 +462,37 @@ func filterToSelectedProviders(raw []types.RawPoi, selected []types.Provider) []
 	return out
 }
 
-// selectProviders filters registered providers to those in q.Providers that support q.Mode.
+// tagKinds stamps name's declared kind onto entries in pois that left Kind
+// unset (single-kind providers only). It returns pois with Kind filled in
+// where applicable.
+func tagKinds(pois []types.RawPoi, name types.Provider) []types.RawPoi {
+	kinds := registry.All[name].Kinds
+	if len(kinds) != 1 {
+		return pois
+	}
+	for i := range pois {
+		if pois[i].Kind == "" {
+			pois[i].Kind = kinds[0]
+		}
+	}
+	return pois
+}
+
+// filterByKind keeps only the entries in pois matching kind, returning pois
+// restricted to that kind.
+func filterByKind(pois []types.EnrichedPoi, kind types.PointKind) []types.EnrichedPoi {
+	out := pois[:0]
+	for _, p := range pois {
+		if p.Kind == kind {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// selectProviders filters registered providers to those named in
+// q.Providers that support q.Mode, returning the matching registered
+// providers.
 func (s *Service) selectProviders(q types.SearchQuery) []providers.Provider {
 	var out []providers.Provider
 	for _, name := range q.Providers {
@@ -472,7 +503,9 @@ func (s *Service) selectProviders(q types.SearchQuery) []providers.Provider {
 	return out
 }
 
-// applyDefaults fills in zero-value fields of q with sensible defaults before the pipeline runs.
+// applyDefaults fills in zero-value fields of q with sensible defaults
+// before the pipeline runs, mutating q in place and falling back to
+// defaultProviders when q.Providers is empty.
 func applyDefaults(q *types.SearchQuery, defaultProviders []types.Provider) {
 	if q.Mode == "" {
 		q.Mode = types.ModeRadius
@@ -491,7 +524,9 @@ func applyDefaults(q *types.SearchQuery, defaultProviders []types.Provider) {
 	}
 }
 
-// applyFilters removes POIs that do not match the requested types or fall below min_score.
+// applyFilters removes entries from pois that do not match q's requested
+// types or fall below q.MinScore. It returns pois matching the requested
+// types and minimum score.
 func applyFilters(pois []types.EnrichedPoi, q types.SearchQuery) []types.EnrichedPoi {
 	allowed := make(map[types.PoiType]bool, len(q.Types))
 	for _, t := range q.Types {
@@ -509,7 +544,8 @@ func applyFilters(pois []types.EnrichedPoi, q types.SearchQuery) []types.Enriche
 	return out
 }
 
-// paginate slices the scored list and wraps it in a SearchResult.
+// paginate slices pois according to q.Offset and q.Limit and wraps the
+// slice in a SearchResult, returning the paginated search result.
 func paginate(pois []types.EnrichedPoi, q types.SearchQuery) *types.SearchResult {
 	total := len(pois)
 	start := min(q.Offset, total)
@@ -517,7 +553,9 @@ func paginate(pois []types.EnrichedPoi, q types.SearchQuery) *types.SearchResult
 	return &types.SearchResult{Query: q, Total: total, Results: pois[start:end]}
 }
 
-// ParseWeights deserialises the "weights" query param. All values must be in [0, 1].
+// ParseWeights deserialises raw, the JSON-encoded "weights" query param;
+// all values must be in [0, 1]. It returns the parsed weights, or an error
+// if raw is malformed or a value is out of range.
 func ParseWeights(raw string) (map[types.PoiType]float64, error) {
 	if raw == "" {
 		return nil, nil
@@ -534,8 +572,10 @@ func ParseWeights(raw string) (map[types.PoiType]float64, error) {
 	return weights, nil
 }
 
-// ParseProviderWeights deserialises the "provider_weights" query param.
-// All values must be in [0, 1].
+// ParseProviderWeights deserialises raw, the JSON-encoded
+// "provider_weights" query param; all values must be in [0, 1]. It returns
+// the parsed weights, or an error if raw is malformed or a value is out of
+// range.
 func ParseProviderWeights(raw string) (map[types.Provider]float64, error) {
 	if raw == "" {
 		return nil, nil

@@ -7,8 +7,9 @@ import (
 	"github.com/trippier/poi-api/pkg/types"
 )
 
-// SetDistances annotates each RawPoi with its distance in meters from (lat, lng).
-// POIs with approximate or missing coordinates are skipped.
+// SetDistances annotates each RawPoi in pois with its distance in meters
+// from (lat, lng); POIs with approximate or missing coordinates are
+// skipped. It returns the same slice with distances set.
 func SetDistances(pois []types.RawPoi, lat, lng float64) []types.RawPoi {
 	for i, p := range pois {
 		if p.Coords != nil && !p.Coords.Approximate {
@@ -18,8 +19,9 @@ func SetDistances(pois []types.RawPoi, lat, lng float64) []types.RawPoi {
 	return pois
 }
 
-// FilterByRadius returns only the POIs within radiusMeters of (lat, lng).
-// POIs without precise coordinates are kept (they are zone-based results).
+// FilterByRadius keeps only the POIs in pois within radiusMeters of
+// (lat, lng); POIs without precise coordinates are kept (zone-based
+// results). It returns the filtered slice.
 func FilterByRadius(pois []types.RawPoi, lat, lng, radiusMeters float64) []types.RawPoi {
 	result := pois[:0]
 	for _, p := range pois {
@@ -34,8 +36,9 @@ func FilterByRadius(pois []types.RawPoi, lat, lng, radiusMeters float64) []types
 	return result
 }
 
-// FilterByPolygon returns only the POIs whose coordinates fall within the given polygon.
-// POIs without precise coordinates are kept.
+// FilterByPolygon keeps only the POIs in pois whose coordinates fall
+// within polygon; POIs without precise coordinates are kept. It returns
+// the filtered slice.
 func FilterByPolygon(pois []types.RawPoi, polygon [][2]float64) []types.RawPoi {
 	result := pois[:0]
 	for _, p := range pois {

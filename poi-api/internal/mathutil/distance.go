@@ -4,7 +4,8 @@ package mathutil
 
 import "math"
 
-// Haversine returns the great-circle distance in meters between two WGS-84 coordinates.
+// Haversine returns the great-circle distance in meters between the two
+// WGS-84 points (lat1,lng1) and (lat2,lng2).
 func Haversine(lat1, lng1, lat2, lng2 float64) float64 {
 	const earthRadius = 6_371_000.0
 	lat1Rad := lat1 * math.Pi / 180

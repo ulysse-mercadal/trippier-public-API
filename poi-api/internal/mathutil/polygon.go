@@ -1,7 +1,9 @@
+// Package mathutil provides small geometric helper functions.
 package mathutil
 
-// PointInPolygon reports whether the point (lat, lng) lies inside the given polygon
-// using the ray-casting algorithm. The polygon is expressed as a slice of [lat, lng] pairs.
+// PointInPolygon reports whether the point at (lat, lng) lies inside polygon,
+// a list of vertices given as [lat, lng] pairs, using the ray-casting
+// algorithm. It returns true if the point is inside the polygon.
 func PointInPolygon(lat, lng float64, polygon [][2]float64) bool {
 	n := len(polygon)
 	inside := false

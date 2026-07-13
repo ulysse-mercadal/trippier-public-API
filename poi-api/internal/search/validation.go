@@ -1,3 +1,4 @@
+// Package search validates and executes point-of-interest search queries.
 package search
 
 import (
@@ -16,10 +17,9 @@ var districtRe = regexp.MustCompile(`^[\p{L}\p{N}\s\-,\.]+$`)
 // polygonCoordRe accepts a single decimal coordinate token, optionally negative.
 var polygonCoordRe = regexp.MustCompile(`^-?\d{1,3}(?:\.\d{1,10})?$`)
 
-// Validate checks that a SearchQuery is semantically valid for its mode.
-// It is called after query binding so all fields are already populated.
-// An empty mode defaults to ModeRadius — the request can omit the parameter
-// when calling /pois/search with lat/lng/radius.
+// Validate dispatches semantic validation of q to its mode-specific
+// validator based on q.Mode; an empty mode defaults to ModeRadius. It
+// returns an error describing why the query is invalid, or nil.
 func Validate(q types.SearchQuery) error {
 	switch q.Mode {
 	case "", types.ModeRadius:
@@ -33,7 +33,9 @@ func Validate(q types.SearchQuery) error {
 	}
 }
 
-// validateRadius checks that lat/lng are present and within valid ranges, and that radius does not exceed 50 000 m.
+// validateRadius checks that q's lat/lng are present and within valid
+// ranges, and that q.Radius does not exceed 50 000 m. It returns an error
+// describing the invalid field, or nil.
 func validateRadius(q types.SearchQuery) error {
 	if q.Lat == 0 && q.Lng == 0 {
 		return errors.New("mode=radius requires lat and lng")
@@ -53,8 +55,9 @@ func validateRadius(q types.SearchQuery) error {
 	return nil
 }
 
-// validatePolygon checks that the polygon string is a whitespace-separated list of decimal
-// coordinate pairs (lat lon), with at least 3 pairs and at most 100, blocking QL injection.
+// validatePolygon checks that q.Polygon is a string of 3-100
+// whitespace-separated lat/lon pairs, blocking QL injection. It returns an
+// error describing the invalid field, or nil.
 func validatePolygon(q types.SearchQuery) error {
 	if q.Polygon == "" {
 		return errors.New("mode=polygon requires a polygon parameter")
@@ -77,8 +80,9 @@ func validatePolygon(q types.SearchQuery) error {
 	return nil
 }
 
-// validateDistrict checks that district is non-empty, within length bounds, and
-// contains only whitelisted characters to prevent Overpass QL injection.
+// validateDistrict checks that q.District is non-empty, within length
+// bounds, and whitelist-clean to prevent QL injection. It returns an error
+// describing the invalid field, or nil.
 func validateDistrict(q types.SearchQuery) error {
 	if q.District == "" {
 		return errors.New("mode=district requires a district parameter")
