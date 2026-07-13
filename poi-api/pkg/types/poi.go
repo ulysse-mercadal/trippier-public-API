@@ -53,6 +53,12 @@ type RawPoi struct {
 	// the provider does not expose a stable browse URL.
 	SourceURL string  `json:"source_url,omitempty"`
 	Distance  float64 `json:"distance,omitempty"`
+	// ExtraSources lets a provider declare cross-references it knows about
+	// (e.g. a Wikivoyage listing carrying a wikipedia= or wikidata= field).
+	// They surface as additional entries in EnrichedPoi.Sources after the
+	// dedup pass but never produce standalone RawPoi records of their own,
+	// so the pipeline never has to filter phantom POIs.
+	ExtraSources []SourceLink `json:"-"`
 	// Event-specific fields — nil/zero for non-event POIs.
 	DateStart *time.Time `json:"date_start,omitempty"`
 	DateEnd   *time.Time `json:"date_end,omitempty"`

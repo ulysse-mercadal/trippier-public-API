@@ -419,6 +419,8 @@ func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 			images = []string{u}
 		}
 
+		wikidataID := strings.TrimSpace(fields["wikidata"])
+
 		poi := types.RawPoi{
 			ID:          fmt.Sprintf("wikivoyage:%s:%s", zone, name),
 			Name:        name,
@@ -430,9 +432,11 @@ func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 				Phone:   strings.TrimSpace(fields["phone"]),
 				Hours:   strings.TrimSpace(fields["hours"]),
 			},
-			Images:    images,
-			Zone:      &types.Zone{Name: zone, Source: types.ProviderWikivoyage},
-			SourceURL: p.listingURL(zone, name),
+			Images:       images,
+			Zone:         &types.Zone{Name: zone, Source: types.ProviderWikivoyage},
+			WikidataID:   wikidataID,
+			SourceURL:    p.listingURL(zone, name),
+			ExtraSources: extraSourcesFromListing(p.wikipediaURL(fields["wikipedia"]), wikidataID),
 		}
 
 		if lat, lng, ok := p.parseCoords(fields); ok {
@@ -443,21 +447,26 @@ func (p *Provider) parseListings(wikitext, zone string) []types.RawPoi {
 		}
 
 		pois = append(pois, poi)
-
-		if wikiURL := p.wikipediaURL(fields["wikipedia"]); wikiURL != "" {
-			pois = append(pois, types.RawPoi{
-				ID:        fmt.Sprintf("wikipedia:%s:%s", zone, name),
-				Name:      name,
-				Type:      poi.Type,
-				Provider:  types.ProviderWikipedia,
-				Coords:    poi.Coords,
-				Zone:      poi.Zone,
-				SourceURL: wikiURL,
-			})
-		}
 	}
 
 	return pois
+}
+
+// @param wikipediaURL resolved Wikipedia article URL (empty when the listing has no wikipedia= field).
+// @param wikidataID raw value of the listing's wikidata= field (expected shape: Qnnn).
+// @return one SourceLink per declared cross-reference, surfacing the Wikipedia and Wikidata pages of the listing in EnrichedPoi.Sources after dedup.
+func extraSourcesFromListing(wikipediaURL, wikidataID string) []types.SourceLink {
+	var out []types.SourceLink
+	if wikipediaURL != "" {
+		out = append(out, types.SourceLink{Provider: types.ProviderWikipedia, URL: wikipediaURL})
+	}
+	if wikidataID != "" {
+		out = append(out, types.SourceLink{
+			Provider: types.ProviderWikidata,
+			URL:      "https://www.wikidata.org/wiki/" + wikidataID,
+		})
+	}
+	return out
 }
 
 // pipePlaceholder masks "|" characters inside [[…]] wiki links so the

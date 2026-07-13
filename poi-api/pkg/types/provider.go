@@ -9,6 +9,10 @@ const (
 	ProviderGeoNames        Provider = "geonames"
 	ProviderWikipedia       Provider = "wikipedia"
 	ProviderWikipediaEvents Provider = "wikipedia_events"
+	// ProviderWikidata only surfaces in EnrichedPoi.Sources as a cross-reference
+	// when another provider's record carries a Wikidata Q-id; there is no
+	// Wikidata Search adapter in the registry.
+	ProviderWikidata Provider = "wikidata"
 
 	ProviderFoursquare Provider = "foursquare"
 	ProviderHere       Provider = "here"
