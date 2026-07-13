@@ -75,11 +75,11 @@ push: prod-build
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 test-go-poi:
-	$(DRUN_GO) -v $(CURDIR)/poi-api:/app:z -w /app golang:1.23 \
+	$(DRUN_GO) -v $(CURDIR)/poi-api:/app:z -w /app golang:1.24 \
 		go test -race ./...
 
 test-go-auth:
-	$(DRUN_GO) -v $(CURDIR)/auth-api:/app:z -w /app golang:1.23 \
+	$(DRUN_GO) -v $(CURDIR)/auth-api:/app:z -w /app golang:1.24 \
 		go test -race ./...
 
 test-python:
@@ -107,5 +107,5 @@ lint: lint-go-poi lint-go-auth lint-python
 # ── Misc ──────────────────────────────────────────────────────────────────────
 
 tidy:
-	$(DRUN_GO) -v $(CURDIR)/poi-api:/app:z -w /app golang:1.23-alpine go mod tidy
-	$(DRUN_GO) -v $(CURDIR)/auth-api:/app:z -w /app golang:1.23-alpine go mod tidy
+	$(DRUN_GO) -v $(CURDIR)/poi-api:/app:z -w /app golang:1.24-alpine go mod tidy
+	$(DRUN_GO) -v $(CURDIR)/auth-api:/app:z -w /app golang:1.24-alpine go mod tidy
