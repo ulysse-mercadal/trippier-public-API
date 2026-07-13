@@ -26,6 +26,15 @@ class ItineraryService:
     """Builds day-by-day itineraries from a list of POIs."""
 
     def generate(self, request: ItineraryRequest, pois: list[Poi]) -> ItineraryResponse:
+        """Build a full multi-day itinerary from a POI list.
+
+        Args:
+            request: itinerary generation request with preferences and days.
+            pois: candidate points of interest to schedule.
+
+        Returns:
+            Generated itinerary response with day plans.
+        """
         pois = self._filter(pois, request.preferences)
         pois = self._sort_by_priority(pois, request.preferences.priorities)
         clusters = self._cluster(pois, request.days, request.start_location)
@@ -39,10 +48,28 @@ class ItineraryService:
         )
 
     def _filter(self, pois: list[Poi], prefs: Preferences) -> list[Poi]:
+        """Remove POIs whose type is in the user's avoid list.
+
+        Args:
+            pois: points of interest to filter.
+            prefs: user preferences containing avoided types.
+
+        Returns:
+            Filtered list of points of interest.
+        """
         avoided = set(prefs.avoid)
         return [p for p in pois if p.type not in avoided]
 
     def _sort_by_priority(self, pois: list[Poi], priorities: list[PoiType]) -> list[Poi]:
+        """Sort POIs by their position in the user's priority list.
+
+        Args:
+            pois: points of interest to sort.
+            priorities: ordered list of preferred POI types.
+
+        Returns:
+            POIs sorted by priority.
+        """
         priority_index = {t: i for i, t in enumerate(priorities)}
         return sorted(pois, key=lambda p: priority_index.get(p.type, len(priorities)))
 
@@ -52,6 +79,16 @@ class ItineraryService:
         days: int,
         start: Coordinates | None,
     ) -> list[list[Poi]]:
+        """Group POIs into geographically coherent clusters, one per day.
+
+        Args:
+            pois: points of interest to cluster.
+            days: number of clusters (days) to produce.
+            start: optional starting coordinates.
+
+        Returns:
+            List of ordered POI clusters, one per day.
+        """
         if not pois:
             return [[] for _ in range(days)]
 
@@ -90,6 +127,16 @@ class ItineraryService:
         k: int,
         start: Coordinates | None,
     ) -> list[tuple[float, float]]:
+        """Pick initial cluster centroids evenly spaced across the POI list.
+
+        Args:
+            pois: points of interest to derive centroids from.
+            k: number of centroids to produce.
+            start: optional starting coordinates used when pois is empty.
+
+        Returns:
+            Initial list of centroid coordinates.
+        """
         if not pois:
             lat = start.lat if start else 0.0
             lng = start.lng if start else 0.0
@@ -106,6 +153,15 @@ class ItineraryService:
         pois: list[Poi],
         start: Coordinates | None,
     ) -> list[Poi]:
+        """Order POIs using a nearest-neighbour heuristic from a start point.
+
+        Args:
+            pois: points of interest to order.
+            start: optional starting coordinates.
+
+        Returns:
+            POIs ordered by nearest-neighbour traversal.
+        """
         if not pois:
             return []
         remaining = list(pois)
@@ -132,6 +188,16 @@ class ItineraryService:
         return ordered
 
     def _build_day(self, day: int, pois: list[Poi], prefs: Preferences) -> DayPlan:
+        """Assemble a single day's plan with an estimated duration.
+
+        Args:
+            day: day number in the itinerary.
+            pois: points of interest scheduled for this day.
+            prefs: user preferences affecting pacing and hours.
+
+        Returns:
+            Day plan with estimated duration.
+        """
         hours_available = _parse_hours(prefs.start_time, prefs.end_time)
         pace_factor = {"relaxed": 1.5, "moderate": 1.0, "intensive": 0.7}.get(prefs.pace, 1.0)
         duration = min(len(pois) * pace_factor, hours_available)
@@ -139,6 +205,17 @@ class ItineraryService:
 
 
 def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Compute the great-circle distance between two coordinates.
+
+    Args:
+        lat1: latitude of the first point.
+        lng1: longitude of the first point.
+        lat2: latitude of the second point.
+        lng2: longitude of the second point.
+
+    Returns:
+        Distance in metres.
+    """
     earth_radius = 6_371_000.0
     lat1_rad = math.radians(lat1)
     lat2_rad = math.radians(lat2)
@@ -152,6 +229,15 @@ def _haversine(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 
 
 def _parse_hours(start: str, end: str) -> float:
+    """Compute the number of hours between two HH:MM time strings.
+
+    Args:
+        start: start time in HH:MM format.
+        end: end time in HH:MM format.
+
+    Returns:
+        Duration in hours.
+    """
     sh, sm = map(int, start.split(":"))
     eh, em = map(int, end.split(":"))
     return (eh * 60 + em - sh * 60 - sm) / 60

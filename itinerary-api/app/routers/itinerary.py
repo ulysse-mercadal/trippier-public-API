@@ -22,6 +22,16 @@ async def generate(
     poi_client: PoiClient = Depends(get_poi_client),  # noqa: B008
     service: ItineraryService = Depends(get_itinerary_service),  # noqa: B008
 ) -> ItineraryResponse:
+    """Build a day-by-day itinerary from provided or searched POIs.
+
+    Args:
+        request: itinerary generation request payload.
+        poi_client: client used to search POIs when needed.
+        service: service that builds the itinerary.
+
+    Returns:
+        The generated itinerary response.
+    """
     if request.pois is None and request.poi_query is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

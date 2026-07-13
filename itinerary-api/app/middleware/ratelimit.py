@@ -16,10 +16,13 @@ EXEMPT_PATHS = {"/health"}
 
 
 def _build_internal_auth(secret: str) -> str:
-    """Return an X-Internal-Auth header value: '<ts>.<hmac-sha256(secret, ts)>'.
+    """Build a signed X-Internal-Auth header value.
 
-    Using a timestamp-bound HMAC prevents replaying a captured header value.
-    The receiving side (auth-api) rejects tokens older than 30 s.
+    Args:
+        secret: shared secret used to sign the timestamp.
+
+    Returns:
+        Header value formatted as '<ts>.<hmac-sha256(secret, ts)>'.
     """
     ts = str(int(time.time()))
     sig = hmac.new(secret.encode(), ts.encode(), hashlib.sha256).hexdigest()
@@ -30,6 +33,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     """Calls auth-api /internal/check-rate-limit before each protected request."""
 
     def __init__(self, app: ASGIApp, auth_api_url: str, internal_secret: str, cost: int) -> None:
+        """Configure the middleware and its HTTP client.
+
+        Args:
+            app: wrapped ASGI application.
+            auth_api_url: base URL of the auth-api service.
+            internal_secret: shared secret for internal auth headers.
+            cost: token cost charged per request.
+        """
         super().__init__(app)
         self._auth_api_url = auth_api_url.rstrip("/")
         self._internal_secret = internal_secret
@@ -38,7 +49,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     @staticmethod
     def _validate_internal_auth(header: str, secret: str) -> bool:
-        """Return True if the X-Internal-Auth header is valid and recent (±30 s)."""
+        """Check whether an X-Internal-Auth header is valid and recent.
+
+        Args:
+            header: raw header value formatted as '<ts>.<sig>'.
+            secret: shared secret used to verify the signature.
+
+        Returns:
+            True if the header is valid and within 30 seconds of now.
+        """
         try:
             ts_str, sig = header.split(".", 1)
             ts = int(ts_str)
@@ -50,11 +69,18 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return hmac.compare_digest(expected, sig)
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        """Enforce rate limiting via auth-api before letting the request through.
+
+        Args:
+            request: incoming HTTP request.
+            call_next: handler that continues the middleware chain.
+
+        Returns:
+            The downstream response, or an error response if blocked.
+        """
         if request.url.path in EXEMPT_PATHS:
             return await call_next(request)
 
-        # Requests signed with the shared internal secret (e.g. the official
-        # site's server-side proxy) bypass rate limiting entirely.
         internal_auth = request.headers.get("X-Internal-Auth", "")
         if internal_auth and self._validate_internal_auth(internal_auth, self._internal_secret):
             return await call_next(request)
