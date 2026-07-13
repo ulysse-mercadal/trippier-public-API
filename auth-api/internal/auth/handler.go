@@ -1,3 +1,4 @@
+// Package auth exposes HTTP handlers for authentication endpoints.
 package auth
 
 import (
@@ -14,12 +15,15 @@ type Handler struct {
 	appURL string
 }
 
-// NewHandler creates a Handler.
+// NewHandler builds a Handler wired to the given service svc and the
+// frontend base URL appURL, and returns the configured Handler.
 func NewHandler(svc *Service, appURL string) *Handler {
 	return &Handler{svc: svc, appURL: appURL}
 }
 
-// RegisterRoutes mounts all auth endpoints on r.
+// RegisterRoutes mounts all auth endpoints on r, protecting /me with
+// jwtAuth and rate-limiting login and registration with loginLimiter and
+// registerLimiter respectively.
 func (h *Handler) RegisterRoutes(r gin.IRouter, jwtAuth gin.HandlerFunc, loginLimiter gin.HandlerFunc, registerLimiter gin.HandlerFunc) {
 	r.POST("/register", registerLimiter, h.register)
 	r.POST("/verify-code", registerLimiter, h.verifyCode)
@@ -28,7 +32,9 @@ func (h *Handler) RegisterRoutes(r gin.IRouter, jwtAuth gin.HandlerFunc, loginLi
 	r.GET("/me", jwtAuth, h.me)
 }
 
-// register handles POST /auth/register: creates an unverified account and sends a 6-digit OTP.
+// register handles POST /auth/register: it creates an unverified account
+// and sends a 6-digit OTP, using c for the request body and to write the
+// JSON response.
 func (h *Handler) register(c *gin.Context) {
 	var body struct {
 		Email    string `json:"email"    binding:"required,email"`
@@ -54,7 +60,9 @@ func (h *Handler) register(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"message": "check your email for a 6-digit verification code"})
 }
 
-// verifyCode handles POST /auth/verify-code: checks the OTP and returns a JWT on success.
+// verifyCode handles POST /auth/verify-code: it checks the OTP and returns
+// a JWT on success, using c for the request body and to write the JSON
+// response.
 func (h *Handler) verifyCode(c *gin.Context) {
 	var body struct {
 		Email string `json:"email" binding:"required,email"`
@@ -78,7 +86,9 @@ func (h *Handler) verifyCode(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
-// resendCode handles POST /auth/resend-code: generates a new OTP for an unverified account.
+// resendCode handles POST /auth/resend-code: it generates a new OTP for an
+// unverified account, using c for the request body and to write the JSON
+// response.
 func (h *Handler) resendCode(c *gin.Context) {
 	var body struct {
 		Email string `json:"email" binding:"required,email"`
@@ -100,7 +110,9 @@ func (h *Handler) resendCode(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "verification code resent"})
 }
 
-// login handles POST /auth/login: verifies credentials and returns a signed JWT on success.
+// login handles POST /auth/login: it verifies credentials and returns a
+// signed JWT on success, using c for the request body and to write the
+// JSON response.
 func (h *Handler) login(c *gin.Context) {
 	var body struct {
 		Email    string `json:"email"    binding:"required,email"`
@@ -127,7 +139,8 @@ func (h *Handler) login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
-// me handles GET /auth/me: returns the profile of the authenticated user.
+// me handles GET /auth/me: it returns the profile of the authenticated
+// user, using c to identify the caller and to write the JSON response.
 func (h *Handler) me(c *gin.Context) {
 	userID := c.GetString(mw.UserIDKey)
 	user, err := h.svc.Me(c.Request.Context(), userID)

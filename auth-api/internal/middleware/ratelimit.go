@@ -1,3 +1,4 @@
+// Package middleware provides gin HTTP middleware handlers.
 package middleware
 
 import (
@@ -9,9 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// incrScript atomically increments a counter and sets its TTL on first creation.
-// Using a Lua script ensures INCR + EXPIRE are executed as a single atomic operation,
-// preventing a race where the key expires before EXPIRE is called.
+// incrScript atomically increments a counter and sets its TTL on first creation, avoiding an INCR/EXPIRE race.
 var incrScript = redis.NewScript(`
 local count = redis.call('INCR', KEYS[1])
 if count == 1 then
@@ -20,8 +19,11 @@ end
 return count
 `)
 
-// IPRateLimit limits requests per remote IP using an atomic sliding window counter in Redis.
-// On Redis failure the request is rejected with 503 to prevent unlimited access.
+// IPRateLimit builds a gin handler that rate-limits requests per client IP
+// via Redis, rejecting with 503 if Redis is unavailable. rdb is the Redis
+// client used to track counters, limit is the max requests allowed per
+// window, and window is the duration of the rate-limit window. It returns a
+// gin.HandlerFunc that enforces the rate limit.
 func IPRateLimit(rdb *redis.Client, limit int, window time.Duration) gin.HandlerFunc {
 	windowSecs := int(window.Seconds())
 	return func(c *gin.Context) {

@@ -9,16 +9,14 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// RedisKey returns the Redis key for a user-level token bucket.
-// Buckets are per-user, not per API key — all keys belonging to the same user
-// draw from the same pool.
+// RedisKey builds the shared per-user rate-limit bucket key for userID.
 func RedisKey(userID string) string {
 	return "rl:user:" + userID
 }
 
-// InitBucket primes the token bucket for a user only if it does not already
-// exist in Redis (SETNX semantics). Creating a second API key does not reset
-// the remaining tokens.
+// InitBucket creates the bucket for userID with the given limit and ttl only
+// if it doesn't already exist, so issuing a new API key doesn't reset
+// existing token counts. It returns an error if the operation fails.
 func InitBucket(ctx context.Context, rdb *redis.Client, userID string, limit int, ttl time.Duration) error {
 	return rdb.SetArgs(ctx, RedisKey(userID), limit, redis.SetArgs{
 		Mode:    "NX",
@@ -28,13 +26,16 @@ func InitBucket(ctx context.Context, rdb *redis.Client, userID string, limit int
 	}).Err()
 }
 
-// SetTokens force-sets (or resets) the token bucket for a user. Use this for
-// administrative resets only — normal key creation should call InitBucket.
+// SetTokens force-resets userID's bucket to limit tokens with the given ttl;
+// use only for admin resets, not normal key creation (see InitBucket). It
+// returns an error if the operation fails.
 func SetTokens(ctx context.Context, rdb *redis.Client, userID string, limit int, ttl time.Duration) error {
 	return rdb.Set(ctx, RedisKey(userID), limit, ttl).Err()
 }
 
-// GetUsage returns (remaining, ttlSecs). remaining == -1 means no bucket in Redis.
+// GetUsage reads the current bucket state for userID. It returns the
+// remaining tokens (-1 if no bucket exists in Redis), the number of seconds
+// until the bucket expires, and an error if the read fails.
 func GetUsage(ctx context.Context, rdb *redis.Client, userID string) (remaining int, ttlSecs int64, err error) {
 	key := RedisKey(userID)
 
@@ -60,11 +61,7 @@ func GetUsage(ctx context.Context, rdb *redis.Client, userID string) (remaining 
 	return val, int64(ttl.Seconds()), nil
 }
 
-// deductScript atomically deducts cost tokens.
-// Returns [remaining, ttlSecs] on success,
-//
-//	[-1, 0]            if bucket not in Redis,
-//	[-2, ttlSecs]      if insufficient tokens.
+// deductScript atomically deducts cost tokens, returning [remaining, ttl], [-1,0] if absent, or [-2, ttl] if insufficient.
 var deductScript = redis.NewScript(`
 local val = redis.call('GET', KEYS[1])
 if val == false then return {-1, 0} end
@@ -82,8 +79,10 @@ if ttl < 0 then ttl = 0 end
 return {remaining, ttl}
 `)
 
-// Deduct subtracts cost from the user's bucket.
-// Returns (remaining, ttlSecs, notFound, insufficient, err).
+// Deduct atomically subtracts cost tokens from userID's bucket. It returns
+// the remaining tokens after deduction, the seconds until the bucket
+// expires, notFound if no bucket exists, insufficient if there weren't
+// enough tokens to cover cost, and err if the script execution fails.
 func Deduct(ctx context.Context, rdb *redis.Client, userID string, cost int) (remaining int, ttlSecs int64, notFound bool, insufficient bool, err error) {
 	key := RedisKey(userID)
 	res, err := deductScript.Run(ctx, rdb, []string{key}, cost).Int64Slice()

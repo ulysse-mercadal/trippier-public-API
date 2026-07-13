@@ -13,7 +13,8 @@ import (
 	rl "github.com/trippier/auth-api/internal/ratelimit"
 )
 
-// sha256Hex returns the SHA-256 hash of s as a lowercase hex string.
+// sha256Hex hashes s with SHA-256 and returns the lowercase hex-encoded
+// digest.
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
@@ -24,13 +25,15 @@ type Handler struct {
 	svc *Service
 }
 
-// NewHandler creates a Handler.
+// NewHandler creates a Handler that delegates to the given API-key service
+// svc.
 func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// RegisterRoutes mounts routes. Key management requires jwtAuth; the internal
-// subtree is protected by the caller (InternalAuth middleware).
+// RegisterRoutes mounts the API-key management routes on keys and the
+// internal rate-limit route on internal. Key management requires jwtAuth;
+// the internal subtree is protected by the caller (InternalAuth middleware).
 func (h *Handler) RegisterRoutes(keys gin.IRouter, internal gin.IRouter, jwtAuth gin.HandlerFunc) {
 	keys.Use(jwtAuth)
 	keys.POST("", h.create)
@@ -40,7 +43,8 @@ func (h *Handler) RegisterRoutes(keys gin.IRouter, internal gin.IRouter, jwtAuth
 	internal.POST("/check-rate-limit", h.checkRateLimit)
 }
 
-// create handles POST /keys: generates a new named API key and returns its plaintext value once.
+// create handles POST /keys: reads the requested name from the JSON body of
+// c, generates a new named API key, and returns its plaintext value once.
 func (h *Handler) create(c *gin.Context) {
 	var body struct {
 		Name string `json:"name" binding:"required"`
@@ -63,7 +67,8 @@ func (h *Handler) create(c *gin.Context) {
 	})
 }
 
-// list handles GET /keys: returns all active API keys for the authenticated user with current usage data.
+// list handles GET /keys: returns all active API keys for the user
+// authenticated on c, along with their current usage data.
 func (h *Handler) list(c *gin.Context) {
 	userID := c.GetString(mw.UserIDKey)
 	keys, err := h.svc.List(c.Request.Context(), userID)
@@ -77,7 +82,9 @@ func (h *Handler) list(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"keys": keys})
 }
 
-// revoke handles DELETE /keys/:id: marks the key as revoked so it can no longer be used.
+// revoke handles DELETE /keys/:id: marks the key identified by the id path
+// parameter of c as revoked, for the authenticated user, so it can no longer
+// be used.
 func (h *Handler) revoke(c *gin.Context) {
 	userID := c.GetString(mw.UserIDKey)
 	keyID := c.Param("id")
@@ -94,7 +101,9 @@ func (h *Handler) revoke(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "key revoked"})
 }
 
-// checkRateLimit handles POST /internal/check-rate-limit: validates an API key and deducts tokens from the user-level bucket.
+// checkRateLimit handles POST /internal/check-rate-limit: validates the
+// api_key from the JSON body of c and deducts cost tokens from the
+// corresponding user's rate-limit bucket.
 func (h *Handler) checkRateLimit(c *gin.Context) {
 	var body struct {
 		APIKey string `json:"api_key" binding:"required"`
@@ -124,7 +133,6 @@ func (h *Handler) checkRateLimit(c *gin.Context) {
 	}
 
 	if notFound {
-		// Bucket disappeared from Redis (e.g. restart) — prime and retry once.
 		ttl := time.Duration(info.TokensResetIntervalSecs) * time.Second
 		_ = rl.InitBucket(c.Request.Context(), h.svc.rdb, info.UserID, info.TokensLimit, ttl)
 		remaining, ttlSecs, _, insufficient, err = rl.Deduct(

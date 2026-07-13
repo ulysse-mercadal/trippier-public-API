@@ -18,15 +18,12 @@ type Sender struct {
 	pass string
 }
 
-// New creates a Sender. When user and pass are non-empty, SMTP PlainAuth is used (e.g. Resend on port 587).
+// New builds a Sender configured for the given SMTP server at host:port,
+// sending as from. If user and pass are non-empty, SMTP auth is enabled;
+// otherwise it is disabled. It returns the configured Sender.
 func New(host string, port int, from, user, pass string) *Sender {
 	return &Sender{host: host, port: port, from: from, user: user, pass: pass}
 }
-
-// Colors — oklch → sRGB approximations (low chroma, near-neutral darks):
-//   bg #0d1110 · bg-2 #101413 · surface #131817 · border #1d2422
-//   text #f2f5f3 · text-2 #c3cec9 · text-3 #91a09b · text-4 #697573
-//   accent #4ee39a
 
 var otpTmpl = template.Must(template.New("otp").Parse(`<!DOCTYPE html>
 <html lang="fr">
@@ -178,13 +175,18 @@ var otpTmpl = template.Must(template.New("otp").Parse(`<!DOCTYPE html>
 </body>
 </html>`))
 
+// otpData holds the values substituted into otpTmpl to render the OTP email.
 type otpData struct {
 	Email, SentAt, ExpiresAt string
 	IP                       string
 	D1, D2, D3, D4, D5, D6   string
 }
 
-// SendOTPCode sends a 6-digit verification code to addr.
+// SendOTPCode builds and sends the OTP verification email to to, containing
+// the 6-digit code (padded with '0' if shorter). clientIP is shown in the
+// email as the request origin (rendered as "—" if empty); userAgent and
+// appURL are accepted for context but not currently rendered. It returns an
+// error if template rendering or sending fails.
 func (s *Sender) SendOTPCode(to, code, clientIP, userAgent, appURL string) error {
 	digits := []rune(code)
 	for len(digits) < 6 {
@@ -209,8 +211,9 @@ func (s *Sender) SendOTPCode(to, code, clientIP, userAgent, appURL string) error
 	return s.sendHTML(to, "Votre code de connexion trippier : "+code, buf.String())
 }
 
-// sendHTML sends a raw HTML email via SMTP with no authentication (suitable for local relay or Mailhog).
-// A 15-second timeout prevents the goroutine from blocking indefinitely on hung SMTP servers.
+// sendHTML sends an HTML email with the given subject and html body to the
+// recipient to, using the Sender's SMTP settings, enforcing a 15s send
+// timeout. It returns an error if sending fails or times out.
 func (s *Sender) sendHTML(to, subject, html string) error {
 	addr := fmt.Sprintf("%s:%d", s.host, s.port)
 	msg := fmt.Sprintf(

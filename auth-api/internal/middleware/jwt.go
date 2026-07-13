@@ -20,7 +20,9 @@ const UserIDKey = "userID"
 // internalAuthWindow is the maximum clock skew accepted for X-Internal-Auth timestamps.
 const internalAuthWindow = 30 * time.Second
 
-// JWTAuth validates Bearer tokens and stores the user ID in the context.
+// JWTAuth returns a Gin middleware that validates Bearer tokens signed with
+// secret (using HMAC) and stores the resulting user ID in the request
+// context under UserIDKey.
 func JWTAuth(secret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
@@ -58,8 +60,9 @@ func JWTAuth(secret string) gin.HandlerFunc {
 	}
 }
 
-// InternalAuth validates X-Internal-Auth: <unix_ts>.<hmac-sha256(secret, ts)>.
-// The timestamp must be within ±30 s of server time to prevent replay attacks.
+// InternalAuth returns a Gin middleware that validates the X-Internal-Auth
+// header (unix_ts.hmac-sha256(secret, ts)) against secret within a ±30s
+// window to prevent replay attacks.
 func InternalAuth(secret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if err := validateInternalAuth(c.GetHeader("X-Internal-Auth"), secret); err != nil {
@@ -70,8 +73,10 @@ func InternalAuth(secret string) gin.HandlerFunc {
 	}
 }
 
-// validateInternalAuth parses and verifies an X-Internal-Auth header value.
-// Exported for use in tests and shared tooling.
+// validateInternalAuth parses and verifies the raw X-Internal-Auth header
+// value using secret for HMAC verification. It returns an error if the
+// header is malformed, its timestamp is outside the allowed window, or its
+// signature is invalid; otherwise it returns nil.
 func validateInternalAuth(header, secret string) error {
 	parts := strings.SplitN(header, ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
@@ -96,4 +101,14 @@ func validateInternalAuth(header, secret string) error {
 		return errors.New("invalid signature")
 	}
 	return nil
+}
+
+// BuildInternalAuth builds a valid X-Internal-Auth header value signed with
+// secret. Use this in service-to-service calls instead of sending the raw
+// secret. It returns the formatted "timestamp.signature" header value.
+func BuildInternalAuth(secret string) string {
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(ts))
+	return ts + "." + hex.EncodeToString(mac.Sum(nil))
 }

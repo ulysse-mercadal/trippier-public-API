@@ -27,12 +27,11 @@ var (
 	ErrAlreadyVerified = errors.New("email already verified")
 )
 
-// dummyHash is used in Login to run a constant-time bcrypt comparison when the
-// queried email does not exist, preventing email enumeration via response timing.
-// We panic on init if bcrypt itself fails — there is no safe fallback for a
-// security-critical timing-defence value.
+// dummyHash is used in Login for constant-time bcrypt comparison when the email doesn't exist, to prevent enumeration via timing.
 var dummyHash = mustBcrypt([]byte("dummy-sentinel-value"))
 
+// mustBcrypt hashes in with bcrypt and returns the resulting hash, panicking
+// if hashing fails.
 func mustBcrypt(in []byte) []byte {
 	h, err := bcrypt.GenerateFromPassword(in, bcrypt.DefaultCost)
 	if err != nil {
@@ -49,12 +48,17 @@ type Service struct {
 	appURL    string
 }
 
-// New creates a Service.
+// New creates a Service using db as the connection pool, emailer to send
+// verification emails, jwtSecret to sign JWTs, and appURL as the base URL of
+// the app included in emails. It returns the configured Service.
 func New(db *pgxpool.Pool, emailer *email.Sender, jwtSecret, appURL string) *Service {
 	return &Service{db: db, emailer: emailer, jwtSecret: jwtSecret, appURL: appURL}
 }
 
-// Register creates an unverified account and sends a 6-digit OTP code by email.
+// Register creates an unverified account for emailAddr with the given
+// password and sends a 6-digit OTP code by email; clientIP and userAgent
+// identify the requester in the OTP email. It returns an error if
+// registration fails.
 func (s *Service) Register(ctx context.Context, emailAddr, password, clientIP, userAgent string) error {
 	if len(password) < 8 {
 		return ErrWeakPassword
@@ -89,8 +93,9 @@ func (s *Service) Register(ctx context.Context, emailAddr, password, clientIP, u
 	return nil
 }
 
-// VerifyCode verifies the 6-digit OTP for the given email, marks the account as verified,
-// and returns a signed JWT so the user is immediately logged in.
+// VerifyCode verifies that code is the current 6-digit OTP for emailAddr,
+// marks the account as verified, and returns a signed JWT so the user is
+// immediately logged in, along with an error, if any.
 func (s *Service) VerifyCode(ctx context.Context, emailAddr, code string) (string, error) {
 	var userID string
 	err := s.db.QueryRow(ctx,
@@ -116,7 +121,8 @@ func (s *Service) VerifyCode(ctx context.Context, emailAddr, code string) (strin
 	return s.signJWT(userID)
 }
 
-// Login validates credentials and returns a signed JWT.
+// Login validates emailAddr and password against stored credentials and
+// returns a signed JWT along with an error, if any.
 func (s *Service) Login(ctx context.Context, emailAddr, password string) (string, error) {
 	var user models.User
 	err := s.db.QueryRow(ctx,
@@ -124,7 +130,6 @@ func (s *Service) Login(ctx context.Context, emailAddr, password string) (string
 		strings.ToLower(emailAddr),
 	).Scan(&user.ID, &user.Email, &user.PasswordHash, &user.Verified)
 	if errors.Is(err, pgx.ErrNoRows) {
-		// Always run bcrypt to normalise response time and prevent email enumeration.
 		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 		return "", ErrBadCredentials
 	}
@@ -142,7 +147,9 @@ func (s *Service) Login(ctx context.Context, emailAddr, password string) (string
 	return s.signJWT(user.ID)
 }
 
-// ResendCode generates a new OTP for an unverified account and sends it by email.
+// ResendCode generates a new OTP for the unverified account with emailAddr
+// and sends it by email; clientIP and userAgent identify the requester in
+// the OTP email. It returns an error if resending fails.
 func (s *Service) ResendCode(ctx context.Context, emailAddr, clientIP, userAgent string) error {
 	code, err := randomCode()
 	if err != nil {
@@ -172,7 +179,8 @@ func (s *Service) ResendCode(ctx context.Context, emailAddr, clientIP, userAgent
 	return nil
 }
 
-// Me returns the user for a given ID.
+// Me fetches the user record with the given userID and returns it along
+// with an error, if any.
 func (s *Service) Me(ctx context.Context, userID string) (*models.User, error) {
 	var u models.User
 	err := s.db.QueryRow(ctx,
@@ -180,14 +188,13 @@ func (s *Service) Me(ctx context.Context, userID string) (*models.User, error) {
 		userID,
 	).Scan(&u.ID, &u.Email, &u.Verified, &u.CreatedAt)
 	if err != nil {
-		// Includes pgx.ErrNoRows — an authenticated user with no row is a DB
-		// inconsistency, not a routine 404, so the handler maps everything to 500.
 		return nil, fmt.Errorf("query: %w", err)
 	}
 	return &u, nil
 }
 
-// signJWT creates a signed JWT for the given user ID.
+// signJWT creates a signed JWT with userID as the subject claim and returns
+// it along with an error, if any.
 func (s *Service) signJWT(userID string) (string, error) {
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub": userID,
@@ -197,9 +204,8 @@ func (s *Service) signJWT(userID string) (string, error) {
 	return tok.SignedString([]byte(s.jwtSecret))
 }
 
-// randomCode returns a uniformly random 6-digit decimal string (000000–999999).
-// Rejection sampling avoids the tiny modulo bias that `n % 1_000_000` would
-// introduce when n is drawn uniformly from [0, 2^32).
+// randomCode returns a uniformly random 6-digit decimal string, using
+// rejection sampling to avoid modulo bias, along with an error, if any.
 func randomCode() (string, error) {
 	const maxBias = (1 << 32) - ((1 << 32) % 1_000_000)
 	for {
@@ -213,7 +219,8 @@ func randomCode() (string, error) {
 	}
 }
 
-// isDuplicateKey detects PostgreSQL unique-constraint violations.
+// isDuplicateKey reports whether err represents a PostgreSQL
+// unique-constraint (duplicate-key) violation.
 func isDuplicateKey(err error) bool {
 	return err != nil && (strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "23505"))
 }
