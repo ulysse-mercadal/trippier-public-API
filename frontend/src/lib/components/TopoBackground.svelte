@@ -14,7 +14,11 @@
 	const cols = Math.ceil(W / cell);
 	const rows = Math.ceil(H / cell);
 
-	// Deterministic linear-congruential PRNG — same as design
+	/**
+	 * Creates a deterministic linear-congruential pseudo-random number generator.
+	 * @param s seed value
+	 * @returns function producing the next random number in [0, 1)
+	 */
 	function makePrng(s: number) {
 		let state = s * 9301 + 49297;
 		return () => {
@@ -23,7 +27,10 @@
 		};
 	}
 
-	// Seven Gaussian peaks/valleys seeded from `seed`
+	/**
+	 * Computes seven Gaussian peaks/valleys seeded from `seed`.
+	 * @returns array of peak descriptors {x, y, sigma, amp}
+	 */
 	const peaks = (() => {
 		const r = makePrng(seed);
 		const arr: { x: number; y: number; sigma: number; amp: number }[] = [];
@@ -38,6 +45,12 @@
 		return arr;
 	})();
 
+	/**
+	 * Evaluates the heightfield value at a point by summing Gaussian peaks.
+	 * @param x x coordinate
+	 * @param y y coordinate
+	 * @returns height value at (x, y)
+	 */
 	function heightAt(x: number, y: number): number {
 		let h = 0;
 		for (const p of peaks) {
@@ -47,7 +60,10 @@
 		return h;
 	}
 
-	// Sample the heightfield on a grid
+	/**
+	 * Samples the heightfield on a grid and tracks its min/max values.
+	 * @returns grid samples with their min and max height
+	 */
 	const { f, fMin, fMax } = (() => {
 		const f = new Float32Array((cols + 1) * (rows + 1));
 		let fMin = Infinity, fMax = -Infinity;
@@ -62,9 +78,13 @@
 		return { f, fMin, fMax };
 	})();
 
-	// Marching squares — one SVG path string per contour level
+	/** One SVG path string for a given contour level index. */
 	type PathEntry = { d: string; idx: number };
 
+	/**
+	 * Runs marching squares over the sampled heightfield to build contour paths.
+	 * @returns list of path entries, one per contour level
+	 */
 	const paths: PathEntry[] = (() => {
 		const levels: number[] = [];
 		for (let k = 1; k < density; k++) {

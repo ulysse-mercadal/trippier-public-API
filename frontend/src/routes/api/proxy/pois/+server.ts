@@ -17,6 +17,11 @@ const ALLOWED_SUBPATHS = new Set([
 	'providers/recommend',
 ]);
 
+/**
+ * Proxies GET requests for POI data to the POI API service.
+ * @param url - incoming request URL with query params, including subpath
+ * @returns JSON error response if subpath is invalid, otherwise the proxied response
+ */
 export const GET: RequestHandler = async ({ url }) => {
 	const subpath = url.searchParams.get('subpath') ?? 'search';
 	if (!ALLOWED_SUBPATHS.has(subpath)) {
@@ -26,5 +31,5 @@ export const GET: RequestHandler = async ({ url }) => {
 	const qs = new URLSearchParams(url.searchParams);
 	qs.delete('subpath');
 
-	return proxyToService(env.FRONTEND_POI_API_URL, `/pois/${subpath}?${qs}`);
+	return proxyToService(env.FRONTEND_POI_API_URL, `/v1/pois/${subpath}?${qs}`);
 };

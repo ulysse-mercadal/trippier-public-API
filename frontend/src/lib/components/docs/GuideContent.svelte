@@ -4,11 +4,11 @@
 	export let pageId: string;
 
 	const CURL_HEALTH    = `curl https://api.poi.trippier.dev/health`;
-	const CURL_AUTH      = `curl "https://api.poi.trippier.dev/pois/search?lat=45.76&lng=4.83&radius=1500" \\\n  -H "X-API-Key: YOUR_API_KEY"`;
+	const CURL_AUTH      = `curl "https://api.poi.trippier.dev/v1/pois/search?lat=45.76&lng=4.83&radius=1500" \\\n  -H "X-API-Key: YOUR_API_KEY"`;
 	const HTTP_AUTH      = `X-API-Key: YOUR_API_KEY`;
 	const JSON_ERROR     = `{\n  "error": "invalid query: lat and lng are required for mode=radius"\n}`;
 	const HTTP_RATELIMIT = `X-RateLimit-Limit:     60\nX-RateLimit-Remaining: 47\nX-RateLimit-Reset:     1716381234\nRetry-After:           12`;
-	const CURL_BYOK      = `curl "https://api.poi.trippier.dev/pois/events?lat=45.76&lng=4.83" \\\n  -H "X-API-Key: YOUR_API_KEY" \\\n  -H "X-Ticketmaster-Key: YOUR_TM_KEY" \\\n  -H "X-Eventbrite-Token: YOUR_EB_TOKEN"`;
+	const CURL_BYOK      = `curl "https://api.poi.trippier.dev/v1/pois/events?lat=45.76&lng=4.83" \\\n  -H "X-API-Key: YOUR_API_KEY" \\\n  -H "X-Ticketmaster-Key: YOUR_TM_KEY" \\\n  -H "X-Eventbrite-Token: YOUR_EB_TOKEN"`;
 </script>
 
 {#if pageId === 'quickstart'}
@@ -28,7 +28,7 @@
 	<CodeBlock lang="bash" code={CURL_AUTH} />
 	<div class="d-callout">
 		<strong>Route gratuite.</strong>
-		<span>Seul <code>GET /health</code> est publique et ne consomme aucun token. Les routes <code>/pois/providers*</code> coûtent 1 token chacune.</span>
+		<span>Seul <code>GET /health</code> est publique et ne consomme aucun token. Les routes <code>/v1/pois/providers*</code> coûtent 1 token chacune.</span>
 	</div>
 
 {:else if pageId === 'auth'}
@@ -77,10 +77,10 @@
 	<table class="d-table">
 		<thead><tr><th>Route</th><th>Tokens</th></tr></thead>
 		<tbody>
-			<tr><td><code>GET /pois/search</code> · <code>/slim</code> · <code>/custom</code> · <code>/custom/slim</code></td><td>1</td></tr>
-			<tr><td><code>GET /pois/providers</code> · <code>/catalog</code> · <code>/recommend</code></td><td>1</td></tr>
-			<tr><td><code>GET /pois/events</code> · <code>/slim</code> · <code>/custom</code> · <code>/custom/slim</code></td><td>10</td></tr>
-			<tr><td><code>POST /itinerary/generate</code></td><td>50</td></tr>
+			<tr><td><code>GET /v1/pois/search</code> · <code>/slim</code> · <code>/custom</code> · <code>/custom/slim</code></td><td>1</td></tr>
+			<tr><td><code>GET /v1/pois/providers</code> · <code>/catalog</code> · <code>/recommend</code></td><td>1</td></tr>
+			<tr><td><code>GET /v1/pois/events</code> · <code>/slim</code> · <code>/custom</code> · <code>/custom/slim</code></td><td>10</td></tr>
+			<tr><td><code>POST /v1/itinerary/generate</code></td><td>50</td></tr>
 			<tr><td><code>GET /health</code></td><td>0 (gratuit)</td></tr>
 		</tbody>
 	</table>
@@ -90,7 +90,7 @@
 	</div>
 	<div class="d-callout">
 		<strong>Pourquoi l'itinéraire coûte 50 tokens ?</strong>
-		<span>La génération combine un appel <code>/pois/search</code>, un appel LLM, et l'optimisation horaire/géographique. Si vous fournissez directement <code>pois</code> au lieu de <code>poi_query</code>, l'appel POI est économisé mais le coût reste identique.</span>
+		<span>La génération combine un appel <code>/v1/pois/search</code>, un appel LLM, et l'optimisation horaire/géographique. Si vous fournissez directement <code>pois</code> au lieu de <code>poi_query</code>, l'appel POI est économisé mais le coût reste identique.</span>
 	</div>
 	<h2>BYOK (Bring Your Own Key)</h2>
 	<p>Apportez vos propres clés provider pour débloquer les routes <code>/events*</code> et <code>/custom*</code> même sans solde suffisant. Headers reconnus : <code>X-Ticketmaster-Key</code>, <code>X-Eventbrite-Token</code>, <code>X-Meetup-Token</code>, <code>X-OpenAgenda-Key</code>, <code>X-Foursquare-Key</code>, <code>X-Here-Key</code>, <code>X-Baidu-Key</code>, <code>X-Amap-Key</code>, <code>X-Kakao-Key</code>, <code>X-Navitime-Key</code>, <code>X-Mappls-Key</code>, <code>X-Grabmaps-Key</code>.</p>

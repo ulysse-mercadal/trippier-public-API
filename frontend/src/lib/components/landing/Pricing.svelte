@@ -12,6 +12,10 @@
 	$: qtyStr   = qty.toLocaleString(numLocale);
 	$: itinStr  = Math.floor(qty / 3).toLocaleString(numLocale);
 
+	/**
+	 * Updates the token quantity from a manual number input change.
+	 * @param e input change event
+	 */
 	function handleQtyInput(e: Event) {
 		const v = parseInt((e.target as HTMLInputElement).value);
 		if (!isNaN(v) && v > 0) qty = v;

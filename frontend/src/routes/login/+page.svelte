@@ -30,6 +30,9 @@
 	let resendOk = false;
 	let resendTimer: ReturnType<typeof setInterval> | null = null;
 
+	/**
+	 * Starts the resend cooldown countdown.
+	 */
 	function startCooldown() {
 		resendCooldown = 30;
 		resendTimer = setInterval(() => {
@@ -41,6 +44,9 @@
 		}, 1000);
 	}
 
+	/**
+	 * Requests a fresh verification code and restarts the cooldown.
+	 */
 	async function handleResend() {
 		if (resendCooldown > 0 || loading) return;
 		resendOk = false;
@@ -56,6 +62,9 @@
 		}
 	}
 
+	/**
+	 * Restores a stored session on mount and redirects if it is still valid.
+	 */
 	onMount(async () => {
 		initLocale();
 		const stored = auth.getStoredToken();
@@ -67,6 +76,9 @@
 		} catch {}
 	});
 
+	/**
+	 * Submits the login or registration form.
+	 */
 	async function submitForm() {
 		error = '';
 		if (mode === 'register' && password !== confirm) {
@@ -94,6 +106,9 @@
 		}
 	}
 
+	/**
+	 * Verifies the entered one-time code and signs the user in.
+	 */
 	async function submitOTP() {
 		error = '';
 		const code = digits.join('');
@@ -114,11 +129,20 @@
 		}
 	}
 
+	/**
+	 * Sanitizes a digit entry and advances focus to the next input.
+	 * @param i index of the digit being edited
+	 */
 	function handleDigitInput(i: number) {
 		digits[i] = digits[i].replace(/\D/g, '').slice(-1);
 		if (digits[i] && i < 5) digitEls[i + 1]?.focus();
 	}
 
+	/**
+	 * Handles backspace and arrow-key navigation across digit inputs.
+	 * @param e keydown event
+	 * @param i index of the active digit input
+	 */
 	function handleDigitKeydown(e: KeyboardEvent, i: number) {
 		if (e.key === 'Backspace') {
 			if (digits[i]) { digits[i] = ''; }
@@ -129,6 +153,10 @@
 		if (e.key === 'ArrowRight' && i < 5) digitEls[i + 1]?.focus();
 	}
 
+	/**
+	 * Distributes pasted text across the six digit inputs.
+	 * @param e paste event
+	 */
 	function handleDigitPaste(e: ClipboardEvent) {
 		e.preventDefault();
 		const pasted = (e.clipboardData?.getData('text') ?? '').replace(/\D/g, '').slice(0, 6);
@@ -136,6 +164,10 @@
 		digitEls[Math.min(pasted.length, 5)]?.focus();
 	}
 
+	/**
+	 * Switches the form between login and register modes.
+	 * @param m target mode
+	 */
 	function switchMode(m: Mode) {
 		mode    = m;
 		error   = '';

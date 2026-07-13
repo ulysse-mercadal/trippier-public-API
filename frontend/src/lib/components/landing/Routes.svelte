@@ -6,8 +6,8 @@
 	const ROUTES = PAGES
 		.filter(p => p.kind === 'route' && p.path && p.method)
 		.map(p => {
-			const subpath = p.path!.startsWith('/pois/')
-				? p.path!.replace('/pois/', '')
+			const subpath = p.path!.startsWith('/v1/pois/')
+				? p.path!.replace('/v1/pois/', '')
 				: null;
 			return { m: p.method!, path: p.path!, cost: p.cost ?? 0, subpath };
 		});
@@ -18,10 +18,19 @@
 	let httpStatus: number | null = null;
 	let elapsed: number | null = null;
 
+	/**
+	 * Picks the badge color for a given HTTP method.
+	 * @param m - HTTP method (e.g. GET, POST)
+	 * @returns CSS color value
+	 */
 	function methodColor(m: string): string {
 		return ({ GET: 'var(--accent)', POST: '#e4b07a' } as Record<string, string>)[m] ?? 'var(--text)';
 	}
 
+	/**
+	 * Sets the active route and clears any previous try-it result.
+	 * @param i - index of the route to select
+	 */
 	function selectRoute(i: number) {
 		activeIdx = i;
 		response = null;
@@ -29,6 +38,9 @@
 		elapsed = null;
 	}
 
+	/**
+	 * Executes a live request against the currently selected route's proxy endpoint and records the outcome.
+	 */
 	async function tryRoute() {
 		running = true;
 		response = null;
@@ -42,7 +54,7 @@
 
 			if (route.path === '/health') {
 				res = await fetch('/api/proxy/health');
-			} else if (route.path === '/itinerary/generate') {
+			} else if (route.path === '/v1/itinerary/generate') {
 				res = await fetch('/api/proxy/itinerary', {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },

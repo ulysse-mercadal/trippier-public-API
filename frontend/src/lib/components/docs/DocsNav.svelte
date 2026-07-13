@@ -11,11 +11,18 @@
 
 	let menuOpen = false;
 
+	/**
+	 * Locks or unlocks page scrolling by toggling body overflow.
+	 * @param lock whether to lock (true) or unlock (false) scrolling
+	 */
 	function lockScroll(lock: boolean) {
 		if (typeof document === 'undefined') return;
 		document.body.style.overflow = lock ? 'hidden' : '';
 	}
 
+	/**
+	 * Logs the user out, closes the mobile menu, and redirects to home.
+	 */
 	function handleLogout() {
 		auth.logout();
 		menuOpen = false;
@@ -23,15 +30,25 @@
 		goto('/');
 	}
 
+	/**
+	 * Toggles the mobile menu open state and locks/unlocks scroll to match.
+	 */
 	function toggleMenu() {
 		menuOpen = !menuOpen;
 		lockScroll(menuOpen);
 	}
+	/**
+	 * Closes the mobile menu and unlocks scroll.
+	 */
 	function closeMenu() {
 		menuOpen = false;
 		lockScroll(false);
 	}
 
+	/**
+	 * Closes the menu then navigates to the given destination.
+	 * @param href target URL or path to navigate to
+	 */
 	function navigate(href: string) {
 		closeMenu();
 		if (href.startsWith('http')) {
@@ -41,6 +58,9 @@
 		}
 	}
 
+	/**
+	 * Switches the active locale between French and English.
+	 */
 	function switchLocale() {
 		setLocale($locale === 'fr' ? 'en' : 'fr');
 	}

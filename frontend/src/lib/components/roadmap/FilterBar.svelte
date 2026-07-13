@@ -3,6 +3,10 @@
 	import type { TagId } from '$lib/data/roadmap';
 
 	export let activeTag: TagId | null = null;
+	/**
+	 * Callback invoked when a filter chip is clicked.
+	 * @param tag - The tag id to filter by, or null to clear the filter (show all).
+	 */
 	export let onFilter: (tag: TagId | null) => void = () => {};
 </script>
 

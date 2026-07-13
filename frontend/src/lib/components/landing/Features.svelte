@@ -16,7 +16,7 @@
 				</header>
 				<h3>{$t('feat_poi_title')}</h3>
 				<p>{$t('feat_poi_desc')}</p>
-				<code class="feature-code">GET /pois/search?lat=…&lng=…</code>
+				<code class="feature-code">GET /v1/pois/search?lat=…&lng=…</code>
 			</article>
 			<article class="feature">
 				<header>
@@ -25,7 +25,7 @@
 				</header>
 				<h3>{$t('feat_events_title')}</h3>
 				<p>{$t('feat_events_desc')}</p>
-				<code class="feature-code">GET /pois/events?lat=…&lng=…</code>
+				<code class="feature-code">GET /v1/pois/events?lat=…&lng=…</code>
 			</article>
 			<article class="feature">
 				<header>
@@ -34,7 +34,7 @@
 				</header>
 				<h3>{$t('feat_itin_title')}</h3>
 				<p>{$t('feat_itin_desc')}</p>
-				<code class="feature-code">POST /itinerary/generate</code>
+				<code class="feature-code">POST /v1/itinerary/generate</code>
 			</article>
 			<article class="feature">
 				<header>
@@ -43,7 +43,7 @@
 				</header>
 				<h3>{$t('feat_routing_title')}</h3>
 				<p>{$t('feat_routing_desc')}</p>
-				<code class="feature-code">GET /pois/providers/recommend</code>
+				<code class="feature-code">GET /v1/pois/providers/recommend</code>
 			</article>
 		</div>
 	</div>

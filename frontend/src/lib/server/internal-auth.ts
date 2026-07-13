@@ -1,9 +1,9 @@
 import { createHmac } from 'crypto';
 
 /**
- * Build an X-Internal-Auth header value: "<ts>.<hmac-sha256(secret, ts)>".
- * The timestamp-bound HMAC prevents replaying a captured header.
- * Receiving services reject tokens older than ±30 s.
+ * Builds a replay-resistant X-Internal-Auth header value: "<ts>.<hmac-sha256(secret, ts)>".
+ * @param secret shared secret used to sign the timestamp
+ * @returns the header value; receiving services reject tokens older than ±30s
  */
 export function buildInternalAuth(secret: string): string {
 	const ts = String(Math.floor(Date.now() / 1000));

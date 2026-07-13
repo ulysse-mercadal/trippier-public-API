@@ -6,7 +6,9 @@
 
 	let copied = false;
 
-	// Copies code to clipboard and shows brief feedback
+	/**
+	 * Copies the code block content to the clipboard and briefly shows confirmation feedback.
+	 */
 	function copy() {
 		if (browser) navigator.clipboard?.writeText(code);
 		copied = true;

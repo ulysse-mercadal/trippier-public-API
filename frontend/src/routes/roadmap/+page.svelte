@@ -30,19 +30,25 @@
 	$: nextCount     = roadmap.columns.find(c => c.id === 'next')?.items.length ?? 0;
 	$: laterCount    = roadmap.columns.find(c => c.id === 'later')?.items.length ?? 0;
 
-	// Enters edit mode with a snapshot
+	/**
+	 * Enters edit mode with a fresh snapshot of the roadmap.
+	 */
 	function startEdit() {
 		roadmap = JSON.parse(JSON.stringify(data.roadmap));
 		editing = true;
 	}
 
-	// Discards changes and exits edit mode
+	/**
+	 * Discards pending changes and exits edit mode.
+	 */
 	function cancelEdit() {
 		roadmap = JSON.parse(JSON.stringify(data.roadmap));
 		editing = false;
 	}
 
-	// Persists roadmap to server
+	/**
+	 * Persists the current roadmap state to the server.
+	 */
 	async function saveEdit() {
 		saving = true;
 		const token = browser ? auth.getStoredToken() : null;
@@ -62,15 +68,28 @@
 		}
 	}
 
+	/**
+	 * Opens the item modal for adding a new item to a column.
+	 * @param colId target column
+	 */
 	function openAdd(colId: ColumnId) {
 		modal = { colId };
 	}
 
+	/**
+	 * Opens the item modal pre-filled to edit an existing item.
+	 * @param item roadmap item to edit
+	 */
 	function openEdit(item: RoadmapItem) {
 		const col = roadmap.columns.find(c => c.items.some(i => i.id === item.id));
 		modal = { item, colId: col?.id as ColumnId ?? 'next' };
 	}
 
+	/**
+	 * Removes an item from the given column.
+	 * @param colId column containing the item
+	 * @param itemId item to delete
+	 */
 	function deleteItem(colId: string, itemId: string) {
 		roadmap = {
 			...roadmap,
@@ -82,7 +101,11 @@
 		};
 	}
 
-	// Handles save from modal: moves item to target column, removing from old one
+	/**
+	 * Handles save from modal: moves item to target column, removing from old one.
+	 * @param targetColId column the item should end up in
+	 * @param item item being saved
+	 */
 	function saveModal(targetColId: ColumnId, item: RoadmapItem) {
 		roadmap = {
 			...roadmap,

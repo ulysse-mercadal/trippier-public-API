@@ -9,20 +9,30 @@ const DATA_PATH    = resolve('data/roadmap.json');
 const ADMIN_EMAILS = (env.ADMIN_EMAILS ?? '').split(',').map(e => e.trim()).filter(Boolean);
 const AUTH_API_URL = env.AUTH_API_URL ?? 'http://localhost:8080';
 
-// Reads roadmap data from disk
+/**
+ * Loads the roadmap data from the on-disk JSON file.
+ * @returns Parsed roadmap data.
+ */
 function readData(): RoadmapData {
 	return JSON.parse(readFileSync(DATA_PATH, 'utf-8'));
 }
 
-// Writes roadmap data to disk atomically
+/**
+ * Persists roadmap data to the on-disk JSON file.
+ * @param data Roadmap data to write.
+ */
 function writeData(data: RoadmapData): void {
 	writeFileSync(DATA_PATH, JSON.stringify(data, null, 2), 'utf-8');
 }
 
-// Verifies JWT and returns admin email or null
+/**
+ * Verifies a bearer token against the auth API and checks admin membership.
+ * @param token Bearer token to verify.
+ * @returns Admin email if authorized, otherwise null.
+ */
 async function getAdminEmail(token: string): Promise<string | null> {
 	try {
-		const res = await fetch(`${AUTH_API_URL}/me`, {
+		const res = await fetch(`${AUTH_API_URL}/v1/me`, {
 			headers: { Authorization: `Bearer ${token}` },
 		});
 		if (!res.ok) return null;
@@ -33,6 +43,10 @@ async function getAdminEmail(token: string): Promise<string | null> {
 	}
 }
 
+/**
+ * Handles GET requests by returning the current roadmap data.
+ * @returns JSON response with roadmap data.
+ */
 export const GET: RequestHandler = () => {
 	try {
 		return json(readData());
@@ -41,6 +55,11 @@ export const GET: RequestHandler = () => {
 	}
 };
 
+/**
+ * Handles PUT requests by validating admin auth and overwriting roadmap data.
+ * @param request Incoming request, expected to hold auth header and JSON body.
+ * @returns JSON response confirming the write.
+ */
 export const PUT: RequestHandler = async ({ request }) => {
 	const auth  = request.headers.get('Authorization') ?? '';
 	const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';

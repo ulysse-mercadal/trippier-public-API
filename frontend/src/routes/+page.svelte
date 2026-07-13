@@ -16,6 +16,10 @@
 
 	let obs: IntersectionObserver;
 
+	/**
+	 * Sets up an intersection observer that tracks which landing section is
+	 * in view and updates the active nav hash accordingly.
+	 */
 	onMount(() => {
 		obs = new IntersectionObserver(entries => {
 			for (const e of entries) {
@@ -28,6 +32,9 @@
 		});
 	});
 
+	/**
+	 * Disconnects the intersection observer and clears the active nav hash.
+	 */
 	onDestroy(() => {
 		obs?.disconnect();
 		activeNavHash.set('');

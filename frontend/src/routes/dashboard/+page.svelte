@@ -33,12 +33,18 @@
 		loaded = true;
 	});
 
+	/**
+	 * Fetches the current API keys and updates local state.
+	 */
 	async function loadKeys() {
 		const token = $auth.token || auth.getStoredToken();
 		try { keys = await listKeys(token); }
 		catch (e) { error = e instanceof ApiError ? e.message : 'Loading error'; }
 	}
 
+	/**
+	 * Creates a new API key from the entered name and reveals it.
+	 */
 	async function handleCreate() {
 		if (!newKeyName.trim()) return;
 		creating = true; error = '';
@@ -53,6 +59,9 @@
 		} finally { creating = false; }
 	}
 
+	/**
+	 * Revokes the key currently targeted for revocation and refreshes the list.
+	 */
 	async function confirmRevoke() {
 		if (!revokeTarget) return;
 		revoking = true;
@@ -66,24 +75,34 @@
 		} finally { revoking = false; }
 	}
 
-	// Returns tokens used by a key as a percentage of its limit
+	/**
+	 * Computes the percentage of tokens used by a key.
+	 * @param k the API key with usage data
+	 * @returns percentage of tokens used, clamped to 0-100
+	 */
 	function usedPct(k: ApiKeyWithUsage): number {
 		if (k.tokens_limit <= 0) return 0;
 		return Math.max(0, Math.min(100, ((k.tokens_limit - k.tokens_remaining) / k.tokens_limit) * 100));
 	}
 
-	// Formats reset time
+	/**
+	 * Formats a duration in seconds as a short reset label.
+	 * @param secs seconds until reset
+	 * @returns formatted label in minutes or hours
+	 */
 	function resetLabel(secs: number): string {
 		const m = Math.ceil(secs / 60);
 		return m > 60 ? `${Math.ceil(m / 60)}h` : `${m}m`;
 	}
 
+	/**
+	 * Copies the revealed API key to the clipboard.
+	 */
 	function copyKey() { navigator.clipboard.writeText(revealedKey); }
 </script>
 
 <div class="db">
 
-	<!-- Header -->
 	<div class="db-head wrap">
 		<div>
 			<p class="eyebrow">dashboard</p>
@@ -97,7 +116,6 @@
 
 		{#if error}<p class="db-error">{error}</p>{/if}
 
-		<!-- Revealed key banner -->
 		{#if revealedKey}
 			<div class="db-reveal">
 				<div class="db-reveal-top">
@@ -112,7 +130,6 @@
 			</div>
 		{/if}
 
-		<!-- Global token gauge -->
 		{#if globalKey}
 			{@const pct = globalKey.tokens_limit > 0 ? Math.max(0, Math.min(100, (globalKey.tokens_remaining / globalKey.tokens_limit) * 100)) : 0}
 			{@const variant = pct > 25 ? 'ok' : pct > 10 ? 'warn' : 'err'}
@@ -136,7 +153,6 @@
 			</div>
 		{/if}
 
-		<!-- Create key -->
 		<div class="db-section">
 			<h2>{$t('db_section_title')}</h2>
 			<p class="db-hint">1 000 {$t('db_hint')} <code>Authorization: Bearer</code>.</p>
@@ -153,7 +169,6 @@
 			</div>
 		</div>
 
-		<!-- Keys list -->
 		{#if !loaded}
 			<p class="db-loading">{$t('db_loading')}</p>
 		{:else if activeKeys.length === 0 && revokedKeys.length === 0}
@@ -204,7 +219,6 @@
 	</div>
 </div>
 
-<!-- Revoke modal -->
 {#if revokeTarget}
 	<div class="db-modal-backdrop" on:click={() => !revoking && (revokeTarget = null)} role="presentation">
 		<div class="db-modal" on:click|stopPropagation role="dialog" aria-modal="true">
@@ -265,7 +279,6 @@
 		padding: 10px 14px;
 	}
 
-	/* Revealed key */
 	.db-reveal {
 		border: 1px solid color-mix(in oklch, var(--accent) 30%, var(--border));
 		border-radius: var(--r-md);
@@ -309,7 +322,6 @@
 	}
 	.db-copy-btn:hover { color: var(--accent); border-color: var(--accent); }
 
-	/* Global token card */
 	.db-token-card {
 		background: var(--bg-2);
 		border: 1px solid var(--border);
@@ -334,14 +346,12 @@
 		margin-bottom: 4px;
 	}
 
-	/* Track / fill */
 	.db-track { background: var(--surface); border-radius: 999px; height: 6px; overflow: hidden; }
 	.db-fill { height: 100%; border-radius: 999px; transition: width .4s ease; }
 	.db-fill-ok  { background: var(--accent); }
 	.db-fill-warn { background: oklch(82% 0.12 80); }
 	.db-fill-err  { background: oklch(72% 0.16 25); }
 
-	/* Section */
 	.db-section { display: flex; flex-direction: column; gap: 10px; }
 	.db-section h2 { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
 	.db-hint { font-size: 13px; color: var(--text-3); line-height: 1.55; }
@@ -376,7 +386,6 @@
 	.db-btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
 	.db-btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
 
-	/* Keys */
 	.db-keys { list-style: none; display: flex; flex-direction: column; gap: 10px; }
 	.db-key {
 		background: var(--bg-2);
@@ -426,7 +435,6 @@
 		line-height: 1.8;
 	}
 
-	/* Modal */
 	.db-modal-backdrop {
 		position: fixed;
 		inset: 0;
