@@ -166,7 +166,7 @@ jobs:
           target: ~/trippier
 
       - name: Bootstrap and deploy
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.2.5
         env:
           DEPLOY_ENV: ${{ secrets.DEPLOY_ENV }}
           IMAGE_TAG: ${{ github.sha }}
