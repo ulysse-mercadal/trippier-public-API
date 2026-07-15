@@ -23,7 +23,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -ldflags="-s -w -extldflags '-static'" -o /poi-api ./cmd/server
 
 
-FROM alpine:3.20
+FROM alpine:3.24
 
 # curl powers the container HEALTHCHECK; ca-certificates for outbound HTTPS.
 RUN apk add --no-cache ca-certificates curl \
