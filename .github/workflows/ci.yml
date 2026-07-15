@@ -10,8 +10,8 @@ jobs:
     name: Test poi-api
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.24"
           cache-dependency-path: poi-api/go.sum
@@ -22,8 +22,8 @@ jobs:
     name: Test auth-api
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.24"
           cache-dependency-path: auth-api/go.sum
@@ -34,8 +34,8 @@ jobs:
     name: Test itinerary-api
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt && pytest --tb=short
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     container: golangci/golangci-lint:v1.64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: git config --global --add safe.directory '*'
       - run: golangci-lint run --timeout 5m
         working-directory: poi-api
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     container: golangci/golangci-lint:v1.64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: git config --global --add safe.directory '*'
       - run: golangci-lint run --timeout 5m
         working-directory: auth-api
@@ -65,8 +65,8 @@ jobs:
     name: Lint itinerary-api
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt && ruff check . && mypy app
