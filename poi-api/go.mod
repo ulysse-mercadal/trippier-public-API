@@ -3,7 +3,7 @@ module github.com/trippier/poi-api
 go 1.24
 
 require (
-	github.com/alicebob/miniredis/v2 v2.37.0
+	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/gin-gonic/gin v1.10.1
 	github.com/redis/go-redis/v9 v9.5.1
 	github.com/spf13/viper v1.19.0
