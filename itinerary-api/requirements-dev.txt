@@ -1,7 +1,7 @@
 -r requirements.txt
 pytest==8.2.0
 pytest-asyncio==0.23.7
-httpx==0.27.0
-respx==0.21.1
-ruff==0.4.4
+httpx==0.28.1
+respx==0.23.1
+ruff==0.15.21
 mypy==1.10.0
