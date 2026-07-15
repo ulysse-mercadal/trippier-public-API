@@ -363,7 +363,7 @@ func (p *Provider) EnrichTarget(target *types.RawPoi, source types.RawPoi) {
 // tests. It searches near the coordinates and radius in q, using ctx for
 // cancellation, and returns matching POIs, or an error.
 func (p *Provider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {
-	b := p.base.forLang(q.Lang)
+	b := p.forLang(q.Lang)
 	pages, err := b.geosearch(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("wikipedia: geosearch: %w", err)
@@ -418,7 +418,7 @@ func (p *EventProvider) SupportsMode(mode types.SearchMode) bool {
 // classified as cultural festivals in Wikidata (articles without a
 // Wikidata ID are dropped), or an error.
 func (p *EventProvider) Search(ctx context.Context, q types.SearchQuery) ([]types.RawPoi, error) {
-	b := p.base.forLang(q.Lang)
+	b := p.forLang(q.Lang)
 	pages, err := b.geosearch(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("wikipedia_events: geosearch: %w", err)
