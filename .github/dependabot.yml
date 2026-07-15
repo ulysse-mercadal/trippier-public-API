@@ -70,6 +70,11 @@ updates:
       interval: weekly
     labels: ["dependencies"]
     open-pull-requests-limit: 5
+    ignore:
+      # itinerary-api pins an older pydantic without 3.14 wheels; hold the base
+      # image at 3.13 until the Python deps support 3.14.
+      - dependency-name: "python"
+        versions: [">=3.14"]
     groups:
       docker:
         patterns: ["*"]
