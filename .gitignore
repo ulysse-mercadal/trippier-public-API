@@ -1,4 +1,8 @@
 .env
+.env.*.local
+
+# Let's Encrypt certificate store (created by docker-compose.prod.yml)
+letsencrypt/
 
 # Go
 */bin/

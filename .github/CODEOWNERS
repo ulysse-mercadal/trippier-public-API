@@ -1,0 +1,18 @@
+# Code owners are requested for review automatically when matching files change.
+# See https://docs.github.com/articles/about-code-owners
+#
+# Adjust the handles below to real maintainers / teams as the project grows.
+
+# Default owner for everything in the repo
+*                @ulysse-mercadal
+
+# Per-service ownership
+/auth-api/       @ulysse-mercadal
+/poi-api/        @ulysse-mercadal
+/itinerary-api/  @ulysse-mercadal
+/frontend/       @ulysse-mercadal
+
+# Build, CI and infrastructure
+/.github/        @ulysse-mercadal
+/Makefile        @ulysse-mercadal
+/docker-compose*.yml @ulysse-mercadal
