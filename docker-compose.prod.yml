@@ -1,10 +1,27 @@
+# Trippier — production stack (VPS): Traefik + Let's Encrypt, images pulled from
+# GHCR. Self-contained: the deploy pipeline copies only this file to the host.
+#
+#   make prod-pull && make prod-up      # or: docker compose -f docker-compose.prod.yml up -d
+#
+# Requires DOMAIN, ACME_EMAIL, OWNER and the shared secrets in .env.
+
+name: trippier
+
+x-defaults: &defaults
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
 
-  # ── Reverse proxy ────────────────────────────────────────────────────────────
+  ############################### Reverse proxy ################################
 
   traefik:
     image: traefik:v3.7
-    restart: unless-stopped
+    <<: *defaults
     environment:
       DOCKER_API_VERSION: "1.54"
     ports:
@@ -26,11 +43,11 @@ services:
       - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
       - "--log.level=INFO"
 
-  # ── Infrastructure ───────────────────────────────────────────────────────────
+  ############################### Infrastructure ###############################
 
   postgres:
     image: postgres:16-alpine
-    restart: unless-stopped
+    <<: *defaults
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -45,7 +62,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    restart: unless-stopped
+    <<: *defaults
     volumes:
       - redis_data:/data
     healthcheck:
@@ -54,11 +71,11 @@ services:
       timeout: 3s
       retries: 5
 
-  # ── auth-api ─────────────────────────────────────────────────────────────────
+  ################################## auth-api ##################################
 
   auth-api:
-    image: ghcr.io/${OWNER}/auth-api:latest
-    restart: unless-stopped
+    image: ghcr.io/${OWNER}/auth-api:${IMAGE_TAG:-latest}
+    <<: *defaults
     env_file: .env
     environment:
       AUTH_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
@@ -75,11 +92,11 @@ services:
       redis:
         condition: service_healthy
 
-  # ── poi-api ──────────────────────────────────────────────────────────────────
+  ################################## poi-api ###################################
 
   poi-api:
-    image: ghcr.io/${OWNER}/poi-api:latest
-    restart: unless-stopped
+    image: ghcr.io/${OWNER}/poi-api:${IMAGE_TAG:-latest}
+    <<: *defaults
     env_file: .env
     environment:
       POI_REDIS_URL: redis://redis:6379
@@ -97,19 +114,21 @@ services:
       - "traefik.http.routers.poi-api.tls.certresolver=le"
       - "traefik.http.services.poi-api.loadbalancer.server.port=8080"
 
-  # ── itinerary-api ────────────────────────────────────────────────────────────
+  ############################### itinerary-api ################################
 
   itinerary-api:
-    image: ghcr.io/${OWNER}/itinerary-api:latest
-    restart: unless-stopped
+    image: ghcr.io/${OWNER}/itinerary-api:${IMAGE_TAG:-latest}
+    <<: *defaults
     env_file: .env
     environment:
       POI_API_URL: http://poi-api:8080
       AUTH_API_URL: http://auth-api:8081
       INTERNAL_SECRET: ${INTERNAL_SECRET}
     depends_on:
-      - poi-api
-      - auth-api
+      poi-api:
+        condition: service_started
+      auth-api:
+        condition: service_started
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.itinerary-api.rule=Host(`api.ai.${DOMAIN}`)"
@@ -117,11 +136,12 @@ services:
       - "traefik.http.routers.itinerary-api.tls.certresolver=le"
       - "traefik.http.services.itinerary-api.loadbalancer.server.port=8000"
 
-  # ── frontend ─────────────────────────────────────────────────────────────────
+  ################################## frontend ##################################
 
   frontend:
-    image: ghcr.io/${OWNER}/frontend:latest
-    restart: unless-stopped
+    image: ghcr.io/${OWNER}/frontend:${IMAGE_TAG:-latest}
+    <<: *defaults
+    env_file: .env
     environment:
       AUTH_API_URL: http://auth-api:8081
       INTERNAL_SECRET: ${INTERNAL_SECRET}
@@ -130,8 +150,10 @@ services:
       PUBLIC_ADMIN_EMAILS: ${PUBLIC_ADMIN_EMAILS}
       ADMIN_EMAILS: ${ADMIN_EMAILS}
     depends_on:
-      - auth-api
-      - poi-api
+      auth-api:
+        condition: service_started
+      poi-api:
+        condition: service_started
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=Host(`${DOMAIN}`)"

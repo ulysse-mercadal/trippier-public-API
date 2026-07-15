@@ -10,8 +10,8 @@ Four services behind a single Docker Compose stack:
 
 | Service | Language | Role |
 |---|---|---|
-| `auth-api` | Go 1.23 · Gin | Registration, email verification, JWT login, API key management |
-| `poi-api` | Go 1.23 · Gin | Point-of-interest search — OpenStreetMap, Wikipedia, Wikivoyage, GeoNames, Ticketmaster, Eventbrite |
+| `auth-api` | Go 1.24 · Gin | Registration, email verification, JWT login, API key management |
+| `poi-api` | Go 1.24 · Gin | Point-of-interest search — OpenStreetMap, Wikipedia, Wikivoyage, GeoNames, Ticketmaster, Eventbrite |
 | `itinerary-api` | Python 3.12 · FastAPI | Day-by-day itinerary generation from a POI list |
 | `frontend` | SvelteKit · Bun | Landing page + auth + dashboard |
 
@@ -37,7 +37,7 @@ The standalone stack sets `POI_AUTH_DISABLED=true`, so all endpoints are open. T
 ### Full dev stack
 
 ```bash
-cp .env.example .env
+make setup        # create .env from .env.example, generating secrets (first run only)
 make dev          # builds + starts everything with hot reload
 ```
 
@@ -163,7 +163,7 @@ The cache key encodes *which* BYOK providers are active (not their values), so t
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in the values you actually need. The dev compose file uses `.env.example` directly so you can run `make dev` without touching anything.
+Run `make setup` to create `.env` from `.env.example`, then fill in the values you actually need. `make dev` reads `.env`, so the checked-in defaults work out of the box for local development.
 
 Required for a production deployment:
 
@@ -227,28 +227,27 @@ poi-api/            Go — POI aggregation + caching
 itinerary-api/      Python — itinerary logic (FastAPI)
 frontend/           SvelteKit app
 
-docker-compose.dev.yml        hot-reload dev stack
-docker-compose.full.yml       production-like stack
+docker-compose.yml            default stack (build from source, published ports)
+docker-compose.override.yml   dev layer: Traefik + hot reload (auto-loaded)
+docker-compose.prod.yml       production: Traefik + Let's Encrypt, GHCR images
 docker-compose.standalone.yml poi-api + itinerary-api, no auth, pulls from GHCR
-Makefile                      dev / test / lint / push targets
+Makefile                      run `make help` for all targets
 ```
 
 ---
 
 ## Docker Compose files
 
-| File | Purpose |
-|---|---|
-| `docker-compose.dev.yml` | Local development — source-mounted volumes, hot reload, MailHog |
-| `docker-compose.full.yml` | Production-like — no hot reload, Postgres/Redis on internal network only |
-| `docker-compose.standalone.yml` | Zero-config standalone — pulls GHCR images, no auth, no Postgres |
+| File | Used by | Purpose |
+|---|---|---|
+| `docker-compose.yml` | `make up` | Base stack — builds every service and publishes it on localhost ports |
+| `docker-compose.override.yml` | `make dev` | Dev layer auto-merged on top of the base: Traefik + hot reload + source mounts |
+| `docker-compose.prod.yml` | `make prod-up` | Production on a VPS — Traefik + Let's Encrypt, images pulled from GHCR |
+| `docker-compose.standalone.yml` | `make standalone` | Zero-config — poi-api + itinerary-api only, no auth, pulls GHCR images |
 
-`make dev` and `make dev-stop` both target `docker-compose.dev.yml`. For other stacks:
+`docker compose up` automatically merges `docker-compose.yml` with `docker-compose.override.yml`, so `make dev` brings up the full hot-reload stack behind Traefik. To run the plain published-ports stack without Traefik, use `make up` (i.e. `docker compose -f docker-compose.yml up`).
 
-```bash
-docker compose -f docker-compose.full.yml up -d
-docker compose -f docker-compose.standalone.yml up
-```
+Run `make help` to see every target.
 
 ---
 

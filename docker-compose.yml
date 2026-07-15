@@ -1,9 +1,25 @@
+# Trippier — default stack: builds every service from source and publishes it on
+# localhost ports. This is the base layer.
+#
+#   make up      -> start detached (this file only)
+#   make dev     -> hot reload + Traefik  (this file + docker-compose.override.yml)
+#   make build   -> build all images       make push -> publish to the registry
+#
+# `docker compose up` auto-loads docker-compose.override.yml (the dev layer).
+# Use `docker compose -f docker-compose.yml up` to run this file on its own.
+
+name: trippier
+
+x-defaults: &defaults
+  restart: unless-stopped
+
 services:
 
-  # ── Infrastructure ──────────────────────────────────────────────────────────
+  ############################### Infrastructure ###############################
 
   postgres:
     image: postgres:16-alpine
+    <<: *defaults
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -15,10 +31,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
+    <<: *defaults
     volumes:
       - redis_data:/data
     healthcheck:
@@ -26,50 +42,48 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
-    restart: unless-stopped
 
   mailhog:
     image: mailhog/mailhog:latest
+    <<: *defaults
     ports:
       - "${MAILHOG_SMTP_PORT:-1025}:1025"
       - "${MAILHOG_UI_PORT:-8025}:8025"
-    restart: unless-stopped
 
-  # ── Auth API (Go) ───────────────────────────────────────────────────────────
+  ############################### auth-api (Go) ################################
 
   auth-api:
-    image: ghcr.io/trippier/auth-api:latest
+    image: ${REGISTRY:-ghcr.io}/${OWNER:-trippier}/auth-api:${TAG:-latest}
     build:
       context: ./auth-api
+    <<: *defaults
     ports:
       - "${AUTH_API_PORT:-8081}:8081"
-    env_file:
-      - .env
+    env_file: .env
     environment:
       AUTH_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
       AUTH_REDIS_URL: redis://redis:6379
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET}
       AUTH_INTERNAL_SECRET: ${INTERNAL_SECRET}
       AUTH_SMTP_HOST: mailhog
-      AUTH_SMTP_PORT: 1025
+      AUTH_SMTP_PORT: "1025"
       AUTH_APP_URL: ${APP_URL:-http://localhost:3000}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    restart: unless-stopped
 
-  # ── POI API (Go) ────────────────────────────────────────────────────────────
+  ################################ poi-api (Go) ################################
 
   poi-api:
-    image: ghcr.io/trippier/poi-api:latest
+    image: ${REGISTRY:-ghcr.io}/${OWNER:-trippier}/poi-api:${TAG:-latest}
     build:
       context: ./poi-api
+    <<: *defaults
     ports:
       - "${POI_API_PORT:-8080}:8080"
-    env_file:
-      - .env
+    env_file: .env
     environment:
       POI_REDIS_URL: redis://redis:6379
       POI_AUTH_API_URL: http://auth-api:8081
@@ -79,44 +93,49 @@ services:
         condition: service_healthy
       auth-api:
         condition: service_started
-    restart: unless-stopped
 
-  # ── Itinerary API (Python) ───────────────────────────────────────────────────
+  ########################### itinerary-api (Python) ###########################
 
   itinerary-api:
-    image: ghcr.io/trippier/itinerary-api:latest
+    image: ${REGISTRY:-ghcr.io}/${OWNER:-trippier}/itinerary-api:${TAG:-latest}
     build:
       context: ./itinerary-api
+    <<: *defaults
     ports:
       - "${ITINERARY_API_PORT:-8000}:8000"
-    env_file:
-      - .env
+    env_file: .env
     environment:
       POI_API_URL: http://poi-api:8080
       AUTH_API_URL: http://auth-api:8081
       INTERNAL_SECRET: ${INTERNAL_SECRET}
     depends_on:
-      - poi-api
-      - auth-api
-    restart: unless-stopped
+      poi-api:
+        condition: service_started
+      auth-api:
+        condition: service_started
 
-  # ── Frontend (SvelteKit) ─────────────────────────────────────────────────────
+  ############################ frontend (SvelteKit) ############################
 
   frontend:
-    image: ghcr.io/trippier/frontend:latest
+    image: ${REGISTRY:-ghcr.io}/${OWNER:-trippier}/frontend:${TAG:-latest}
     build:
       context: ./frontend
+    <<: *defaults
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
+    env_file: .env
     environment:
       AUTH_API_URL: http://auth-api:8081
       INTERNAL_SECRET: ${INTERNAL_SECRET}
       FRONTEND_POI_API_URL: http://poi-api:8080
       FRONTEND_ITINERARY_API_URL: http://itinerary-api:8000
+      PUBLIC_ADMIN_EMAILS: ${PUBLIC_ADMIN_EMAILS:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
     depends_on:
-      - auth-api
-      - poi-api
-    restart: unless-stopped
+      auth-api:
+        condition: service_started
+      poi-api:
+        condition: service_started
 
 volumes:
   postgres_data:

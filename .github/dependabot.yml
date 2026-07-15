@@ -1,0 +1,47 @@
+version: 2
+
+updates:
+  # GitHub Actions used by the workflows
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "ci"]
+
+  # Go modules
+  - package-ecosystem: gomod
+    directory: "/auth-api"
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go"]
+
+  - package-ecosystem: gomod
+    directory: "/poi-api"
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go"]
+
+  # Python (itinerary-api)
+  - package-ecosystem: pip
+    directory: "/itinerary-api"
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "python"]
+
+  # Frontend (package.json / Bun)
+  - package-ecosystem: npm
+    directory: "/frontend"
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "frontend"]
+
+  # Base images referenced in the Dockerfiles
+  - package-ecosystem: docker
+    directories:
+      - "/auth-api"
+      - "/poi-api"
+      - "/itinerary-api"
+      - "/frontend"
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "docker"]
