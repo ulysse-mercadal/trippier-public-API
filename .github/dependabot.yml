@@ -6,34 +6,57 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
-    labels: ["dependencies", "ci"]
+    labels: ["dependencies"]
+    groups:
+      github-actions:
+        patterns: ["*"]
 
-  # Go modules
+  # Go modules — minor/patch grouped, majors raised individually
   - package-ecosystem: gomod
     directory: "/auth-api"
     schedule:
       interval: weekly
-    labels: ["dependencies", "go"]
+    labels: ["dependencies"]
+    open-pull-requests-limit: 5
+    groups:
+      go-minor:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: gomod
     directory: "/poi-api"
     schedule:
       interval: weekly
-    labels: ["dependencies", "go"]
+    labels: ["dependencies"]
+    open-pull-requests-limit: 5
+    groups:
+      go-minor:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # Python (itinerary-api)
   - package-ecosystem: pip
     directory: "/itinerary-api"
     schedule:
       interval: weekly
-    labels: ["dependencies", "python"]
+    labels: ["dependencies"]
+    open-pull-requests-limit: 5
+    groups:
+      python-minor:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
-  # Frontend (package.json / Bun)
+  # Frontend (package.json)
   - package-ecosystem: npm
     directory: "/frontend"
     schedule:
       interval: weekly
-    labels: ["dependencies", "frontend"]
+    labels: ["dependencies"]
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   # Base images referenced in the Dockerfiles
   - package-ecosystem: docker
@@ -44,4 +67,7 @@ updates:
       - "/frontend"
     schedule:
       interval: weekly
-    labels: ["dependencies", "docker"]
+    labels: ["dependencies"]
+    groups:
+      docker:
+        patterns: ["*"]
