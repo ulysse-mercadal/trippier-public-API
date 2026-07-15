@@ -44,30 +44,22 @@ jobs:
   lint-go-poi:
     name: Lint poi-api
     runs-on: ubuntu-latest
+    container: golangci/golangci-lint:v1.64
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-          cache-dependency-path: poi-api/go.sum
-      - uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.64
-          working-directory: poi-api
+      - run: git config --global --add safe.directory '*'
+      - run: golangci-lint run --timeout 5m
+        working-directory: poi-api
 
   lint-go-auth:
     name: Lint auth-api
     runs-on: ubuntu-latest
+    container: golangci/golangci-lint:v1.64
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-          cache-dependency-path: auth-api/go.sum
-      - uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.64
-          working-directory: auth-api
+      - run: git config --global --add safe.directory '*'
+      - run: golangci-lint run --timeout 5m
+        working-directory: auth-api
 
   lint-python:
     name: Lint itinerary-api
