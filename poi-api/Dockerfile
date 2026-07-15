@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 # build-base provides gcc + musl-dev, required by the H3 v4 cgo binding
 # (github.com/uber/h3-go/v4 links against a statically-compiled H3 C library).
@@ -23,7 +23,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go build -ldflags="-s -w -extldflags '-static'" -o /poi-api ./cmd/server
 
 
-FROM alpine:3.20
+FROM alpine:3.24
 
 # curl powers the container HEALTHCHECK; ca-certificates for outbound HTTPS.
 RUN apk add --no-cache ca-certificates curl \
