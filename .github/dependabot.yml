@@ -42,10 +42,6 @@ updates:
       interval: weekly
     labels: ["dependencies"]
     open-pull-requests-limit: 5
-    ignore:
-      # pytest 9 drops the asyncio default mode our tests rely on; hold at 8.x.
-      - dependency-name: "pytest"
-        update-types: ["version-update:semver-major"]
     groups:
       python-minor:
         patterns: ["*"]
@@ -58,10 +54,6 @@ updates:
       interval: weekly
     labels: ["dependencies"]
     open-pull-requests-limit: 5
-    ignore:
-      # vite 8 is a major jump for the SvelteKit build; hold at 5.x for now.
-      - dependency-name: "vite"
-        update-types: ["version-update:semver-major"]
     groups:
       npm-minor:
         patterns: ["*"]
@@ -78,11 +70,6 @@ updates:
       interval: weekly
     labels: ["dependencies"]
     open-pull-requests-limit: 5
-    ignore:
-      # itinerary-api pins an older pydantic without 3.14 wheels; hold the base
-      # image at 3.13 until the Python deps support 3.14.
-      - dependency-name: "python"
-        versions: [">=3.14"]
     groups:
       docker:
         patterns: ["*"]
