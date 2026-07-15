@@ -1,6 +1,6 @@
 module github.com/trippier/poi-api
 
-go 1.24
+go 1.25.0
 
 require (
 	github.com/alicebob/miniredis/v2 v2.37.0
@@ -9,7 +9,7 @@ require (
 	github.com/spf13/viper v1.19.0
 	github.com/uber/h3-go/v4 v4.5.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/sync v0.10.0
+	golang.org/x/sync v0.22.0
 )
 
 require (
