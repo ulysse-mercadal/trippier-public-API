@@ -1,8 +1,21 @@
+# syntax=docker/dockerfile:1
 FROM golang:1.24-alpine
 WORKDIR /app
-RUN go install github.com/air-verse/air@v1.61.1
+
+# curl lets the container report health via the HEALTHCHECK probe below.
+RUN apk add --no-cache curl
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go install github.com/air-verse/air@v1.61.1
+
 COPY go.mod go.sum ./
-RUN go mod download
-# Source is mounted via volume in docker-compose.dev.yml
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+# Source is mounted via volume in docker-compose.override.yml.
 EXPOSE 8081
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
+    CMD curl -fsS http://localhost:8081/health || exit 1
+
 CMD ["air"]

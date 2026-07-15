@@ -3,3 +3,12 @@ __pycache__/
 .venv/
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+
+# Not needed in the build context
+.git
+.env
+.env.*
+*.md
+Dockerfile*
+.dockerignore

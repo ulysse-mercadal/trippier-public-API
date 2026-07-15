@@ -1,5 +1,13 @@
+# Build artifacts & dev-only files
 tmp/
 *.out
 *.test
 .air.toml
-Dockerfile.dev
+
+# Not needed in the build context
+.git
+.env
+.env.*
+*.md
+Dockerfile*
+.dockerignore
