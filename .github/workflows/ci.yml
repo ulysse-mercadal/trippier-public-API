@@ -50,7 +50,7 @@ jobs:
         with:
           go-version: "1.24"
           cache-dependency-path: poi-api/go.sum
-      - uses: golangci/golangci-lint-action@v6
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: v1.64
           working-directory: poi-api
@@ -64,7 +64,7 @@ jobs:
         with:
           go-version: "1.24"
           cache-dependency-path: auth-api/go.sum
-      - uses: golangci/golangci-lint-action@v6
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: v1.64
           working-directory: auth-api
