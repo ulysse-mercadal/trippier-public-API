@@ -123,10 +123,10 @@ standalone-stop:
 ########### Tests (throwaway containers — no local toolchain needed) ###########
 
 test-go-poi:
-	$(DRUN_GO) -v $(CURDIR)/poi-api:/app:z -w /app golang:1.24 go test -race ./...
+	$(DRUN_GO) -v $(CURDIR)/poi-api:/app:z -w /app golang:1.25 go test -race ./...
 
 test-go-auth:
-	$(DRUN_GO) -v $(CURDIR)/auth-api:/app:z -w /app golang:1.24 go test -race ./...
+	$(DRUN_GO) -v $(CURDIR)/auth-api:/app:z -w /app golang:1.25 go test -race ./...
 
 test-python:
 	$(DRUN_PY) -v $(CURDIR)/itinerary-api:/app:z -w /app python:3.12-slim \
@@ -137,10 +137,10 @@ test: test-go-poi test-go-auth test-python
 ##################################### Lint #####################################
 
 lint-go-poi:
-	$(DRUN_GO) -v $(CURDIR)/poi-api:/app:z -w /app golangci/golangci-lint:v1.64 golangci-lint run --timeout 5m
+	$(DRUN_GO) -v $(CURDIR)/poi-api:/app:z -w /app golangci/golangci-lint:v2.12.2 golangci-lint run --timeout 5m
 
 lint-go-auth:
-	$(DRUN_GO) -v $(CURDIR)/auth-api:/app:z -w /app golangci/golangci-lint:v1.64 golangci-lint run --timeout 5m
+	$(DRUN_GO) -v $(CURDIR)/auth-api:/app:z -w /app golangci/golangci-lint:v2.12.2 golangci-lint run --timeout 5m
 
 lint-python:
 	$(DRUN_PY) -v $(CURDIR)/itinerary-api:/app:z -w /app python:3.12-slim \
@@ -151,8 +151,8 @@ lint: lint-go-poi lint-go-auth lint-python
 ##################################### Misc #####################################
 
 tidy:
-	$(DRUN_GO) -v $(CURDIR)/poi-api:/app:z  -w /app golang:1.24-alpine go mod tidy
-	$(DRUN_GO) -v $(CURDIR)/auth-api:/app:z -w /app golang:1.24-alpine go mod tidy
+	$(DRUN_GO) -v $(CURDIR)/poi-api:/app:z  -w /app golang:1.25-alpine go mod tidy
+	$(DRUN_GO) -v $(CURDIR)/auth-api:/app:z -w /app golang:1.25-alpine go mod tidy
 
 clean:
 	-$(COMPOSE) down -v --remove-orphans
