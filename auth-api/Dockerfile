@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /app
 
 ENV GOFLAGS=-mod=mod
@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=linux go build -o /admin ./cmd/admin
 
 
-FROM alpine:3.20
+FROM alpine:3.24
 
 # curl powers the container HEALTHCHECK; ca-certificates for outbound HTTPS/SMTP.
 RUN apk add --no-cache ca-certificates curl \
