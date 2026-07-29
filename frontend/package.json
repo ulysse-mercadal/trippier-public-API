@@ -23,7 +23,7 @@
     "@types/d3-contour": "^3.0.6",
     "@types/node": "^25.6.0",
     "d3-contour": "^4.0.2",
-    "jsdom": "^24.0.0",
+    "jsdom": "^30.0.1",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
     "typescript": "^5.6.2",
