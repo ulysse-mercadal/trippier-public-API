@@ -21,7 +21,7 @@
     "@testing-library/jest-dom": "^6.4.0",
     "@testing-library/svelte": "^5.2.0",
     "@types/d3-contour": "^3.0.6",
-    "@types/node": "^25.6.0",
+    "@types/node": "^26.1.2",
     "d3-contour": "^4.0.2",
     "jsdom": "^24.0.0",
     "svelte": "^5.0.0",
