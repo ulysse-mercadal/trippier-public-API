@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/gin-gonic/gin v1.12.0
-	github.com/redis/go-redis/v9 v9.21.0
+	github.com/redis/go-redis/v9 v9.22.0
 	github.com/spf13/viper v1.21.0
 	github.com/uber/h3-go/v4 v4.5.0
 	go.uber.org/zap v1.28.0
